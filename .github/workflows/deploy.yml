@@ -1,0 +1,70 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev, main]
+
+jobs:
+  deploy:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success'
+       && github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+
+            # Ensure correct branch
+            git checkout "$BRANCH" 2>/dev/null || true
+
+            # Save current commit for rollback
+            PREV_COMMIT=$(git rev-parse HEAD)
+
+            # Pull latest code
+            if ! git pull origin "$BRANCH"; then
+              echo "ERROR: git pull failed"
+              exit 1
+            fi
+
+            # Build and start containers
+            if ! docker compose up --build -d --remove-orphans; then
+              echo "ERROR: docker compose up failed! Rolling back..."
+              git reset --hard "$PREV_COMMIT"
+              docker compose up --build -d
+              echo "Rolled back to $PREV_COMMIT"
+              exit 1
+            fi
+
+            # Wait for containers to be healthy
+            sleep 15
+
+            # Check all containers are running (not restarting/exited)
+            TOTAL=$(docker compose ps --quiet | wc -l)
+            RUNNING=$(docker compose ps --status running --quiet | wc -l)
+            if [ "$TOTAL" -ne "$RUNNING" ]; then
+              echo "ERROR: $((TOTAL - RUNNING))/$TOTAL containers are not running:"
+              docker compose ps
+              docker compose logs --tail=50
+
+              echo "Rolling back..."
+              git reset --hard "$PREV_COMMIT"
+              docker compose up --build -d
+              echo "Rolled back to $PREV_COMMIT"
+              exit 1
+            fi
+
+            # docker image prune -f
+            echo "Deploy successful! Branch: $BRANCH, Commit: $(git rev-parse --short HEAD)"
