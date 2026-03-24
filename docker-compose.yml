@@ -1,6 +1,6 @@
 services:
   mongodb:
-    image: mongo:7
+    image: mongo:latest
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -13,7 +13,7 @@ services:
       - market-tracker-network
 
   redis:
-    image: redis:7-alpine
+    image: redis:latest
     command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
