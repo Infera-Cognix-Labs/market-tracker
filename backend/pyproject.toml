@@ -1,0 +1,17 @@
+[project]
+name = "market-tracker-backend"
+version = "0.1.0"
+description = "Backend service for market tracking platform"
+requires-python = ">=3.13"
+dependencies = [
+    "apify-client>=2.5.0",
+    "beanie>=2.1.0",
+    "fastapi>=0.135.2",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
