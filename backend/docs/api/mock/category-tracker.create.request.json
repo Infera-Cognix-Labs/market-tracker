@@ -1,0 +1,15 @@
+{
+  "name": "Baby Bottle Warmers - US",
+  "marketplace": "amazon_us",
+  "scope": {
+    "browse_node_id": "13893610011",
+    "browse_node_url": "https://www.amazon.com/Best-Sellers-Baby-Bottle-Warmers/zgbs/baby-products/13893610011"
+  },
+  "tracking_config": {
+    "top10_alert_enabled": true
+  },
+  "schedule": {
+    "frequency": "DAILY",
+    "hour_utc": 2
+  }
+}

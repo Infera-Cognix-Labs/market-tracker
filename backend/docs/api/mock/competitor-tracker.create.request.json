@@ -1,0 +1,33 @@
+{
+  "name": "Bottle Warmer Competitors - US",
+  "marketplace": "amazon_us",
+  "tracked_asins": [
+    {
+      "asin": "B0ABC12345",
+      "enabled": true
+    },
+    {
+      "asin": "B0XYZ67890",
+      "enabled": true
+    },
+    {
+      "asin": "B0LMN45678",
+      "enabled": true
+    }
+  ],
+  "track_fields": {
+    "bsr": true,
+    "price": true,
+    "buy_box": true,
+    "availability": true,
+    "promotions": true,
+    "title_change": true,
+    "main_image_change": true,
+    "variation_change": true,
+    "content_change": true
+  },
+  "schedule": {
+    "frequency": "DAILY",
+    "hour_utc": 3
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "digest_code": "wd_2026w14_ws_demo_us",
+  "week_start": "2026-03-28",
+  "week_end": "2026-04-03",
+  "tracker_refs": [
+    {
+      "tracker_type": "CATEGORY",
+      "tracker_code": "ct_baby_bottle_warmers_us",
+      "tracker_name": "Baby Bottle Warmers - US"
+    },
+    {
+      "tracker_type": "COMPETITOR",
+      "tracker_code": "cmp_baby_bottle_warmers_us",
+      "tracker_name": "Bottle Warmer Competitors - US"
+    }
+  ],
+  "summary": {
+    "new_entrant_count": 4,
+    "returning_count": 2,
+    "top10_enter_count": 1,
+    "price_change_count": 9,
+    "listing_change_count": 5
+  },
+  "threats": [
+    {
+      "asin": "B0ABC12345",
+      "marketplace": "amazon_us",
+      "reason": "Entered Top 10 and lowered price within the same week.",
+      "event_types": [
+        "ENTER_TOP10",
+        "PRICE_CHANGED"
+      ],
+      "tracker_refs": [
+        {
+          "tracker_type": "CATEGORY",
+          "tracker_code": "ct_baby_bottle_warmers_us",
+          "tracker_name": "Baby Bottle Warmers - US"
+        },
+        {
+          "tracker_type": "COMPETITOR",
+          "tracker_code": "cmp_baby_bottle_warmers_us",
+          "tracker_name": "Bottle Warmer Competitors - US"
+        }
+      ]
+    },
+    {
+      "asin": "B0XYZ67890",
+      "marketplace": "amazon_us",
+      "reason": "Went out of stock after a Buy Box seller change.",
+      "event_types": [
+        "BUY_BOX_CHANGED",
+        "AVAILABILITY_CHANGED"
+      ],
+      "tracker_refs": [
+        {
+          "tracker_type": "COMPETITOR",
+          "tracker_code": "cmp_baby_bottle_warmers_us",
+          "tracker_name": "Bottle Warmer Competitors - US"
+        }
+      ]
+    }
+  ],
+  "report_storage_uri": "s3://market-tracker/reports/weekly/wd_2026w14_ws_demo_us.json",
+  "created_at": "2026-04-03T10:00:00Z"
+}

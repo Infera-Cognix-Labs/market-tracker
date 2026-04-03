@@ -1,0 +1,64 @@
+{
+  "workspace_id": "ws_demo_us",
+  "openapi_file": "../market-tracker.openapi.yaml",
+  "mocks": [
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/dashboard/overview",
+      "response_file": "dashboard-overview.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/category-trackers",
+      "response_file": "category-trackers.list.response.json"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/{workspace_id}/category-trackers",
+      "request_file": "category-tracker.create.request.json",
+      "response_file": "category-tracker.detail.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/category-trackers/{tracker_code}/snapshots/latest",
+      "response_file": "category-tracker.latest-snapshot.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/competitor-trackers",
+      "response_file": "competitor-trackers.list.response.json"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/{workspace_id}/competitor-trackers",
+      "request_file": "competitor-tracker.create.request.json",
+      "response_file": "competitor-tracker.detail.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/events",
+      "response_file": "events.list.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/products/{marketplace}/{asin}",
+      "response_file": "product.detail.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/products/{marketplace}/{asin}/timeline",
+      "response_file": "product.timeline.response.json"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/workspaces/{workspace_id}/jobs",
+      "request_file": "jobs.create.request.json",
+      "response_file": "job.detail.response.json"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/workspaces/{workspace_id}/reports/weekly-digests/{digest_code}",
+      "response_file": "weekly-digest.detail.response.json"
+    }
+  ]
+}
