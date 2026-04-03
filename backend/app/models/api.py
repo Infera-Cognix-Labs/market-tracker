@@ -411,6 +411,33 @@ class ProductTimelineResponse(ApiModel):
     summary: ProductTimelineSummary
 
 
+class ProductSnapshot(ApiModel):
+    marketplace: MarketplaceCode
+    asin: AsinCode
+    snapshot_date: date
+    captured_at: datetime
+    tracker_refs: list[TrackerRef]
+    parent_asin: str | None = None
+    brand: str
+    title: str
+    title_hash: str | None = None
+    product_url: str
+    main_image_url: str
+    main_image_hash: str | None = None
+    bsr_position: int | None = None
+    price_current: float | None = None
+    price_original: float | None = None
+    currency: str | None = None
+    coupon_text: str | None = None
+    availability_status: AvailabilityStatus
+    buy_box_status: BuyBoxStatus
+    buy_box_seller_name: str | None = None
+    rating_value: float | None = None
+    review_count: int | None = None
+    variation_count: int | None = None
+    source_refs: dict[str, Any] | None = None
+
+
 class JobSummary(ApiModel):
     expected_items: int
     imported_items: int

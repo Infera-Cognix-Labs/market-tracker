@@ -6,10 +6,11 @@ from app.models.api import (
     Event,
     EventPayload,
     EventType,
+    ProductTimelinePoint,
     Severity,
     Timeframe,
-    TrackerType,
     TrackerStatus,
+    TrackerType,
 )
 from app.store import (
     MongoStore,
@@ -38,14 +39,35 @@ def test_generate_tracker_code_and_job_code_increment_uniquely():
 
 
 def test_range_and_timeline_helpers(seed_data):
-    timeline = seed_data.product_timelines[0]
+    timeline_points = [
+        ProductTimelinePoint(
+            snapshot_date=snapshot.snapshot_date,
+            bsr_position=snapshot.bsr_position,
+            price_current=snapshot.price_current,
+            price_original=snapshot.price_original,
+            coupon_text=snapshot.coupon_text,
+            availability_status=snapshot.availability_status,
+            buy_box_status=snapshot.buy_box_status,
+            rating_value=snapshot.rating_value,
+            review_count=snapshot.review_count,
+            title_hash=snapshot.title_hash,
+            main_image_hash=snapshot.main_image_hash,
+            variation_count=snapshot.variation_count,
+        )
+        for snapshot in seed_data.product_snapshots
+    ]
+    timeline_events = [
+        event
+        for event in seed_data.events
+        if event.asin == seed_data.products[0].asin and event.marketplace == seed_data.products[0].marketplace
+    ]
 
     assert _within_range(date(2026, 4, 3), date(2026, 4, 1), date(2026, 4, 3)) is True
     assert _within_range(date(2026, 3, 31), date(2026, 4, 1), date(2026, 4, 3)) is False
 
-    weekly_points = _aggregate_timeline_points(timeline.points, Timeframe.WEEKLY)
-    monthly_points = _aggregate_timeline_points(timeline.points, Timeframe.MONTHLY)
-    summary = _build_timeline_summary(timeline.events)
+    weekly_points = _aggregate_timeline_points(timeline_points, Timeframe.WEEKLY)
+    monthly_points = _aggregate_timeline_points(timeline_points, Timeframe.MONTHLY)
+    summary = _build_timeline_summary(timeline_events)
 
     assert len(weekly_points) == 2
     assert weekly_points[0].snapshot_date == date(2026, 3, 23)
@@ -55,6 +77,12 @@ def test_range_and_timeline_helpers(seed_data):
     assert monthly_points[1].snapshot_date == date(2026, 4, 1)
     assert summary.price_change_count == 1
     assert summary.listing_change_count == 1
+
+
+def test_seed_data_builds_product_snapshots(seed_data):
+    assert len(seed_data.product_snapshots) == 6
+    assert seed_data.product_snapshots[-1].snapshot_date == date(2026, 4, 3)
+    assert seed_data.product_snapshots[-1].title.endswith("Night Light")
 
 
 def test_event_sorting_threats_and_dashboard_helpers(seed_data):

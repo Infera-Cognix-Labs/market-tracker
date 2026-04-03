@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+from dataclasses import dataclass
+from typing import Any
+
+from apify_client import ApifyClient
+
+from app.config.config import ApifyConfig
+from app.models.api import ExternalRunStatus
+
+
+class ApifyGatewayError(Exception):
+    pass
+
+
+class ApifyBindingResolutionError(ApifyGatewayError):
+    pass
+
+
+class ApifyRunStartError(ApifyGatewayError):
+    pass
+
+
+@dataclass(frozen=True)
+class ApifyBindingTarget:
+    binding_code: str
+    actor_id: str | None
+    task_id: str | None
+    build: str | None
+    memory_mbytes: int | None
+
+
+@dataclass(frozen=True)
+class ApifyRunLaunch:
+    provider_run_id: str
+    default_dataset_id: str | None
+    status: ExternalRunStatus | None
+    raw_status: str | None
+    started_at: Any
+    finished_at: Any
+    input_hash: str
+    binding: ApifyBindingTarget
+    run_input: dict[str, object]
+
+
+class ApifyGateway:
+    def __init__(self, config: ApifyConfig) -> None:
+        self.config = config
+
+    def resolve_binding(self, binding_code: str) -> ApifyBindingTarget:
+        if binding_code == "bind_category_top50_v1":
+            return ApifyBindingTarget(
+                binding_code=binding_code,
+                actor_id=self.config.category_actor_id,
+                task_id=self.config.category_task_id,
+                build=self.config.category_build,
+                memory_mbytes=self.config.category_memory_mbytes,
+            )
+        if binding_code == "bind_competitor_tracking_v1":
+            return ApifyBindingTarget(
+                binding_code=binding_code,
+                actor_id=self.config.competitor_actor_id,
+                task_id=self.config.competitor_task_id,
+                build=self.config.competitor_build,
+                memory_mbytes=self.config.competitor_memory_mbytes,
+            )
+        raise ApifyBindingResolutionError(f"Unsupported Apify binding_code `{binding_code}`.")
+
+    async def start_run(self, binding_code: str, run_input: dict[str, object]) -> ApifyRunLaunch:
+        if not self.config.token:
+            raise ApifyBindingResolutionError("Missing APIFY_TOKEN for Apify dispatch.")
+
+        binding = self.resolve_binding(binding_code)
+        if not binding.actor_id and not binding.task_id:
+            raise ApifyBindingResolutionError(
+                f"Missing actor/task configuration for binding `{binding_code}`."
+            )
+
+        input_hash = hashlib.sha256(
+            json.dumps(run_input, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        try:
+            run = await asyncio.to_thread(self._start_run_sync, binding, run_input)
+        except Exception as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
+            raise ApifyRunStartError(str(exc)) from exc
+
+        return ApifyRunLaunch(
+            provider_run_id=run["id"],
+            default_dataset_id=run.get("defaultDatasetId"),
+            status=map_apify_status(run.get("status")),
+            raw_status=run.get("status"),
+            started_at=run.get("startedAt"),
+            finished_at=run.get("finishedAt"),
+            input_hash=input_hash,
+            binding=binding,
+            run_input=run_input,
+        )
+
+    def _start_run_sync(
+        self, binding: ApifyBindingTarget, run_input: dict[str, object]
+    ) -> dict[str, object]:
+        client = ApifyClient(self.config.token)
+        if binding.task_id:
+            task_kwargs: dict[str, object] = {
+                "task_input": run_input,
+                "timeout_secs": self.config.dispatch_timeout_secs,
+            }
+            if binding.memory_mbytes is not None:
+                task_kwargs["memory_mbytes"] = binding.memory_mbytes
+            if binding.build is not None:
+                task_kwargs["build"] = binding.build
+            return client.task(binding.task_id).call(**task_kwargs)
+        if binding.actor_id:
+            actor_kwargs: dict[str, object] = {
+                "run_input": run_input,
+                "timeout_secs": self.config.dispatch_timeout_secs,
+            }
+            if binding.memory_mbytes is not None:
+                actor_kwargs["memory_mbytes"] = binding.memory_mbytes
+            if binding.build is not None:
+                actor_kwargs["build"] = binding.build
+            return client.actor(binding.actor_id).call(**actor_kwargs)
+        raise ApifyBindingResolutionError(
+            f"Missing actor/task configuration for binding `{binding.binding_code}`."
+        )
+
+
+def map_apify_status(raw_status: str | None) -> ExternalRunStatus | None:
+    if raw_status is None:
+        return None
+    normalized = raw_status.upper()
+    if normalized in {"READY", "RUNNING", "SUCCEEDED", "FAILED", "TIMED-OUT", "TIMED_OUT", "ABORTED"}:
+        if normalized == "TIMED-OUT":
+            normalized = "TIMED_OUT"
+        return ExternalRunStatus(normalized)
+    return None

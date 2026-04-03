@@ -16,6 +16,13 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int | None = None) -> int | None:
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value.strip() == "":
+        return default
+    return int(raw_value)
+
+
 class MongoDBConfig(BaseModel):
     uri: str | None = os.getenv("MONGO_URI")
     host: str = os.getenv("MONGO_HOST", "localhost")
@@ -37,6 +44,15 @@ class MongoDBConfig(BaseModel):
 
 class ApifyConfig(BaseModel):
     token: str | None = os.getenv("APIFY_TOKEN")
+    dispatch_timeout_secs: int = _env_int("APIFY_DISPATCH_TIMEOUT_SECS", 300) or 300
+    category_actor_id: str | None = os.getenv("APIFY_CATEGORY_ACTOR_ID")
+    category_task_id: str | None = os.getenv("APIFY_CATEGORY_TASK_ID")
+    category_build: str | None = os.getenv("APIFY_CATEGORY_BUILD")
+    category_memory_mbytes: int | None = _env_int("APIFY_CATEGORY_MEMORY_MBYTES")
+    competitor_actor_id: str | None = os.getenv("APIFY_COMPETITOR_ACTOR_ID")
+    competitor_task_id: str | None = os.getenv("APIFY_COMPETITOR_TASK_ID")
+    competitor_build: str | None = os.getenv("APIFY_COMPETITOR_BUILD")
+    competitor_memory_mbytes: int | None = _env_int("APIFY_COMPETITOR_MEMORY_MBYTES")
 
 
 class Config(BaseModel):

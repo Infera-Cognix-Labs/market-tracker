@@ -9,12 +9,14 @@ from fastapi.exceptions import RequestValidationError
 from app.api.v1.router import api_router
 from app.config.config import Config, get_settings
 from app.core.errors import AppError, app_error_handler, validation_error_handler
+from app.core.logging import configure_logging
 from app.seed import load_demo_seed
 from app.store import build_store
 
 
 def create_app(settings: Config | None = None) -> FastAPI:
     app_settings = settings or get_settings()
+    configure_logging()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

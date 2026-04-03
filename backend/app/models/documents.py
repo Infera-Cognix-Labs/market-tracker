@@ -24,8 +24,6 @@ from app.models.api import (
     JobRunStrategy,
     JobSummary,
     ProductCurrentState,
-    ProductTimelinePoint,
-    ProductTimelineSummary,
     TrackerRef,
     TrackerSchedule,
     Threat,
@@ -144,20 +142,42 @@ class ProductDocument(WorkspaceDocument):
         ]
 
 
-class ProductTimelineDocument(WorkspaceDocument):
+class ProductSnapshotDocument(WorkspaceDocument):
     marketplace: str
     asin: str
-    from_date: date
-    to_date: date
-    granularity: str
-    points: list[ProductTimelinePoint]
-    events: list[Event]
-    summary: ProductTimelineSummary
+    snapshot_date: date
+    captured_at: datetime
+    tracker_refs: list[TrackerRef]
+    parent_asin: str | None = None
+    brand: str
+    title: str
+    title_hash: str | None = None
+    product_url: str
+    main_image_url: str
+    main_image_hash: str | None = None
+    bsr_position: int | None = None
+    price_current: float | None = None
+    price_original: float | None = None
+    currency: str | None = None
+    coupon_text: str | None = None
+    availability_status: str
+    buy_box_status: str
+    buy_box_seller_name: str | None = None
+    rating_value: float | None = None
+    review_count: int | None = None
+    variation_count: int | None = None
+    source_refs: dict[str, object] | None = None
+    created_at: datetime
 
     class Settings:
-        name = "product_timelines"
+        name = "product_snapshots"
         indexes = [
-            IndexModel([("workspace_id", 1), ("marketplace", 1), ("asin", 1)], unique=True),
+            IndexModel(
+                [("workspace_id", 1), ("marketplace", 1), ("asin", 1), ("snapshot_date", -1)],
+                unique=True,
+            ),
+            IndexModel([("workspace_id", 1), ("snapshot_date", -1)]),
+            IndexModel([("workspace_id", 1), ("tracker_refs.tracker_code", 1), ("snapshot_date", -1)]),
         ]
 
 
@@ -187,6 +207,58 @@ class JobDocument(WorkspaceDocument):
         ]
 
 
+class ApifyRunDocument(WorkspaceDocument):
+    tracking_job_code: str
+    provider: str
+    binding_code: str | None = None
+    actor_ref: str | None = None
+    task_ref: str | None = None
+    apify_run_id: str
+    default_dataset_id: str | None = None
+    run_input: dict[str, object] = Field(default_factory=dict)
+    input_hash: str
+    status: str
+    apify_status_raw: str | None = None
+    origin: str = "API"
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    webhook_received_at: datetime | None = None
+    poll_count: int = 0
+    error: JobError | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "apify_runs"
+        indexes = [
+            IndexModel([("apify_run_id", 1)], unique=True),
+            IndexModel([("workspace_id", 1), ("tracking_job_code", 1)]),
+            IndexModel([("default_dataset_id", 1)]),
+            IndexModel([("workspace_id", 1), ("status", 1), ("created_at", -1)]),
+        ]
+
+
+class RawImportBatchDocument(WorkspaceDocument):
+    tracking_job_code: str
+    apify_run_id: str
+    dataset_id: str | None = None
+    batch_no: int
+    source_item_count: int
+    import_status: str
+    raw_items: list[dict[str, object]] = Field(default_factory=list)
+    raw_storage_uri: str | None = None
+    imported_at: datetime
+    created_at: datetime
+
+    class Settings:
+        name = "raw_import_batches"
+        indexes = [
+            IndexModel([("apify_run_id", 1), ("batch_no", 1)], unique=True),
+            IndexModel([("workspace_id", 1), ("tracking_job_code", 1)]),
+            IndexModel([("dataset_id", 1)]),
+        ]
+
+
 class WeeklyDigestDocument(WorkspaceDocument):
     digest_code: str
     week_start: date
@@ -211,7 +283,9 @@ DOCUMENT_MODELS = [
     CompetitorTrackerDocument,
     EventDocument,
     ProductDocument,
-    ProductTimelineDocument,
+    ProductSnapshotDocument,
     JobDocument,
+    ApifyRunDocument,
+    RawImportBatchDocument,
     WeeklyDigestDocument,
 ]

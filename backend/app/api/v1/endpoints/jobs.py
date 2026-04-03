@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
 from app.api.v1.deps import get_store
 from app.models.api import Job, JobCreateRequest, JobListResponse, JobStatus, TrackerType
@@ -40,9 +40,12 @@ async def list_jobs(
 async def create_job(
     workspace_id: str,
     payload: JobCreateRequest,
+    background_tasks: BackgroundTasks,
     store: Annotated[BaseStore, Depends(get_store)],
 ) -> Job:
-    return await store.create_job(workspace_id, payload)
+    job = await store.create_job(workspace_id, payload)
+    background_tasks.add_task(store.dispatch_job, workspace_id, job.job_code)
+    return job
 
 
 @router.get("/{job_code}", response_model=Job)
