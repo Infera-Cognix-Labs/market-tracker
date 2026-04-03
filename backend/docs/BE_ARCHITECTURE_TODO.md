@@ -11,7 +11,8 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 
 - The current backend matches a contract-first `FastAPI + MongoDB` monolith more than the target modular monolith with workers.
 - Read-side APIs, tracker CRUD, and snapshot-backed product timeline reads are implemented.
-- The backend now has real `services/` and `integrations/` seams plus an Apify dispatch path, but webhook/import/normalization/event-generation runtime flow is still incomplete.
+- The backend now has real `services/` and `integrations/` seams plus an Apify dispatch path.
+- Webhook/poller -> importer worker -> normalization -> snapshot persistence now runs in code; diff/event runtime generation is the main remaining gap.
 - `app/store.py` is now a thin facade over extracted services instead of the main home for business logic.
 
 ## 1. App Shell And Topology
@@ -21,7 +22,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [ ] Background worker process pool exists.
 - [ ] Scheduler worker exists.
 - [x] Poller worker exists.
-- [ ] Import worker exists.
+- [x] Import worker exists.
 - [ ] Digest worker exists.
 - [ ] Object storage integration exists.
 
@@ -34,10 +35,12 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] `run_orchestrator`
   Notes: background dispatch now moves jobs from `QUEUED` into the external-run path and records failures on the job.
 - [x] `webhook_receiver`
-- [ ] `result_importer`
-- [ ] `normalization_service`
-- [ ] `snapshot_service`
-  Notes: `category_snapshots`, `products`, and `product_snapshots` documents exist, but runtime snapshot creation/update flow from imported provider data is not implemented.
+- [x] `result_importer`
+  Notes: `ResultImporterService` imports Apify dataset items into `raw_import_batches` with replay via stored batches.
+- [x] `normalization_service`
+  Notes: deterministic normalization now maps common provider payload shapes into internal product records.
+- [x] `snapshot_service`
+  Notes: runtime writes now create/update `category_snapshots`, `product_snapshots`, and update `products`.
 - [ ] `diff_engine`
 - [ ] `event_engine`
   Notes: `tracking_events` is queryable as a stored read model, but events are not generated in code.
@@ -54,21 +57,21 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Persist `apify_runs` records.
 - [x] Receive and validate Apify webhooks.
 - [x] Poll Apify run status as fallback.
-- [ ] Import dataset items into internal raw storage.
-- [ ] Normalize provider payloads into stable internal models.
-- [ ] Create category/product snapshots from normalized data.
+- [x] Import dataset items into internal raw storage.
+- [x] Normalize provider payloads into stable internal models.
+- [x] Create category/product snapshots from normalized data.
 - [ ] Diff snapshots and emit event candidates.
 - [ ] Apply event rules and persist derived events.
 - [x] Update jobs through `QUEUED -> DISPATCHING -> RUNNING_EXTERNAL/FAILED` during dispatch.
-- [ ] Update jobs through `IMPORTING -> PROCESSING -> SUCCESS/FAILED` during downstream processing.
+- [x] Update jobs through `IMPORTING -> PROCESSING -> SUCCESS/PARTIAL_SUCCESS/FAILED` during downstream processing.
 
 ## 4. State And Data Ownership
 
 - [x] Internal tracker configuration is owned in MongoDB.
 - [x] Internal job records exist in `tracking_jobs`.
 - [x] Internal copy of external run metadata exists in `apify_runs`.
-- [ ] Raw provider payload storage exists via `raw_import_batches` or object storage.
-  Notes: `raw_import_batches` document/index scaffolding exists, but runtime import persistence is not wired yet.
+- [x] Raw provider payload storage exists via `raw_import_batches` or object storage.
+  Notes: raw payload batches are now persisted in `raw_import_batches`; object-storage offload is still optional follow-up.
 - [x] Internal product registry exists in `products`.
 - [x] Internal category snapshots collection exists.
 - [x] Internal product snapshots collection exists.
@@ -102,10 +105,10 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 
 - [x] Request IDs are attached at HTTP middleware level.
 - [ ] Structured logs for job/run/import/snapshot/event lifecycle exist.
-  Notes: lightweight structured logs now exist for job creation and Apify dispatch/failure, but importer/snapshot/event flows are not wired yet.
+  Notes: structured logs now cover job creation, dispatch, lifecycle updates, and import worker batches; event/digest phases are still pending.
 - [ ] Metrics for jobs, run latency, import lag, normalization error rate, snapshot latency, and digest latency exist.
 - [ ] Correlation keys such as `job_code`, `tracker_code`, `apify_run_id`, and `snapshot_date` are propagated consistently.
-  Notes: correlation context is present in current job creation/dispatch logs, but not across the unfinished webhook/import/processing flows.
+  Notes: correlation context now spans dispatch, webhook/poller lifecycle, and importer flow; broader consistency still pending for future modules.
 - [x] Apify token is loaded from environment config instead of being hardcoded in app logic.
 - [ ] Secret management integration beyond local env loading exists.
 - [x] Restricted and verified webhook endpoint exists.
@@ -120,7 +123,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Separate `services/` package exists.
 - [x] Separate `workers/` package exists.
 - [x] Module boundaries from the architecture doc are reflected in the code layout.
-  Notes: first real seams now live in `services/`, `integrations/`, and a thinner `store` facade; worker-oriented modules are still missing.
+  Notes: first real seams now live in `services/`, `integrations/`, and a thinner `store` facade; scheduler/digest workers remain pending.
 
 ## Suggested Next Steps
 
@@ -133,6 +136,6 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 ## Next Follow-Up
 
 1. [x] Implement `webhook_receiver` and `poller` so `RUNNING_EXTERNAL` jobs can progress without manual inspection.
-2. Build `result_importer`, `normalization_service`, and `snapshot_service` on top of `raw_import_batches`.
-3. Add runtime diff/event generation plus event dedupe enforcement, then complete the remaining job state transitions.
+2. [x] Build `result_importer`, `normalization_service`, and `snapshot_service` on top of `raw_import_batches`.
+3. Add runtime diff/event generation plus event dedupe enforcement on top of persisted snapshots.
 4. Decide whether object storage is needed for large raw payload offload before importer volume grows.

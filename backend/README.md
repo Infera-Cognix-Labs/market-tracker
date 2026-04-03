@@ -18,7 +18,7 @@ Backend đang tập trung vào các read/write flows chính cho:
 - jobs
 - weekly digests
 
-Lưu ý: phần scheduler, webhook receiver, orchestrator, importer và Apify execution flow mới ở mức khung tài liệu, chưa phải full production workflow.
+Lưu ý: webhook receiver, poller fallback, import worker, normalization, và snapshot persistence da co runtime flow co the chay. Cac phan diff/event engine, scheduler, digest worker van la follow-up.
 
 ## Tech Stack
 
@@ -89,6 +89,9 @@ APIFY_WEBHOOK_URL=https://your-domain.example.com/v1/webhooks/apify/runs
 APIFY_WEBHOOK_SECRET=replace_me
 APIFY_POLL_BATCH_SIZE=25
 APIFY_POLL_INTERVAL_SECS=60
+APIFY_IMPORT_BATCH_SIZE=200
+APIFY_IMPORT_WORKER_BATCH_SIZE=10
+APIFY_IMPORT_WORKER_INTERVAL_SECS=30
 ```
 
 Bạn cũng có thể dùng:
@@ -123,6 +126,18 @@ Hoặc chạy loop liên tục:
 
 ```bash
 uv run python -m app.workers.poller_worker
+```
+
+Chay import worker mot lan:
+
+```bash
+uv run python -m app.workers.import_worker --once
+```
+
+Hoac chay import worker lien tuc:
+
+```bash
+uv run python -m app.workers.import_worker
 ```
 
 Endpoints hữu ích:

@@ -4,11 +4,11 @@ from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
-
 from app.config.config import Config
 from app.core.errors import ForbiddenError
 from app.integrations.apify_gateway import (
     ApifyBindingResolutionError,
+    ApifyGateway,
     ApifyRunLaunch,
     ApifyRunLookupError,
 )
@@ -17,6 +17,7 @@ from app.models.api import (
     CategoryTrackerCreateRequest,
     CategoryTrackingConfigInput,
     ExternalRunStatus,
+    ImportWorkerResult,
     JobCreateRequest,
     JobRunStrategy,
     JobStatus,
@@ -84,9 +85,22 @@ def test_mongo_store_delegates_to_extracted_services(run_async, seed_data):
         async def dispatch_job(self, workspace_id, job_code):
             captured["dispatch"] = (workspace_id, job_code)
 
+    class Importer:
+        async def process_pending_jobs(self):
+            captured["import"] = True
+            return ImportWorkerResult(
+                scanned_jobs=1,
+                processed_jobs=1,
+                succeeded_jobs=1,
+                partial_jobs=0,
+                failed_jobs=0,
+                skipped_jobs=0,
+            )
+
     store.tracker_management = TrackerService()
     store.dashboard_query = QueryService()
     store.job_service = Jobs()
+    store.result_importer = Importer()
 
     category = run_async(
         store.create_category_tracker(
@@ -100,7 +114,9 @@ def test_mongo_store_delegates_to_extracted_services(run_async, seed_data):
             ),
         )
     )
-    overview = run_async(store.get_dashboard_overview(seed_data.workspace_id, Timeframe.WEEKLY))
+    overview = run_async(
+        store.get_dashboard_overview(seed_data.workspace_id, Timeframe.WEEKLY)
+    )
     job = run_async(
         store.create_job(
             seed_data.workspace_id,
@@ -111,17 +127,57 @@ def test_mongo_store_delegates_to_extracted_services(run_async, seed_data):
         )
     )
     run_async(store.dispatch_job(seed_data.workspace_id, seed_data.jobs[0].job_code))
+    import_result = run_async(store.process_import_jobs())
 
     assert category == seed_data.category_trackers[0]
     assert overview == seed_data.dashboard_overview
     assert job == seed_data.jobs[0]
     assert captured["tracker"] == (seed_data.workspace_id, "New Tracker")
     assert captured["dashboard"] == (seed_data.workspace_id, Timeframe.WEEKLY)
-    assert captured["job"] == (seed_data.workspace_id, seed_data.category_trackers[0].tracker_code)
+    assert captured["job"] == (
+        seed_data.workspace_id,
+        seed_data.category_trackers[0].tracker_code,
+    )
     assert captured["dispatch"] == (seed_data.workspace_id, seed_data.jobs[0].job_code)
+    assert captured["import"] is True
+    assert import_result.succeeded_jobs == 1
 
 
-def test_dashboard_query_builds_timeline_from_product_snapshots(run_async, monkeypatch, seed_data):
+def test_apify_gateway_list_dataset_items_maps_response(run_async, monkeypatch):
+    gateway = ApifyGateway(Config(apify_config={"token": "token"}).apify_config)
+
+    def fake_list_dataset_items_sync(dataset_id, limit, offset):
+        assert dataset_id == "dataset_test_001"
+        assert limit == 50
+        assert offset == 100
+        return {
+            "count": 2,
+            "total": 300,
+            "items": [
+                {"asin": "B0BN72FYFG", "title": "One"},
+                {"asin": "B09NNBBY8F", "title": "Two"},
+            ],
+        }
+
+    monkeypatch.setattr(
+        gateway, "_list_dataset_items_sync", fake_list_dataset_items_sync
+    )
+
+    result = run_async(
+        gateway.list_dataset_items("dataset_test_001", limit=50, offset=100)
+    )
+
+    assert result.dataset_id == "dataset_test_001"
+    assert result.offset == 100
+    assert result.limit == 50
+    assert result.count == 2
+    assert result.total == 300
+    assert len(result.items) == 2
+
+
+def test_dashboard_query_builds_timeline_from_product_snapshots(
+    run_async, monkeypatch, seed_data
+):
     snapshots = [
         FakeDocument(
             workspace_id=seed_data.workspace_id,
@@ -130,7 +186,9 @@ def test_dashboard_query_builds_timeline_from_product_snapshots(run_async, monke
         for snapshot in seed_data.product_snapshots
     ]
     events = [
-        FakeDocument(workspace_id=seed_data.workspace_id, **event.model_dump(mode="python"))
+        FakeDocument(
+            workspace_id=seed_data.workspace_id, **event.model_dump(mode="python")
+        )
         for event in seed_data.events
         if event.asin == seed_data.products[0].asin
     ]
@@ -175,7 +233,9 @@ def test_dashboard_query_builds_timeline_from_product_snapshots(run_async, monke
     assert response.summary.listing_change_count == 1
 
 
-def test_run_orchestrator_dispatch_job_success(run_async, monkeypatch, seed_data, caplog):
+def test_run_orchestrator_dispatch_job_success(
+    run_async, monkeypatch, seed_data, caplog
+):
     caplog.set_level("INFO")
 
     job_document = FakeDocument(
@@ -186,7 +246,9 @@ def test_run_orchestrator_dispatch_job_success(run_async, monkeypatch, seed_data
         snapshot_date=date(2026, 4, 5),
         trigger_mode="MANUAL",
         status=JobStatus.QUEUED,
-        run_strategy=JobRunStrategy(provider=Provider.APIFY, binding_code="bind_category_top50_v1"),
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY, binding_code="bind_category_top50_v1"
+        ),
         summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
         created_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
         started_at=None,
@@ -233,7 +295,9 @@ def test_run_orchestrator_dispatch_job_success(run_async, monkeypatch, seed_data
             tracker_code="tracker_code",
         ),
     )
-    monkeypatch.setattr("app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument)
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument
+    )
 
     class Gateway:
         config = SimpleNamespace(webhook_url=None, webhook_secret=None)
@@ -272,7 +336,9 @@ def test_run_orchestrator_dispatch_job_success(run_async, monkeypatch, seed_data
     )
 
 
-def test_run_orchestrator_dispatch_job_registers_webhook(run_async, monkeypatch, seed_data):
+def test_run_orchestrator_dispatch_job_registers_webhook(
+    run_async, monkeypatch, seed_data
+):
     job_document = FakeDocument(
         workspace_id=seed_data.workspace_id,
         job_code="job_cat_20260405_001",
@@ -281,7 +347,9 @@ def test_run_orchestrator_dispatch_job_registers_webhook(run_async, monkeypatch,
         snapshot_date=date(2026, 4, 5),
         trigger_mode="MANUAL",
         status=JobStatus.QUEUED,
-        run_strategy=JobRunStrategy(provider=Provider.APIFY, binding_code="bind_category_top50_v1"),
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY, binding_code="bind_category_top50_v1"
+        ),
         summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
         created_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
         started_at=None,
@@ -326,7 +394,9 @@ def test_run_orchestrator_dispatch_job_registers_webhook(run_async, monkeypatch,
             tracker_code="tracker_code",
         ),
     )
-    monkeypatch.setattr("app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument)
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument
+    )
 
     class Gateway:
         config = SimpleNamespace(
@@ -357,14 +427,20 @@ def test_run_orchestrator_dispatch_job_registers_webhook(run_async, monkeypatch,
     run_async(orchestrator.dispatch_job(seed_data.workspace_id, job_document.job_code))
 
     assert captured_webhooks is not None
-    assert captured_webhooks[0]["request_url"] == "https://example.com/v1/webhooks/apify/runs"
+    assert (
+        captured_webhooks[0]["request_url"]
+        == "https://example.com/v1/webhooks/apify/runs"
+    )
     assert captured_webhooks[0]["event_types"] == [
         "ACTOR.RUN.SUCCEEDED",
         "ACTOR.RUN.FAILED",
         "ACTOR.RUN.ABORTED",
         "ACTOR.RUN.TIMED_OUT",
     ]
-    assert captured_webhooks[0]["headers_template"] == '{"Authorization": "Bearer topsecret"}'
+    assert (
+        captured_webhooks[0]["headers_template"]
+        == '{"Authorization": "Bearer topsecret"}'
+    )
 
 
 def test_apify_run_lifecycle_webhook_success(run_async, monkeypatch):
@@ -707,7 +783,9 @@ def test_apify_run_lifecycle_poller_counts_and_transitions(run_async, monkeypatc
     monkeypatch.setattr(
         "app.services.apify_run_lifecycle_service.ApifyRunDocument",
         SimpleNamespace(
-            find=lambda *args, **kwargs: FakeCursor([run_one, run_two, run_three, run_four]),
+            find=lambda *args, **kwargs: FakeCursor(
+                [run_one, run_two, run_three, run_four]
+            ),
             find_one=lambda *args, **kwargs: None,
             apify_run_id="apify_run_id",
             workspace_id="workspace_id",
@@ -744,7 +822,9 @@ def test_apify_run_lifecycle_poller_counts_and_transitions(run_async, monkeypatc
 
     service = ApifyRunLifecycleService(
         Gateway(),
-        Config(apify_config={"poll_batch_size": 10, "webhook_secret": None}).apify_config,
+        Config(
+            apify_config={"poll_batch_size": 10, "webhook_secret": None}
+        ).apify_config,
     )
     service._find_job_document = _find_job_by_run_code(jobs).__get__(
         service,
@@ -802,7 +882,9 @@ def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_conte
         snapshot_date=date(2026, 4, 5),
         trigger_mode="MANUAL",
         status=JobStatus.QUEUED,
-        run_strategy=JobRunStrategy(provider=Provider.APIFY, binding_code="bind_category_top50_v1"),
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY, binding_code="bind_category_top50_v1"
+        ),
         summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
         created_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
         started_at=None,
@@ -846,7 +928,9 @@ def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_conte
         config = SimpleNamespace(webhook_url=None, webhook_secret=None)
 
         async def start_run(self, binding_code, run_input, webhooks=None):
-            raise ApifyBindingResolutionError("Missing actor/task configuration for binding.")
+            raise ApifyBindingResolutionError(
+                "Missing actor/task configuration for binding."
+            )
 
     orchestrator = RunOrchestrator(Gateway())
     run_async(orchestrator.dispatch_job(seed_data.workspace_id, job_document.job_code))
