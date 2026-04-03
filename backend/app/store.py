@@ -24,6 +24,7 @@ from app.models.api import (
     DashboardOverview,
     EventListResponse,
     EventType,
+    ImportWorkerResult,
     Job,
     JobCreateRequest,
     JobListResponse,
@@ -52,17 +53,10 @@ from app.seed import SeedData
 from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.dashboard_query_service import DashboardQueryService
 from app.services.job_service import JobService
+from app.services.normalization_service import NormalizationService
+from app.services.result_importer_service import ResultImporterService
 from app.services.run_orchestrator import RunOrchestrator
-from app.services.shared import (
-    _aggregate_timeline_points,
-    _build_dashboard_overview,
-    _build_timeline_summary,
-    _build_top_threats,
-    _generate_job_code,
-    _generate_tracker_code,
-    _sort_events,
-    _within_range,
-)
+from app.services.snapshot_service import SnapshotService
 from app.services.tracker_management_service import TrackerManagementService
 
 LISTING_EVENT_TYPES = {
@@ -205,6 +199,9 @@ class BaseStore:
     async def poll_apify_runs(self) -> ApifyRunPollResult:
         raise NotImplementedError
 
+    async def process_import_jobs(self) -> ImportWorkerResult:
+        raise NotImplementedError
+
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         raise NotImplementedError
 
@@ -234,6 +231,14 @@ class MongoStore(BaseStore):
         self.tracker_management = TrackerManagementService()
         self.dashboard_query = DashboardQueryService()
         self.run_orchestrator = RunOrchestrator(self.apify_gateway)
+        self.normalization_service = NormalizationService()
+        self.snapshot_service = SnapshotService()
+        self.result_importer = ResultImporterService(
+            self.apify_gateway,
+            self.normalization_service,
+            self.snapshot_service,
+            settings.apify_config,
+        )
         self.apify_run_lifecycle = ApifyRunLifecycleService(
             self.apify_gateway,
             settings.apify_config,
@@ -560,6 +565,9 @@ class MongoStore(BaseStore):
 
     async def poll_apify_runs(self) -> ApifyRunPollResult:
         return await self.apify_run_lifecycle.poll_runs()
+
+    async def process_import_jobs(self) -> ImportWorkerResult:
+        return await self.result_importer.process_pending_jobs()
 
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         return await self.job_service.get_job(workspace_id, job_code)

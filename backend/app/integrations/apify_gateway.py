@@ -28,6 +28,10 @@ class ApifyRunLookupError(ApifyGatewayError):
     pass
 
 
+class ApifyDatasetLookupError(ApifyGatewayError):
+    pass
+
+
 @dataclass(frozen=True)
 class ApifyBindingTarget:
     binding_code: str
@@ -60,6 +64,16 @@ class ApifyRunState:
     finished_at: Any
 
 
+@dataclass(frozen=True)
+class ApifyDatasetBatch:
+    dataset_id: str
+    offset: int
+    limit: int
+    count: int
+    total: int | None
+    items: list[dict[str, object]]
+
+
 class ApifyGateway:
     def __init__(self, config: ApifyConfig) -> None:
         self.config = config
@@ -81,7 +95,9 @@ class ApifyGateway:
                 build=self.config.competitor_build,
                 memory_mbytes=self.config.competitor_memory_mbytes,
             )
-        raise ApifyBindingResolutionError(f"Unsupported Apify binding_code `{binding_code}`.")
+        raise ApifyBindingResolutionError(
+            f"Unsupported Apify binding_code `{binding_code}`."
+        )
 
     async def start_run(
         self,
@@ -103,8 +119,12 @@ class ApifyGateway:
             json.dumps(run_input, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
         try:
-            run = await asyncio.to_thread(self._start_run_sync, binding, run_input, webhooks)
-        except Exception as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
+            run = await asyncio.to_thread(
+                self._start_run_sync, binding, run_input, webhooks
+            )
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
             raise ApifyRunStartError(str(exc)) from exc
 
         return ApifyRunLaunch(
@@ -125,7 +145,9 @@ class ApifyGateway:
 
         try:
             run = await asyncio.to_thread(self._get_run_sync, run_id)
-        except Exception as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
             raise ApifyRunLookupError(str(exc)) from exc
 
         if run is None:
@@ -138,6 +160,40 @@ class ApifyGateway:
             raw_status=run.get("status"),
             started_at=run.get("startedAt"),
             finished_at=run.get("finishedAt"),
+        )
+
+    async def list_dataset_items(
+        self,
+        dataset_id: str,
+        *,
+        limit: int,
+        offset: int = 0,
+    ) -> ApifyDatasetBatch:
+        if not self.config.token:
+            raise ApifyDatasetLookupError("Missing APIFY_TOKEN for dataset lookup.")
+
+        try:
+            response = await asyncio.to_thread(
+                self._list_dataset_items_sync,
+                dataset_id,
+                limit,
+                offset,
+            )
+        except (
+            Exception
+        ) as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
+            raise ApifyDatasetLookupError(str(exc)) from exc
+
+        items = [item for item in response.get("items", []) if isinstance(item, dict)]
+        count = response.get("count")
+        total = response.get("total")
+        return ApifyDatasetBatch(
+            dataset_id=dataset_id,
+            offset=offset,
+            limit=limit,
+            count=count if isinstance(count, int) else len(items),
+            total=total if isinstance(total, int) else None,
+            items=items,
         )
 
     def _start_run_sync(
@@ -179,12 +235,34 @@ class ApifyGateway:
         client = ApifyClient(self.config.token)
         return client.run(run_id).get()
 
+    def _list_dataset_items_sync(
+        self,
+        dataset_id: str,
+        limit: int,
+        offset: int,
+    ) -> dict[str, object]:
+        client = ApifyClient(self.config.token)
+        response = client.dataset(dataset_id).list_items(limit=limit, offset=offset)
+        return {
+            "count": response.count,
+            "total": response.total,
+            "items": list(response.items),
+        }
+
 
 def map_apify_status(raw_status: str | None) -> ExternalRunStatus | None:
     if raw_status is None:
         return None
     normalized = raw_status.upper()
-    if normalized in {"READY", "RUNNING", "SUCCEEDED", "FAILED", "TIMED-OUT", "TIMED_OUT", "ABORTED"}:
+    if normalized in {
+        "READY",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "TIMED-OUT",
+        "TIMED_OUT",
+        "ABORTED",
+    }:
         if normalized == "TIMED-OUT":
             normalized = "TIMED_OUT"
         return ExternalRunStatus(normalized)

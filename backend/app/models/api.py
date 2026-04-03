@@ -11,11 +11,15 @@ AsinCode = Annotated[str, StringConstraints(min_length=10, max_length=12)]
 
 
 class ApiModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid", populate_by_name=True, str_strip_whitespace=True
+    )
 
 
 class FlexibleApiModel(BaseModel):
-    model_config = ConfigDict(extra="allow", populate_by_name=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="allow", populate_by_name=True, str_strip_whitespace=True
+    )
 
 
 class Timeframe(str, Enum):
@@ -118,7 +122,9 @@ class CategoryScope(ApiModel):
     @model_validator(mode="after")
     def validate_scope(self) -> "CategoryScope":
         if not self.browse_node_id and not self.browse_node_url:
-            raise ValueError("Either browse_node_id or browse_node_url must be provided.")
+            raise ValueError(
+                "Either browse_node_id or browse_node_url must be provided."
+            )
         return self
 
 
@@ -509,6 +515,16 @@ class ApifyRunPollResult(ApiModel):
     jobs_advanced: int
     jobs_failed: int
     lookup_failures: int
+
+
+class ImportWorkerResult(ApiModel):
+    source: Literal["IMPORT_WORKER"] = "IMPORT_WORKER"
+    scanned_jobs: int
+    processed_jobs: int
+    succeeded_jobs: int
+    partial_jobs: int
+    failed_jobs: int
+    skipped_jobs: int
 
 
 class Threat(ApiModel):

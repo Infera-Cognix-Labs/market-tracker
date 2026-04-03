@@ -49,6 +49,11 @@ class ApifyConfig(BaseModel):
     webhook_secret: str | None = os.getenv("APIFY_WEBHOOK_SECRET")
     poll_batch_size: int = _env_int("APIFY_POLL_BATCH_SIZE", 25) or 25
     poll_interval_secs: int = _env_int("APIFY_POLL_INTERVAL_SECS", 60) or 60
+    import_batch_size: int = _env_int("APIFY_IMPORT_BATCH_SIZE", 200) or 200
+    import_worker_batch_size: int = _env_int("APIFY_IMPORT_WORKER_BATCH_SIZE", 10) or 10
+    import_worker_interval_secs: int = (
+        _env_int("APIFY_IMPORT_WORKER_INTERVAL_SECS", 30) or 30
+    )
     category_actor_id: str | None = os.getenv("APIFY_CATEGORY_ACTOR_ID")
     category_task_id: str | None = os.getenv("APIFY_CATEGORY_TASK_ID")
     category_build: str | None = os.getenv("APIFY_CATEGORY_BUILD")
