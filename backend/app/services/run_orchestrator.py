@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from app.core.errors import NotFoundError
@@ -9,9 +10,14 @@ from app.integrations.apify_gateway import (
     ApifyBindingResolutionError,
     ApifyGateway,
     ApifyGatewayError,
-    ApifyRunStartError,
 )
-from app.models.api import ExternalRunStatus, ExternalRunSummary, JobError, JobStatus, TrackerType
+from app.models.api import (
+    ExternalRunStatus,
+    ExternalRunSummary,
+    JobError,
+    JobStatus,
+    TrackerType,
+)
 from app.models.documents import (
     ApifyRunDocument,
     CategoryTrackerDocument,
@@ -37,7 +43,11 @@ class RunOrchestrator:
         if job_document.status != JobStatus.QUEUED:
             logger.info(
                 "Skipping job dispatch because job is no longer queued.",
-                extra={"context": correlation_context(job_code=job_code, status=job_document.status)},
+                extra={
+                    "context": correlation_context(
+                        job_code=job_code, status=job_document.status
+                    )
+                },
             )
             return
 
@@ -65,7 +75,11 @@ class RunOrchestrator:
                 extra={"context": log_context},
             )
 
-            launch = await self.gateway.start_run(binding_code, run_input)
+            launch = await self.gateway.start_run(
+                binding_code,
+                run_input,
+                webhooks=self._build_run_webhooks(),
+            )
 
             apify_run = ApifyRunDocument(
                 workspace_id=workspace_id,
@@ -92,7 +106,8 @@ class RunOrchestrator:
             job_document.external_run = ExternalRunSummary(
                 provider_run_id=launch.provider_run_id,
                 status=launch.status or ExternalRunStatus.READY,
-                started_at=coerce_datetime(launch.started_at) or job_document.started_at,
+                started_at=coerce_datetime(launch.started_at)
+                or job_document.started_at,
                 finished_at=coerce_datetime(launch.finished_at),
             )
             job_document.status = JobStatus.RUNNING_EXTERNAL
@@ -172,11 +187,33 @@ class RunOrchestrator:
         base_input.update(
             {
                 "marketplace": tracker_document.marketplace,
-                "asins": [item.asin for item in tracker_document.tracked_asins if item.enabled],
+                "asins": [
+                    item.asin for item in tracker_document.tracked_asins if item.enabled
+                ],
                 "track_fields": tracker_document.track_fields.model_dump(mode="python"),
             }
         )
         return base_input
+
+    def _build_run_webhooks(self) -> list[dict[str, object]] | None:
+        webhook_url = self.gateway.config.webhook_url
+        if not webhook_url:
+            return None
+
+        webhook: dict[str, object] = {
+            "event_types": [
+                "ACTOR.RUN.SUCCEEDED",
+                "ACTOR.RUN.FAILED",
+                "ACTOR.RUN.ABORTED",
+                "ACTOR.RUN.TIMED_OUT",
+            ],
+            "request_url": webhook_url,
+        }
+        if self.gateway.config.webhook_secret:
+            webhook["headers_template"] = json_headers(
+                {"Authorization": f"Bearer {self.gateway.config.webhook_secret}"}
+            )
+        return [webhook]
 
 
 def coerce_datetime(value: object | None) -> datetime | None:
@@ -189,3 +226,7 @@ def coerce_datetime(value: object | None) -> datetime | None:
             return parsed.replace(tzinfo=UTC)
         return parsed
     raise ValueError(f"Unsupported datetime payload: {value!r}")
+
+
+def json_headers(values: dict[str, str]) -> str:
+    return json.dumps(values)

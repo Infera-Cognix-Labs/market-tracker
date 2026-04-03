@@ -3,6 +3,8 @@ from app.integrations.apify_gateway import (
     ApifyGateway,
     ApifyGatewayError,
     ApifyRunLaunch,
+    ApifyRunLookupError,
+    ApifyRunState,
     ApifyRunStartError,
 )
 
@@ -11,5 +13,7 @@ __all__ = [
     "ApifyGateway",
     "ApifyGatewayError",
     "ApifyRunLaunch",
+    "ApifyRunLookupError",
+    "ApifyRunState",
     "ApifyRunStartError",
 ]

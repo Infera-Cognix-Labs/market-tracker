@@ -7,11 +7,13 @@ from app.models.api import (
     CategoryTracker,
     CategoryTrackerCreateRequest,
     CategoryTrackerListResponse,
+    CategoryTrackerStats,
     CategoryTrackerUpdateRequest,
     CategoryTrackingConfig,
     CompetitorTrackerCreateRequest,
     CompetitorTrackerDetail,
     CompetitorTrackerListResponse,
+    CompetitorTrackerStats,
     CompetitorTrackerUpdateRequest,
     TrackedAsin,
     TrackedAsinReplacementRequest,
@@ -108,7 +110,9 @@ class TrackerManagementService:
         ).insert()
         return tracker
 
-    async def get_category_tracker(self, workspace_id: str, tracker_code: str) -> CategoryTracker:
+    async def get_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> CategoryTracker:
         document = await CategoryTrackerDocument.find_one(
             CategoryTrackerDocument.workspace_id == workspace_id,
             CategoryTrackerDocument.tracker_code == tracker_code,
@@ -134,13 +138,17 @@ class TrackerManagementService:
         if payload.name is not None:
             tracker.name = payload.name
         if payload.schedule is not None:
-            tracker.schedule = TrackerSchedule.model_validate(payload.schedule.model_dump())
+            tracker.schedule = TrackerSchedule.model_validate(
+                payload.schedule.model_dump()
+            )
         if payload.status is not None:
             tracker.status = payload.status
         if payload.tracking_config is not None and (
             "top10_alert_enabled" in payload.tracking_config.model_fields_set
         ):
-            tracker.tracking_config.top10_alert_enabled = payload.tracking_config.top10_alert_enabled
+            tracker.tracking_config.top10_alert_enabled = (
+                payload.tracking_config.top10_alert_enabled
+            )
         tracker.updated_at = utc_now()
 
         for key, value in tracker.model_dump(mode="python").items():
@@ -194,8 +202,12 @@ class TrackerManagementService:
             TrackedAsin(asin=item.asin, enabled=item.enabled, added_at=now)
             for item in payload.tracked_asins
         ]
-        product_docs = await ProductDocument.find(ProductDocument.workspace_id == workspace_id).to_list()
-        event_docs = await EventDocument.find(EventDocument.workspace_id == workspace_id).to_list()
+        product_docs = await ProductDocument.find(
+            ProductDocument.workspace_id == workspace_id
+        ).to_list()
+        event_docs = await EventDocument.find(
+            EventDocument.workspace_id == workspace_id
+        ).to_list()
         tracker = CompetitorTrackerDetail(
             tracker_code=generate_tracker_code(
                 "cmp",
@@ -254,12 +266,18 @@ class TrackerManagementService:
         if payload.track_fields is not None:
             tracker.track_fields = payload.track_fields
         if payload.schedule is not None:
-            tracker.schedule = TrackerSchedule.model_validate(payload.schedule.model_dump())
+            tracker.schedule = TrackerSchedule.model_validate(
+                payload.schedule.model_dump()
+            )
         if payload.status is not None:
             tracker.status = payload.status
 
-        product_docs = await ProductDocument.find(ProductDocument.workspace_id == workspace_id).to_list()
-        event_docs = await EventDocument.find(EventDocument.workspace_id == workspace_id).to_list()
+        product_docs = await ProductDocument.find(
+            ProductDocument.workspace_id == workspace_id
+        ).to_list()
+        event_docs = await EventDocument.find(
+            EventDocument.workspace_id == workspace_id
+        ).to_list()
         tracker.tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
@@ -303,8 +321,12 @@ class TrackerManagementService:
         tracker.stats.tracked_asin_count = len(tracker.tracked_asins)
         tracker.updated_at = now
 
-        product_docs = await ProductDocument.find(ProductDocument.workspace_id == workspace_id).to_list()
-        event_docs = await EventDocument.find(EventDocument.workspace_id == workspace_id).to_list()
+        product_docs = await ProductDocument.find(
+            ProductDocument.workspace_id == workspace_id
+        ).to_list()
+        event_docs = await EventDocument.find(
+            EventDocument.workspace_id == workspace_id
+        ).to_list()
         tracker.tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,

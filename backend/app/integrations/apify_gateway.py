@@ -24,6 +24,10 @@ class ApifyRunStartError(ApifyGatewayError):
     pass
 
 
+class ApifyRunLookupError(ApifyGatewayError):
+    pass
+
+
 @dataclass(frozen=True)
 class ApifyBindingTarget:
     binding_code: str
@@ -44,6 +48,16 @@ class ApifyRunLaunch:
     input_hash: str
     binding: ApifyBindingTarget
     run_input: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ApifyRunState:
+    provider_run_id: str
+    default_dataset_id: str | None
+    status: ExternalRunStatus | None
+    raw_status: str | None
+    started_at: Any
+    finished_at: Any
 
 
 class ApifyGateway:
@@ -69,7 +83,13 @@ class ApifyGateway:
             )
         raise ApifyBindingResolutionError(f"Unsupported Apify binding_code `{binding_code}`.")
 
-    async def start_run(self, binding_code: str, run_input: dict[str, object]) -> ApifyRunLaunch:
+    async def start_run(
+        self,
+        binding_code: str,
+        run_input: dict[str, object],
+        *,
+        webhooks: list[dict[str, object]] | None = None,
+    ) -> ApifyRunLaunch:
         if not self.config.token:
             raise ApifyBindingResolutionError("Missing APIFY_TOKEN for Apify dispatch.")
 
@@ -83,7 +103,7 @@ class ApifyGateway:
             json.dumps(run_input, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
         try:
-            run = await asyncio.to_thread(self._start_run_sync, binding, run_input)
+            run = await asyncio.to_thread(self._start_run_sync, binding, run_input, webhooks)
         except Exception as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
             raise ApifyRunStartError(str(exc)) from exc
 
@@ -99,8 +119,32 @@ class ApifyGateway:
             run_input=run_input,
         )
 
+    async def get_run(self, run_id: str) -> ApifyRunState:
+        if not self.config.token:
+            raise ApifyRunLookupError("Missing APIFY_TOKEN for Apify run lookup.")
+
+        try:
+            run = await asyncio.to_thread(self._get_run_sync, run_id)
+        except Exception as exc:  # pragma: no cover - exercised via monkeypatch in unit tests
+            raise ApifyRunLookupError(str(exc)) from exc
+
+        if run is None:
+            raise ApifyRunLookupError(f"Apify run `{run_id}` was not found.")
+
+        return ApifyRunState(
+            provider_run_id=run["id"],
+            default_dataset_id=run.get("defaultDatasetId"),
+            status=map_apify_status(run.get("status")),
+            raw_status=run.get("status"),
+            started_at=run.get("startedAt"),
+            finished_at=run.get("finishedAt"),
+        )
+
     def _start_run_sync(
-        self, binding: ApifyBindingTarget, run_input: dict[str, object]
+        self,
+        binding: ApifyBindingTarget,
+        run_input: dict[str, object],
+        webhooks: list[dict[str, object]] | None,
     ) -> dict[str, object]:
         client = ApifyClient(self.config.token)
         if binding.task_id:
@@ -108,6 +152,8 @@ class ApifyGateway:
                 "task_input": run_input,
                 "timeout_secs": self.config.dispatch_timeout_secs,
             }
+            if webhooks is not None:
+                task_kwargs["webhooks"] = webhooks
             if binding.memory_mbytes is not None:
                 task_kwargs["memory_mbytes"] = binding.memory_mbytes
             if binding.build is not None:
@@ -118,6 +164,8 @@ class ApifyGateway:
                 "run_input": run_input,
                 "timeout_secs": self.config.dispatch_timeout_secs,
             }
+            if webhooks is not None:
+                actor_kwargs["webhooks"] = webhooks
             if binding.memory_mbytes is not None:
                 actor_kwargs["memory_mbytes"] = binding.memory_mbytes
             if binding.build is not None:
@@ -126,6 +174,10 @@ class ApifyGateway:
         raise ApifyBindingResolutionError(
             f"Missing actor/task configuration for binding `{binding.binding_code}`."
         )
+
+    def _get_run_sync(self, run_id: str) -> dict[str, object] | None:
+        client = ApifyClient(self.config.token)
+        return client.run(run_id).get()
 
 
 def map_apify_status(raw_status: str | None) -> ExternalRunStatus | None:

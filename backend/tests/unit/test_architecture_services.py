@@ -3,11 +3,20 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
+import pytest
+
 from app.config.config import Config
-from app.integrations.apify_gateway import ApifyBindingResolutionError, ApifyRunLaunch
+from app.core.errors import ForbiddenError
+from app.integrations.apify_gateway import (
+    ApifyBindingResolutionError,
+    ApifyRunLaunch,
+    ApifyRunLookupError,
+)
 from app.models.api import (
+    ApifyWebhookEnvelope,
     CategoryTrackerCreateRequest,
     CategoryTrackingConfigInput,
+    ExternalRunStatus,
     JobCreateRequest,
     JobRunStrategy,
     JobStatus,
@@ -18,6 +27,7 @@ from app.models.api import (
     TrackerScheduleInput,
     TrackerType,
 )
+from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.dashboard_query_service import DashboardQueryService
 from app.services.run_orchestrator import RunOrchestrator
 from app.store import MongoStore
@@ -226,9 +236,12 @@ def test_run_orchestrator_dispatch_job_success(run_async, monkeypatch, seed_data
     monkeypatch.setattr("app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument)
 
     class Gateway:
-        async def start_run(self, binding_code, run_input):
+        config = SimpleNamespace(webhook_url=None, webhook_secret=None)
+
+        async def start_run(self, binding_code, run_input, webhooks=None):
             assert binding_code == "bind_category_top50_v1"
             assert run_input["tracker_code"] == job_document.tracker_code
+            assert webhooks is None
             return ApifyRunLaunch(
                 provider_run_id="apify_run_test_001",
                 default_dataset_id="dataset_test_001",
@@ -257,6 +270,523 @@ def test_run_orchestrator_dispatch_job_success(run_async, monkeypatch, seed_data
         getattr(record, "context", {}).get("apify_run_id") == "apify_run_test_001"
         for record in caplog.records
     )
+
+
+def test_run_orchestrator_dispatch_job_registers_webhook(run_async, monkeypatch, seed_data):
+    job_document = FakeDocument(
+        workspace_id=seed_data.workspace_id,
+        job_code="job_cat_20260405_001",
+        tracker_type=TrackerType.CATEGORY,
+        tracker_code=seed_data.category_trackers[0].tracker_code,
+        snapshot_date=date(2026, 4, 5),
+        trigger_mode="MANUAL",
+        status=JobStatus.QUEUED,
+        run_strategy=JobRunStrategy(provider=Provider.APIFY, binding_code="bind_category_top50_v1"),
+        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
+        created_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        started_at=None,
+        finished_at=None,
+        error=None,
+        external_run=None,
+    )
+    tracker_document = seed_data.category_trackers[0].model_copy(deep=True)
+    captured_webhooks: list[dict[str, object]] | None = None
+
+    async def fake_save(self, *args, **kwargs):
+        return None
+
+    async def fake_job_find_one(*args, **kwargs):
+        return job_document
+
+    async def fake_tracker_find_one(*args, **kwargs):
+        return tracker_document
+
+    class FakeApifyRunDocument:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        async def insert(self):
+            return None
+
+    job_document.save = fake_save.__get__(job_document, FakeDocument)
+
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.JobDocument",
+        SimpleNamespace(
+            find_one=fake_job_find_one,
+            workspace_id="workspace_id",
+            job_code="job_code",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.CategoryTrackerDocument",
+        SimpleNamespace(
+            find_one=fake_tracker_find_one,
+            workspace_id="workspace_id",
+            tracker_code="tracker_code",
+        ),
+    )
+    monkeypatch.setattr("app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument)
+
+    class Gateway:
+        config = SimpleNamespace(
+            webhook_url="https://example.com/v1/webhooks/apify/runs",
+            webhook_secret="topsecret",
+        )
+
+        async def start_run(self, binding_code, run_input, webhooks=None):
+            nonlocal captured_webhooks
+            captured_webhooks = webhooks
+            return ApifyRunLaunch(
+                provider_run_id="apify_run_test_001",
+                default_dataset_id="dataset_test_001",
+                status=ExternalRunStatus.READY,
+                raw_status="READY",
+                started_at="2026-04-05T02:00:03Z",
+                finished_at=None,
+                input_hash="hash123",
+                binding=SimpleNamespace(
+                    binding_code=binding_code,
+                    actor_id="owner/category-actor",
+                    task_id=None,
+                ),
+                run_input=run_input,
+            )
+
+    orchestrator = RunOrchestrator(Gateway())
+    run_async(orchestrator.dispatch_job(seed_data.workspace_id, job_document.job_code))
+
+    assert captured_webhooks is not None
+    assert captured_webhooks[0]["request_url"] == "https://example.com/v1/webhooks/apify/runs"
+    assert captured_webhooks[0]["event_types"] == [
+        "ACTOR.RUN.SUCCEEDED",
+        "ACTOR.RUN.FAILED",
+        "ACTOR.RUN.ABORTED",
+        "ACTOR.RUN.TIMED_OUT",
+    ]
+    assert captured_webhooks[0]["headers_template"] == '{"Authorization": "Bearer topsecret"}'
+
+
+def test_apify_run_lifecycle_webhook_success(run_async, monkeypatch):
+    run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_cat_20260405_001",
+        apify_run_id="apify_run_test_001",
+        status="RUNNING",
+        apify_status_raw="RUNNING",
+        default_dataset_id=None,
+        started_at=None,
+        finished_at=None,
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+    )
+    job_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        job_code="job_cat_20260405_001",
+        status=JobStatus.RUNNING_EXTERNAL,
+        external_run=None,
+        error=SimpleNamespace(code="old", message="old"),
+        started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        finished_at=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.ApifyRunDocument",
+        SimpleNamespace(
+            find_one=_async_return(run_document),
+            find=lambda *args, **kwargs: FakeCursor([run_document]),
+            apify_run_id="apify_run_id",
+            workspace_id="workspace_id",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.JobDocument",
+        SimpleNamespace(
+            find_one=_async_return(job_document),
+            workspace_id="workspace_id",
+            job_code="job_code",
+        ),
+    )
+
+    service = ApifyRunLifecycleService(
+        SimpleNamespace(),
+        Config(apify_config={"webhook_secret": None}).apify_config,
+    )
+    ack = run_async(
+        service.handle_webhook(
+            ApifyWebhookEnvelope(
+                eventType="ACTOR.RUN.SUCCEEDED",
+                resource={
+                    "id": "apify_run_test_001",
+                    "status": "SUCCEEDED",
+                    "defaultDatasetId": "dataset_test_001",
+                    "startedAt": "2026-04-05T02:00:03Z",
+                    "finishedAt": "2026-04-05T02:05:00Z",
+                },
+            )
+        )
+    )
+
+    assert ack.status == "ACCEPTED"
+    assert ack.job_status == JobStatus.IMPORTING
+    assert run_document.status == "SUCCEEDED"
+    assert run_document.default_dataset_id == "dataset_test_001"
+    assert run_document.webhook_received_at is not None
+    assert job_document.status == JobStatus.IMPORTING
+    assert job_document.external_run.provider_run_id == "apify_run_test_001"
+    assert job_document.external_run.status == ExternalRunStatus.SUCCEEDED
+    assert job_document.error is None
+
+
+@pytest.mark.parametrize(
+    ("event_type", "raw_status", "expected_status"),
+    [
+        ("ACTOR.RUN.FAILED", "FAILED", ExternalRunStatus.FAILED),
+        ("ACTOR.RUN.ABORTED", "ABORTED", ExternalRunStatus.ABORTED),
+        ("ACTOR.RUN.TIMED_OUT", "TIMED-OUT", ExternalRunStatus.TIMED_OUT),
+    ],
+)
+def test_apify_run_lifecycle_webhook_failure(
+    run_async,
+    monkeypatch,
+    event_type,
+    raw_status,
+    expected_status,
+):
+    run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_cat_20260405_001",
+        apify_run_id="apify_run_test_001",
+        status="RUNNING",
+        apify_status_raw="RUNNING",
+        default_dataset_id="dataset_test_001",
+        started_at=None,
+        finished_at=None,
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+    )
+    job_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        job_code="job_cat_20260405_001",
+        status=JobStatus.RUNNING_EXTERNAL,
+        external_run=None,
+        error=None,
+        started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        finished_at=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.ApifyRunDocument",
+        SimpleNamespace(
+            find_one=_async_return(run_document),
+            find=lambda *args, **kwargs: FakeCursor([run_document]),
+            apify_run_id="apify_run_id",
+            workspace_id="workspace_id",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.JobDocument",
+        SimpleNamespace(
+            find_one=_async_return(job_document),
+            workspace_id="workspace_id",
+            job_code="job_code",
+        ),
+    )
+
+    service = ApifyRunLifecycleService(
+        SimpleNamespace(),
+        Config(apify_config={"webhook_secret": None}).apify_config,
+    )
+    ack = run_async(
+        service.handle_webhook(
+            ApifyWebhookEnvelope(
+                eventType=event_type,
+                resource={
+                    "id": "apify_run_test_001",
+                    "status": raw_status,
+                    "finishedAt": "2026-04-05T02:05:00Z",
+                },
+            )
+        )
+    )
+
+    assert ack.status == "ACCEPTED"
+    assert ack.provider_status == expected_status
+    assert ack.job_status == JobStatus.FAILED
+    assert run_document.status == expected_status.value
+    assert job_document.status == JobStatus.FAILED
+    assert job_document.error.code == expected_status.value
+
+
+def test_apify_run_lifecycle_webhook_duplicate_is_ignored(run_async, monkeypatch):
+    run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_cat_20260405_001",
+        apify_run_id="apify_run_test_001",
+        status="SUCCEEDED",
+        apify_status_raw="SUCCEEDED",
+        default_dataset_id="dataset_test_001",
+        started_at=None,
+        finished_at=datetime(2026, 4, 5, 2, 5, tzinfo=UTC),
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 5, tzinfo=UTC),
+    )
+    job_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        job_code="job_cat_20260405_001",
+        status=JobStatus.IMPORTING,
+        external_run=SimpleNamespace(
+            provider_run_id="apify_run_test_001",
+            status=ExternalRunStatus.SUCCEEDED,
+            started_at=None,
+            finished_at=datetime(2026, 4, 5, 2, 5, tzinfo=UTC),
+        ),
+        error=None,
+        started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        finished_at=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.ApifyRunDocument",
+        SimpleNamespace(
+            find_one=_async_return(run_document),
+            find=lambda *args, **kwargs: FakeCursor([run_document]),
+            apify_run_id="apify_run_id",
+            workspace_id="workspace_id",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.JobDocument",
+        SimpleNamespace(
+            find_one=_async_return(job_document),
+            workspace_id="workspace_id",
+            job_code="job_code",
+        ),
+    )
+
+    service = ApifyRunLifecycleService(
+        SimpleNamespace(),
+        Config(apify_config={"webhook_secret": None}).apify_config,
+    )
+    ack = run_async(
+        service.handle_webhook(
+            ApifyWebhookEnvelope(
+                eventType="ACTOR.RUN.SUCCEEDED",
+                resource={"id": "apify_run_test_001", "status": "SUCCEEDED"},
+            )
+        )
+    )
+
+    assert ack.status == "IGNORED"
+    assert ack.job_status == JobStatus.IMPORTING
+    assert run_document.webhook_received_at is not None
+    assert job_document.status == JobStatus.IMPORTING
+
+
+def test_apify_run_lifecycle_webhook_secret_check(run_async):
+    service = ApifyRunLifecycleService(
+        SimpleNamespace(),
+        Config(apify_config={"webhook_secret": "topsecret"}).apify_config,
+    )
+
+    with pytest.raises(ForbiddenError):
+        run_async(
+            service.handle_webhook(
+                ApifyWebhookEnvelope(
+                    eventType="ACTOR.RUN.SUCCEEDED",
+                    resource={"id": "apify_run_test_001", "status": "SUCCEEDED"},
+                ),
+                authorization_header="Bearer wrong-secret",
+            )
+        )
+
+
+def test_apify_run_lifecycle_poller_counts_and_transitions(run_async, monkeypatch):
+    run_one = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_one",
+        apify_run_id="run_one",
+        status="RUNNING",
+        apify_status_raw="RUNNING",
+        default_dataset_id=None,
+        started_at=None,
+        finished_at=None,
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+    )
+    run_two = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_two",
+        apify_run_id="run_two",
+        status="READY",
+        apify_status_raw="READY",
+        default_dataset_id=None,
+        started_at=None,
+        finished_at=None,
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 1, tzinfo=UTC),
+    )
+    run_three = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_three",
+        apify_run_id="run_three",
+        status="RUNNING",
+        apify_status_raw="RUNNING",
+        default_dataset_id=None,
+        started_at=None,
+        finished_at=None,
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 2, tzinfo=UTC),
+    )
+    run_four = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_four",
+        apify_run_id="run_four",
+        status="RUNNING",
+        apify_status_raw="RUNNING",
+        default_dataset_id=None,
+        started_at=None,
+        finished_at=None,
+        webhook_received_at=None,
+        poll_count=0,
+        error=None,
+        updated_at=datetime(2026, 4, 5, 2, 3, tzinfo=UTC),
+    )
+
+    jobs = {
+        "job_one": FakeDocument(
+            workspace_id="ws_demo_us",
+            job_code="job_one",
+            status=JobStatus.RUNNING_EXTERNAL,
+            external_run=None,
+            error=None,
+            started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+            finished_at=None,
+        ),
+        "job_two": FakeDocument(
+            workspace_id="ws_demo_us",
+            job_code="job_two",
+            status=JobStatus.RUNNING_EXTERNAL,
+            external_run=None,
+            error=None,
+            started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+            finished_at=None,
+        ),
+        "job_three": FakeDocument(
+            workspace_id="ws_demo_us",
+            job_code="job_three",
+            status=JobStatus.IMPORTING,
+            external_run=None,
+            error=None,
+            started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+            finished_at=None,
+        ),
+        "job_four": FakeDocument(
+            workspace_id="ws_demo_us",
+            job_code="job_four",
+            status=JobStatus.RUNNING_EXTERNAL,
+            external_run=None,
+            error=None,
+            started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+            finished_at=None,
+        ),
+    }
+
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.ApifyRunDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor([run_one, run_two, run_three, run_four]),
+            find_one=lambda *args, **kwargs: None,
+            apify_run_id="apify_run_id",
+            workspace_id="workspace_id",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.apify_run_lifecycle_service.JobDocument",
+        SimpleNamespace(
+            find_one=_job_lookup(jobs),
+            workspace_id="workspace_id",
+            job_code="job_code",
+        ),
+    )
+
+    class Gateway:
+        async def get_run(self, run_id):
+            if run_id == "run_one":
+                return SimpleNamespace(
+                    status=ExternalRunStatus.SUCCEEDED,
+                    raw_status="SUCCEEDED",
+                    default_dataset_id="dataset_one",
+                    started_at="2026-04-05T02:00:01Z",
+                    finished_at="2026-04-05T02:05:00Z",
+                )
+            if run_id == "run_two":
+                return SimpleNamespace(
+                    status=ExternalRunStatus.FAILED,
+                    raw_status="FAILED",
+                    default_dataset_id="dataset_two",
+                    started_at="2026-04-05T02:00:02Z",
+                    finished_at="2026-04-05T02:05:10Z",
+                )
+            raise ApifyRunLookupError("lookup failed")
+
+    service = ApifyRunLifecycleService(
+        Gateway(),
+        Config(apify_config={"poll_batch_size": 10, "webhook_secret": None}).apify_config,
+    )
+    service._find_job_document = _find_job_by_run_code(jobs).__get__(
+        service,
+        ApifyRunLifecycleService,
+    )
+    result = run_async(service.poll_runs())
+
+    assert result.polled_runs == 3
+    assert result.updated_runs == 2
+    assert result.jobs_advanced == 1
+    assert result.jobs_failed == 1
+    assert result.lookup_failures == 1
+    assert run_one.poll_count == 1
+    assert run_two.poll_count == 1
+    assert run_four.poll_count == 0
+    assert jobs["job_one"].status == JobStatus.IMPORTING
+    assert jobs["job_two"].status == JobStatus.FAILED
+    assert jobs["job_three"].status == JobStatus.IMPORTING
+
+
+def _async_return(value):
+    async def _inner(*args, **kwargs):
+        return value
+
+    return _inner
+
+
+def _job_lookup(jobs):
+    async def _inner(*args, **kwargs):
+        for job in jobs.values():
+            if job.job_code in str(args):
+                return job
+        return None
+
+    return _inner
+
+
+def _find_job_by_run_code(jobs):
+    async def _inner(self, run_document):
+        return jobs.get(run_document.tracking_job_code)
+
+    return _inner
 
 
 def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_context(
@@ -313,7 +843,9 @@ def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_conte
     )
 
     class Gateway:
-        async def start_run(self, binding_code, run_input):
+        config = SimpleNamespace(webhook_url=None, webhook_secret=None)
+
+        async def start_run(self, binding_code, run_input, webhooks=None):
             raise ApifyBindingResolutionError("Missing actor/task configuration for binding.")
 
     orchestrator = RunOrchestrator(Gateway())

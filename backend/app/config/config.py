@@ -45,6 +45,10 @@ class MongoDBConfig(BaseModel):
 class ApifyConfig(BaseModel):
     token: str | None = os.getenv("APIFY_TOKEN")
     dispatch_timeout_secs: int = _env_int("APIFY_DISPATCH_TIMEOUT_SECS", 300) or 300
+    webhook_url: str | None = os.getenv("APIFY_WEBHOOK_URL")
+    webhook_secret: str | None = os.getenv("APIFY_WEBHOOK_SECRET")
+    poll_batch_size: int = _env_int("APIFY_POLL_BATCH_SIZE", 25) or 25
+    poll_interval_secs: int = _env_int("APIFY_POLL_INTERVAL_SECS", 60) or 60
     category_actor_id: str | None = os.getenv("APIFY_CATEGORY_ACTOR_ID")
     category_task_id: str | None = os.getenv("APIFY_CATEGORY_TASK_ID")
     category_build: str | None = os.getenv("APIFY_CATEGORY_BUILD")

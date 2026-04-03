@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     jobs,
     products,
     reports,
+    webhooks_apify,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "jobs",
     "products",
     "reports",
+    "webhooks_apify",
 ]

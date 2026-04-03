@@ -7,28 +7,25 @@ from pydantic import Field
 from pymongo import IndexModel
 
 from app.models.api import (
-    CategorySnapshot,
+    CategoryScope,
     CategorySnapshotProduct,
     CategorySnapshotSummary,
     CategoryTrackerLatestSnapshotSummary,
     CategoryTrackerStats,
-    CategoryScope,
     CategoryTrackingConfig,
-    CompetitorTrackFields,
     CompetitorTrackerStats,
-    Event,
+    CompetitorTrackFields,
     EventPayload,
     ExternalRunSummary,
-    Job,
     JobError,
     JobRunStrategy,
     JobSummary,
     ProductCurrentState,
-    TrackerRef,
-    TrackerSchedule,
     Threat,
     TrackedAsin,
     TrackedProductSummary,
+    TrackerRef,
+    TrackerSchedule,
     WeeklyDigestSummary,
 )
 
@@ -72,7 +69,10 @@ class CategorySnapshotDocument(WorkspaceDocument):
     class Settings:
         name = "category_snapshots"
         indexes = [
-            IndexModel([("workspace_id", 1), ("tracker_code", 1), ("snapshot_date", -1)], unique=True),
+            IndexModel(
+                [("workspace_id", 1), ("tracker_code", 1), ("snapshot_date", -1)],
+                unique=True,
+            ),
         ]
 
 
@@ -138,7 +138,9 @@ class ProductDocument(WorkspaceDocument):
     class Settings:
         name = "products"
         indexes = [
-            IndexModel([("workspace_id", 1), ("marketplace", 1), ("asin", 1)], unique=True),
+            IndexModel(
+                [("workspace_id", 1), ("marketplace", 1), ("asin", 1)], unique=True
+            ),
         ]
 
 
@@ -173,11 +175,22 @@ class ProductSnapshotDocument(WorkspaceDocument):
         name = "product_snapshots"
         indexes = [
             IndexModel(
-                [("workspace_id", 1), ("marketplace", 1), ("asin", 1), ("snapshot_date", -1)],
+                [
+                    ("workspace_id", 1),
+                    ("marketplace", 1),
+                    ("asin", 1),
+                    ("snapshot_date", -1),
+                ],
                 unique=True,
             ),
             IndexModel([("workspace_id", 1), ("snapshot_date", -1)]),
-            IndexModel([("workspace_id", 1), ("tracker_refs.tracker_code", 1), ("snapshot_date", -1)]),
+            IndexModel(
+                [
+                    ("workspace_id", 1),
+                    ("tracker_refs.tracker_code", 1),
+                    ("snapshot_date", -1),
+                ]
+            ),
         ]
 
 
@@ -201,7 +214,12 @@ class JobDocument(WorkspaceDocument):
         indexes = [
             IndexModel([("workspace_id", 1), ("job_code", 1)], unique=True),
             IndexModel(
-                [("workspace_id", 1), ("tracker_type", 1), ("tracker_code", 1), ("snapshot_date", 1)],
+                [
+                    ("workspace_id", 1),
+                    ("tracker_type", 1),
+                    ("tracker_code", 1),
+                    ("snapshot_date", 1),
+                ],
                 unique=True,
             ),
         ]

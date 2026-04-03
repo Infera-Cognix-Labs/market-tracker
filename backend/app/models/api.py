@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -482,6 +482,33 @@ class JobCreateRequest(ApiModel):
     tracker_code: str
     snapshot_date: date | None = None
     trigger_mode: TriggerMode = TriggerMode.MANUAL
+
+
+class ApifyWebhookEnvelope(FlexibleApiModel):
+    event_type: str | None = Field(default=None, alias="eventType")
+    event_data: dict[str, Any] | str | None = Field(default=None, alias="eventData")
+    resource_id: str | None = Field(default=None, alias="resourceId")
+    resource: dict[str, Any] | str | None = None
+    payload: dict[str, Any] | str | None = None
+    data: dict[str, Any] | str | None = None
+
+
+class ApifyWebhookAck(ApiModel):
+    status: Literal["ACCEPTED", "IGNORED"]
+    source: Literal["WEBHOOK"] = "WEBHOOK"
+    apify_run_id: str | None = None
+    tracking_job_code: str | None = None
+    provider_status: ExternalRunStatus | None = None
+    job_status: JobStatus | None = None
+
+
+class ApifyRunPollResult(ApiModel):
+    source: Literal["POLL"] = "POLL"
+    polled_runs: int
+    updated_runs: int
+    jobs_advanced: int
+    jobs_failed: int
+    lookup_failures: int
 
 
 class Threat(ApiModel):

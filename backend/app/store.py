@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date
 from inspect import isawaitable
-from typing import Iterable
 
 from beanie import init_beanie
 from pymongo import AsyncMongoClient
@@ -10,6 +9,9 @@ from pymongo import AsyncMongoClient
 from app.config.config import Config
 from app.integrations.apify_gateway import ApifyGateway
 from app.models.api import (
+    ApifyRunPollResult,
+    ApifyWebhookAck,
+    ApifyWebhookEnvelope,
     CategorySnapshot,
     CategoryTracker,
     CategoryTrackerCreateRequest,
@@ -20,7 +22,6 @@ from app.models.api import (
     CompetitorTrackerListResponse,
     CompetitorTrackerUpdateRequest,
     DashboardOverview,
-    Event,
     EventListResponse,
     EventType,
     Job,
@@ -28,36 +29,32 @@ from app.models.api import (
     JobListResponse,
     JobStatus,
     ProductDetail,
-    ProductTimelinePoint,
     ProductTimelineResponse,
-    ProductTimelineSummary,
     Severity,
     Timeframe,
-    TrackerType,
     TrackedAsinReplacementRequest,
+    TrackerType,
     WeeklyDigest,
     WeeklyDigestListResponse,
 )
 from app.models.documents import (
-    ApifyRunDocument,
+    DOCUMENT_MODELS,
     CategorySnapshotDocument,
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
-    DOCUMENT_MODELS,
     EventDocument,
     JobDocument,
     ProductDocument,
     ProductSnapshotDocument,
-    RawImportBatchDocument,
     WeeklyDigestDocument,
 )
 from app.seed import SeedData
+from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.dashboard_query_service import DashboardQueryService
 from app.services.job_service import JobService
 from app.services.run_orchestrator import RunOrchestrator
 from app.services.shared import (
     _aggregate_timeline_points,
-    _build_competitor_summaries,
     _build_dashboard_overview,
     _build_timeline_summary,
     _build_top_threats,
@@ -98,7 +95,9 @@ class BaseStore:
     ) -> CategoryTracker:
         raise NotImplementedError
 
-    async def get_category_tracker(self, workspace_id: str, tracker_code: str) -> CategoryTracker:
+    async def get_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> CategoryTracker:
         raise NotImplementedError
 
     async def update_category_tracker(
@@ -196,6 +195,16 @@ class BaseStore:
     async def dispatch_job(self, workspace_id: str, job_code: str) -> None:
         raise NotImplementedError
 
+    async def handle_apify_webhook(
+        self,
+        payload: ApifyWebhookEnvelope,
+        authorization_header: str | None = None,
+    ) -> ApifyWebhookAck:
+        raise NotImplementedError
+
+    async def poll_apify_runs(self) -> ApifyRunPollResult:
+        raise NotImplementedError
+
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         raise NotImplementedError
 
@@ -208,18 +217,27 @@ class BaseStore:
     ) -> WeeklyDigestListResponse:
         raise NotImplementedError
 
-    async def get_weekly_digest(self, workspace_id: str, digest_code: str) -> WeeklyDigest:
+    async def get_weekly_digest(
+        self, workspace_id: str, digest_code: str
+    ) -> WeeklyDigest:
         raise NotImplementedError
 
 
 class MongoStore(BaseStore):
-    def __init__(self, client: AsyncMongoClient, database_name: str, settings: Config) -> None:
+    def __init__(
+        self, client: AsyncMongoClient, database_name: str, settings: Config
+    ) -> None:
         self.client = client
         self.database_name = database_name
         self.settings = settings
+        self.apify_gateway = ApifyGateway(settings.apify_config)
         self.tracker_management = TrackerManagementService()
         self.dashboard_query = DashboardQueryService()
-        self.run_orchestrator = RunOrchestrator(ApifyGateway(settings.apify_config))
+        self.run_orchestrator = RunOrchestrator(self.apify_gateway)
+        self.apify_run_lifecycle = ApifyRunLifecycleService(
+            self.apify_gateway,
+            settings.apify_config,
+        )
         self.job_service = JobService(self.run_orchestrator)
 
     async def close(self) -> None:
@@ -288,7 +306,9 @@ class MongoStore(BaseStore):
                     setattr(existing, key, value)
                 await existing.save()
             else:
-                await EventDocument(workspace_id=seed_data.workspace_id, **payload).insert()
+                await EventDocument(
+                    workspace_id=seed_data.workspace_id, **payload
+                ).insert()
 
         for product in seed_data.products:
             existing = await ProductDocument.find_one(
@@ -302,7 +322,9 @@ class MongoStore(BaseStore):
                     setattr(existing, key, value)
                 await existing.save()
             else:
-                await ProductDocument(workspace_id=seed_data.workspace_id, **payload).insert()
+                await ProductDocument(
+                    workspace_id=seed_data.workspace_id, **payload
+                ).insert()
 
         for snapshot in seed_data.product_snapshots:
             existing = await ProductSnapshotDocument.find_one(
@@ -333,7 +355,9 @@ class MongoStore(BaseStore):
                     setattr(existing, key, value)
                 await existing.save()
             else:
-                await JobDocument(workspace_id=seed_data.workspace_id, **payload).insert()
+                await JobDocument(
+                    workspace_id=seed_data.workspace_id, **payload
+                ).insert()
 
         for digest in seed_data.weekly_digests:
             existing = await WeeklyDigestDocument.find_one(
@@ -354,20 +378,30 @@ class MongoStore(BaseStore):
     async def get_dashboard_overview(
         self, workspace_id: str, timeframe: Timeframe
     ) -> DashboardOverview:
-        return await self.dashboard_query.get_dashboard_overview(workspace_id, timeframe)
+        return await self.dashboard_query.get_dashboard_overview(
+            workspace_id, timeframe
+        )
 
     async def list_category_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CategoryTrackerListResponse:
-        return await self.tracker_management.list_category_trackers(workspace_id, page, page_size)
+        return await self.tracker_management.list_category_trackers(
+            workspace_id, page, page_size
+        )
 
     async def create_category_tracker(
         self, workspace_id: str, payload: CategoryTrackerCreateRequest
     ) -> CategoryTracker:
-        return await self.tracker_management.create_category_tracker(workspace_id, payload)
+        return await self.tracker_management.create_category_tracker(
+            workspace_id, payload
+        )
 
-    async def get_category_tracker(self, workspace_id: str, tracker_code: str) -> CategoryTracker:
-        return await self.tracker_management.get_category_tracker(workspace_id, tracker_code)
+    async def get_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> CategoryTracker:
+        return await self.tracker_management.get_category_tracker(
+            workspace_id, tracker_code
+        )
 
     async def update_category_tracker(
         self,
@@ -384,22 +418,30 @@ class MongoStore(BaseStore):
     async def get_latest_category_snapshot(
         self, workspace_id: str, tracker_code: str
     ) -> CategorySnapshot:
-        return await self.tracker_management.get_latest_category_snapshot(workspace_id, tracker_code)
+        return await self.tracker_management.get_latest_category_snapshot(
+            workspace_id, tracker_code
+        )
 
     async def list_competitor_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CompetitorTrackerListResponse:
-        return await self.tracker_management.list_competitor_trackers(workspace_id, page, page_size)
+        return await self.tracker_management.list_competitor_trackers(
+            workspace_id, page, page_size
+        )
 
     async def create_competitor_tracker(
         self, workspace_id: str, payload: CompetitorTrackerCreateRequest
     ) -> CompetitorTrackerDetail:
-        return await self.tracker_management.create_competitor_tracker(workspace_id, payload)
+        return await self.tracker_management.create_competitor_tracker(
+            workspace_id, payload
+        )
 
     async def get_competitor_tracker(
         self, workspace_id: str, tracker_code: str
     ) -> CompetitorTrackerDetail:
-        return await self.tracker_management.get_competitor_tracker(workspace_id, tracker_code)
+        return await self.tracker_management.get_competitor_tracker(
+            workspace_id, tracker_code
+        )
 
     async def update_competitor_tracker(
         self,
@@ -428,7 +470,9 @@ class MongoStore(BaseStore):
     async def get_product_detail(
         self, workspace_id: str, marketplace: str, asin: str
     ) -> ProductDetail:
-        return await self.dashboard_query.get_product_detail(workspace_id, marketplace, asin)
+        return await self.dashboard_query.get_product_detail(
+            workspace_id, marketplace, asin
+        )
 
     async def get_product_timeline(
         self,
@@ -504,6 +548,19 @@ class MongoStore(BaseStore):
     async def dispatch_job(self, workspace_id: str, job_code: str) -> None:
         await self.job_service.dispatch_job(workspace_id, job_code)
 
+    async def handle_apify_webhook(
+        self,
+        payload: ApifyWebhookEnvelope,
+        authorization_header: str | None = None,
+    ) -> ApifyWebhookAck:
+        return await self.apify_run_lifecycle.handle_webhook(
+            payload,
+            authorization_header,
+        )
+
+    async def poll_apify_runs(self) -> ApifyRunPollResult:
+        return await self.apify_run_lifecycle.poll_runs()
+
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         return await self.job_service.get_job(workspace_id, job_code)
 
@@ -521,7 +578,9 @@ class MongoStore(BaseStore):
             week_start,
         )
 
-    async def get_weekly_digest(self, workspace_id: str, digest_code: str) -> WeeklyDigest:
+    async def get_weekly_digest(
+        self, workspace_id: str, digest_code: str
+    ) -> WeeklyDigest:
         return await self.dashboard_query.get_weekly_digest(workspace_id, digest_code)
 
 

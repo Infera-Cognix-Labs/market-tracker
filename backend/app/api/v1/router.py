@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     jobs,
     products,
     reports,
+    webhooks_apify,
 )
 
 api_router = APIRouter()
@@ -20,3 +21,4 @@ api_router.include_router(products.router)
 api_router.include_router(events.router)
 api_router.include_router(jobs.router)
 api_router.include_router(reports.router)
+api_router.include_router(webhooks_apify.router)

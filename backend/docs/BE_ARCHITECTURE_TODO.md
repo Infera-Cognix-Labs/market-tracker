@@ -20,7 +20,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] MongoDB + Beanie is the active persistence path.
 - [ ] Background worker process pool exists.
 - [ ] Scheduler worker exists.
-- [ ] Poller worker exists.
+- [x] Poller worker exists.
 - [ ] Import worker exists.
 - [ ] Digest worker exists.
 - [ ] Object storage integration exists.
@@ -33,7 +33,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
   Notes: dedicated `app/integrations/apify_gateway.py` exists and resolves dispatch bindings from env config.
 - [x] `run_orchestrator`
   Notes: background dispatch now moves jobs from `QUEUED` into the external-run path and records failures on the job.
-- [ ] `webhook_receiver`
+- [x] `webhook_receiver`
 - [ ] `result_importer`
 - [ ] `normalization_service`
 - [ ] `snapshot_service`
@@ -52,8 +52,8 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Create logical tracking jobs from API requests.
 - [x] Dispatch external Apify runs from created jobs.
 - [x] Persist `apify_runs` records.
-- [ ] Receive and validate Apify webhooks.
-- [ ] Poll Apify run status as fallback.
+- [x] Receive and validate Apify webhooks.
+- [x] Poll Apify run status as fallback.
 - [ ] Import dataset items into internal raw storage.
 - [ ] Normalize provider payloads into stable internal models.
 - [ ] Create category/product snapshots from normalized data.
@@ -108,7 +108,8 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
   Notes: correlation context is present in current job creation/dispatch logs, but not across the unfinished webhook/import/processing flows.
 - [x] Apify token is loaded from environment config instead of being hardcoded in app logic.
 - [ ] Secret management integration beyond local env loading exists.
-- [ ] Restricted and verified webhook endpoint exists.
+- [x] Restricted and verified webhook endpoint exists.
+  Notes: `APIFY_WEBHOOK_SECRET` is enforced when configured; local/dev can still run unsigned when the secret is intentionally unset.
 - [ ] Data minimization and raw payload offload strategy exists.
 
 ## 8. Folder Structure Alignment
@@ -117,7 +118,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [ ] Separate `schemas/` package exists.
 - [x] Separate `integrations/` package exists.
 - [x] Separate `services/` package exists.
-- [ ] Separate `workers/` package exists.
+- [x] Separate `workers/` package exists.
 - [x] Module boundaries from the architecture doc are reflected in the code layout.
   Notes: first real seams now live in `services/`, `integrations/`, and a thinner `store` facade; worker-oriented modules are still missing.
 
@@ -131,7 +132,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 
 ## Next Follow-Up
 
-1. Implement `webhook_receiver` and `poller` so `RUNNING_EXTERNAL` jobs can progress without manual inspection.
+1. [x] Implement `webhook_receiver` and `poller` so `RUNNING_EXTERNAL` jobs can progress without manual inspection.
 2. Build `result_importer`, `normalization_service`, and `snapshot_service` on top of `raw_import_batches`.
 3. Add runtime diff/event generation plus event dedupe enforcement, then complete the remaining job state transitions.
 4. Decide whether object storage is needed for large raw payload offload before importer volume grows.

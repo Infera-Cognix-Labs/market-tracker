@@ -8,7 +8,6 @@ from app.models.api import (
     DashboardOverview,
     EventListResponse,
     EventType,
-    JobStatus,
     ProductDetail,
     ProductTimelineResponse,
     Severity,
@@ -48,11 +47,15 @@ class DashboardQueryService:
         competitor_docs = await CompetitorTrackerDocument.find(
             CompetitorTrackerDocument.workspace_id == workspace_id
         ).to_list()
-        event_docs = await EventDocument.find(EventDocument.workspace_id == workspace_id).to_list()
+        event_docs = await EventDocument.find(
+            EventDocument.workspace_id == workspace_id
+        ).to_list()
         return build_dashboard_overview(
             timeframe=timeframe,
             category_trackers=[category_doc_to_model(doc) for doc in category_docs],
-            competitor_trackers=[competitor_doc_to_model(doc) for doc in competitor_docs],
+            competitor_trackers=[
+                competitor_doc_to_model(doc) for doc in competitor_docs
+            ],
             events=[event_doc_to_model(doc) for doc in event_docs],
         )
 
@@ -167,7 +170,9 @@ class DashboardQueryService:
             total=total,
         )
 
-    async def get_weekly_digest(self, workspace_id: str, digest_code: str) -> WeeklyDigest:
+    async def get_weekly_digest(
+        self, workspace_id: str, digest_code: str
+    ) -> WeeklyDigest:
         document = await WeeklyDigestDocument.find_one(
             WeeklyDigestDocument.workspace_id == workspace_id,
             WeeklyDigestDocument.digest_code == digest_code,

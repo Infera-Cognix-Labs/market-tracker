@@ -50,6 +50,16 @@ class ConflictError(AppError):
         )
 
 
+class ForbiddenError(AppError):
+    def __init__(self, message: str, details: dict[str, object] | None = None) -> None:
+        super().__init__(
+            status_code=403,
+            code="FORBIDDEN",
+            message=message,
+            details=details,
+        )
+
+
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", None) or f"req_{uuid4().hex[:10]}"
 

@@ -85,6 +85,10 @@ MONGO_USERNAME=admin
 MONGO_PASSWORD=secret
 SEED_DEMO_DATA=true
 APIFY_TOKEN=your_apify_token
+APIFY_WEBHOOK_URL=https://your-domain.example.com/v1/webhooks/apify/runs
+APIFY_WEBHOOK_SECRET=replace_me
+APIFY_POLL_BATCH_SIZE=25
+APIFY_POLL_INTERVAL_SECS=60
 ```
 
 Bạn cũng có thể dùng:
@@ -109,11 +113,24 @@ Trong thư mục `backend`:
 uv run uvicorn app.main:app --reload
 ```
 
+Nếu muốn poll fallback cho Apify runs:
+
+```bash
+uv run python -m app.workers.poller_worker --once
+```
+
+Hoặc chạy loop liên tục:
+
+```bash
+uv run python -m app.workers.poller_worker
+```
+
 Endpoints hữu ích:
 
 - Health check: `GET /health`
 - Swagger UI: `GET /docs`
 - ReDoc: `GET /redoc`
+- Apify webhook receiver: `POST /v1/webhooks/apify/runs`
 
 Base API prefix:
 

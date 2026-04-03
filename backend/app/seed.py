@@ -44,12 +44,15 @@ def load_demo_seed() -> SeedData:
     manifest = _load_json("manifest.json")
 
     event_items = {
-        item["event_code"]: item for item in _load_json("events.list.response.json")["items"]
+        item["event_code"]: item
+        for item in _load_json("events.list.response.json")["items"]
     }
     timeline_payload = _load_json("product.timeline.response.json")
     for item in timeline_payload["events"]:
         event_items[item["event_code"]] = item
-    product_detail = ProductDetail.model_validate(_load_json("product.detail.response.json"))
+    product_detail = ProductDetail.model_validate(
+        _load_json("product.detail.response.json")
+    )
     product_timeline = ProductTimelineResponse.model_validate(timeline_payload)
 
     return SeedData(
@@ -76,7 +79,9 @@ def load_demo_seed() -> SeedData:
         product_snapshots=_build_product_snapshots(product_detail, product_timeline),
         jobs=[Job.model_validate(_load_json("job.detail.response.json"))],
         weekly_digests=[
-            WeeklyDigest.model_validate(_load_json("weekly-digest.detail.response.json"))
+            WeeklyDigest.model_validate(
+                _load_json("weekly-digest.detail.response.json")
+            )
         ],
     )
 

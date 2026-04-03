@@ -10,12 +10,9 @@ from app.models.api import (
     CategoryHighlight,
     CategorySnapshot,
     CategoryTracker,
-    CategoryTrackerStats,
-    CategoryTrackingConfig,
     CompetitorHighlight,
     CompetitorTracker,
     CompetitorTrackerDetail,
-    CompetitorTrackerStats,
     DashboardOverview,
     DashboardOverviewSummary,
     Event,
@@ -29,12 +26,11 @@ from app.models.api import (
     Severity,
     Threat,
     Timeframe,
-    TrackerRef,
-    TrackerSchedule,
-    TrackerStatus,
-    TrackerType,
     TrackedAsin,
     TrackedProductSummary,
+    TrackerRef,
+    TrackerStatus,
+    TrackerType,
     WeeklyDigest,
 )
 from app.models.documents import (
@@ -73,18 +69,26 @@ def snapshot_doc_to_model(document: CategorySnapshotDocument) -> CategorySnapsho
     )
 
 
-def competitor_doc_to_model(document: CompetitorTrackerDocument) -> CompetitorTrackerDetail:
+def competitor_doc_to_model(
+    document: CompetitorTrackerDocument,
+) -> CompetitorTrackerDetail:
     return CompetitorTrackerDetail.model_validate(
         document.model_dump(exclude={"id", "workspace_id"}, mode="python")
     )
 
 
 def event_doc_to_model(document: EventDocument) -> Event:
-    return Event.model_validate(document.model_dump(exclude={"id", "workspace_id"}, mode="python"))
+    return Event.model_validate(
+        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+    )
 
 
-def competitor_detail_to_list_model(tracker: CompetitorTrackerDetail) -> CompetitorTracker:
-    return CompetitorTracker.model_validate(tracker.model_dump(exclude={"tracked_products"}))
+def competitor_detail_to_list_model(
+    tracker: CompetitorTrackerDetail,
+) -> CompetitorTracker:
+    return CompetitorTracker.model_validate(
+        tracker.model_dump(exclude={"tracked_products"})
+    )
 
 
 def product_doc_to_model(document: ProductDocument) -> ProductDetail:
@@ -94,7 +98,9 @@ def product_doc_to_model(document: ProductDocument) -> ProductDetail:
 
 
 def job_doc_to_model(document: JobDocument) -> Job:
-    return Job.model_validate(document.model_dump(exclude={"id", "workspace_id"}, mode="python"))
+    return Job.model_validate(
+        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+    )
 
 
 def digest_doc_to_model(document: WeeklyDigestDocument) -> WeeklyDigest:
@@ -152,11 +158,15 @@ def aggregate_timeline_points(
 
 def build_timeline_summary(events: list[Event]) -> ProductTimelineSummary:
     return ProductTimelineSummary(
-        price_change_count=sum(1 for event in events if event.event_type == EventType.PRICE_CHANGED),
+        price_change_count=sum(
+            1 for event in events if event.event_type == EventType.PRICE_CHANGED
+        ),
         availability_change_count=sum(
             1 for event in events if event.event_type == EventType.AVAILABILITY_CHANGED
         ),
-        listing_change_count=sum(1 for event in events if event.event_type in LISTING_EVENT_TYPES),
+        listing_change_count=sum(
+            1 for event in events if event.event_type in LISTING_EVENT_TYPES
+        ),
         buy_box_change_count=sum(
             1 for event in events if event.event_type == EventType.BUY_BOX_CHANGED
         ),
@@ -167,7 +177,9 @@ def build_tracker_name_map(
     category_trackers: Iterable[CategoryTracker],
     competitor_trackers: Iterable[CompetitorTrackerDetail],
 ) -> dict[str, str]:
-    tracker_name_map = {tracker.tracker_code: tracker.name for tracker in category_trackers}
+    tracker_name_map = {
+        tracker.tracker_code: tracker.name for tracker in category_trackers
+    }
     tracker_name_map.update(
         {tracker.tracker_code: tracker.name for tracker in competitor_trackers}
     )
@@ -184,7 +196,9 @@ def build_top_threats(
 
     threats: list[Threat] = []
     for (marketplace, asin), group in grouped.items():
-        unique_event_types: list[EventType] = list(dict.fromkeys(event.event_type for event in group))
+        unique_event_types: list[EventType] = list(
+            dict.fromkeys(event.event_type for event in group)
+        )
         if len(unique_event_types) < 2 and not any(
             event.severity == Severity.HIGH for event in group
         ):
@@ -195,7 +209,9 @@ def build_top_threats(
                 (event.tracker_type, event.tracker_code): TrackerRef(
                     tracker_type=event.tracker_type,
                     tracker_code=event.tracker_code,
-                    tracker_name=tracker_name_map.get(event.tracker_code, event.tracker_code),
+                    tracker_name=tracker_name_map.get(
+                        event.tracker_code, event.tracker_code
+                    ),
                 )
                 for event in group
             }.values()
@@ -224,19 +240,27 @@ def build_dashboard_overview(
     competitor_trackers: list[CompetitorTrackerDetail],
     events: list[Event],
 ) -> DashboardOverview:
-    reference_date = max((event.snapshot_date for event in events), default=utc_now().date())
+    reference_date = max(
+        (event.snapshot_date for event in events), default=utc_now().date()
+    )
     from_date, to_date = timeframe_bounds(timeframe, reference_date)
     filtered_events = [
-        event for event in events if within_range(event.snapshot_date, from_date, to_date)
+        event
+        for event in events
+        if within_range(event.snapshot_date, from_date, to_date)
     ]
     sorted_events = sort_events(filtered_events)
     tracker_name_map = build_tracker_name_map(category_trackers, competitor_trackers)
 
     active_category_trackers = [
-        tracker for tracker in category_trackers if tracker.status == TrackerStatus.ACTIVE
+        tracker
+        for tracker in category_trackers
+        if tracker.status == TrackerStatus.ACTIVE
     ]
     active_competitor_trackers = [
-        tracker for tracker in competitor_trackers if tracker.status == TrackerStatus.ACTIVE
+        tracker
+        for tracker in competitor_trackers
+        if tracker.status == TrackerStatus.ACTIVE
     ]
     tracked_product_count = len(
         {
@@ -309,19 +333,29 @@ def build_dashboard_overview(
             active_competitor_tracker_count=len(active_competitor_trackers),
             tracked_product_count=tracked_product_count,
             new_entrant_count=sum(
-                1 for event in filtered_events if event.event_type == EventType.NEW_ENTRANT_TOP50
+                1
+                for event in filtered_events
+                if event.event_type == EventType.NEW_ENTRANT_TOP50
             ),
             returning_count=sum(
-                1 for event in filtered_events if event.event_type == EventType.RETURNING_TOP50
+                1
+                for event in filtered_events
+                if event.event_type == EventType.RETURNING_TOP50
             ),
             top10_enter_count=sum(
-                1 for event in filtered_events if event.event_type == EventType.ENTER_TOP10
+                1
+                for event in filtered_events
+                if event.event_type == EventType.ENTER_TOP10
             ),
             price_change_count=sum(
-                1 for event in filtered_events if event.event_type == EventType.PRICE_CHANGED
+                1
+                for event in filtered_events
+                if event.event_type == EventType.PRICE_CHANGED
             ),
             listing_change_count=sum(
-                1 for event in filtered_events if event.event_type in LISTING_EVENT_TYPES
+                1
+                for event in filtered_events
+                if event.event_type in LISTING_EVENT_TYPES
             ),
         ),
         top_events=sorted_events[:5],
@@ -369,7 +403,9 @@ def build_competitor_summaries(
     }
     existing_map = {item.asin: item for item in existing or []}
 
-    reference_date = max((event.snapshot_date for event in events), default=utc_now().date())
+    reference_date = max(
+        (event.snapshot_date for event in events), default=utc_now().date()
+    )
     recent_from_date = reference_date - timedelta(days=6)
 
     summaries: list[TrackedProductSummary] = []
@@ -407,7 +443,9 @@ def build_competitor_summaries(
     return summaries
 
 
-def product_snapshot_to_timeline_point(snapshot: ProductSnapshot) -> ProductTimelinePoint:
+def product_snapshot_to_timeline_point(
+    snapshot: ProductSnapshot,
+) -> ProductTimelinePoint:
     return ProductTimelinePoint(
         snapshot_date=snapshot.snapshot_date,
         bsr_position=snapshot.bsr_position,
@@ -458,10 +496,14 @@ def build_product_timeline_response(
         raise NotFoundError("No timeline data found for the requested range.")
 
     effective_from = from_date or (
-        filtered_points[0].snapshot_date if filtered_points else snapshots[0].snapshot_date
+        filtered_points[0].snapshot_date
+        if filtered_points
+        else snapshots[0].snapshot_date
     )
     effective_to = to_date or (
-        filtered_points[-1].snapshot_date if filtered_points else snapshots[-1].snapshot_date
+        filtered_points[-1].snapshot_date
+        if filtered_points
+        else snapshots[-1].snapshot_date
     )
 
     return ProductTimelineResponse(

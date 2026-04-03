@@ -30,9 +30,34 @@ tags:
     description: Event feed and event filtering APIs.
   - name: jobs
     description: Manual trigger and job status APIs.
+  - name: webhooks
+    description: External provider callbacks used to advance internal lifecycle state.
   - name: reports
     description: Weekly digest and reporting APIs.
 paths:
+  /v1/webhooks/apify/runs:
+    post:
+      tags: [webhooks]
+      operationId: receiveApifyRunWebhook
+      summary: Receive an Apify actor run lifecycle callback
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApifyWebhookEnvelope'
+      responses:
+        '202':
+          description: Webhook accepted or safely ignored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApifyWebhookAck'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /v1/workspaces/{workspace_id}/dashboard/overview:
     get:
       tags: [dashboard]
@@ -579,6 +604,13 @@ components:
       schema:
         type: string
       description: Optional idempotency key for write operations.
+    AuthorizationHeader:
+      name: Authorization
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional bearer token used to verify Apify webhook callbacks.
 
   responses:
     BadRequest:
@@ -613,6 +645,16 @@ components:
           example:
             code: CONFLICT
             message: A job already exists for tracker `ct_bottle_warmers_us` on 2026-04-03.
+            request_id: req_01J8X9XYZ
+    Forbidden:
+      description: Request is not allowed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: FORBIDDEN
+            message: Invalid webhook secret.
             request_id: req_01J8X9XYZ
 
   schemas:
@@ -650,6 +692,70 @@ components:
         - SUCCESS
         - PARTIAL_SUCCESS
         - FAILED
+
+    ExternalRunStatus:
+      type: string
+      enum:
+        - READY
+        - RUNNING
+        - SUCCEEDED
+        - FAILED
+        - TIMED_OUT
+        - ABORTED
+
+    ApifyWebhookEnvelope:
+      type: object
+      additionalProperties: true
+      properties:
+        eventType:
+          type: string
+        eventData:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+        resourceId:
+          type: string
+        resource:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+        payload:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+        data:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+
+    ApifyWebhookAck:
+      type: object
+      required: [status, source]
+      properties:
+        status:
+          type: string
+          enum: [ACCEPTED, IGNORED]
+        source:
+          type: string
+          enum: [WEBHOOK]
+        apify_run_id:
+          type: string
+          nullable: true
+        tracking_job_code:
+          type: string
+          nullable: true
+        provider_status:
+          allOf:
+            - $ref: '#/components/schemas/ExternalRunStatus'
+          nullable: true
+        job_status:
+          allOf:
+            - $ref: '#/components/schemas/JobStatus'
+          nullable: true
 
     EventType:
       type: string
