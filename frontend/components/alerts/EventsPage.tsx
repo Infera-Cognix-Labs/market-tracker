@@ -41,7 +41,19 @@ export const EventsPage = () => {
     })
   }
 
-  useEffect(() => { loadEvents(1) }, [filterType, filterSeverity])
+  useEffect(() => {
+    apiListEvents({
+      event_type: filterType || undefined,
+      severity: filterSeverity || undefined,
+      page: 1,
+      page_size: 20,
+    }).then(res => {
+      setEvents(res.items)
+      setTotal(res.total)
+      setPageNum(1)
+      setLoading(false)
+    })
+  }, [filterType, filterSeverity])
 
   return (
     <div className="anim-fade">

@@ -222,8 +222,6 @@ export const CompetitorPage = () => {
   // Load product detail and timeline when ASIN selection changes
   useEffect(() => {
     if (!selectedProduct || !tracker) return
-    setProductDetail(null)
-    setTimeline(null)
     apiGetProductDetail(tracker.marketplace, selectedProduct.asin).then(setProductDetail)
     apiGetProductTimeline(tracker.marketplace, selectedProduct.asin).then(setTimeline)
   }, [selectedProduct?.asin, tracker?.marketplace])

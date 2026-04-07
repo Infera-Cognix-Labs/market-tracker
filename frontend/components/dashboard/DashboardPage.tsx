@@ -18,7 +18,6 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
   const [digestLoading, setDigestLoading] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
     apiGetDashboardOverview(timeframe).then(d => { setData(d); setLoading(false) })
   }, [timeframe])
 

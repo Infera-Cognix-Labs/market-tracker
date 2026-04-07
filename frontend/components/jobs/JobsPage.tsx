@@ -32,7 +32,12 @@ export const JobsPage = () => {
     })
   }
 
-  useEffect(() => { loadJobs() }, [])
+  useEffect(() => {
+    apiListJobs().then(res => {
+      setJobs(res.items)
+      setLoading(false)
+    })
+  }, [])
 
   const handleTrigger = async (trackerType: "CATEGORY" | "COMPETITOR", trackerCode: string) => {
     setTriggering(true)

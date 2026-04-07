@@ -27,7 +27,6 @@ export const CategoryPage = () => {
   // Load snapshot when tracker changes
   useEffect(() => {
     if (!selectedCode) return
-    setLoading(true)
     apiGetLatestCategorySnapshot(selectedCode).then(snap => {
       setSnapshot(snap)
       setLoading(false)
