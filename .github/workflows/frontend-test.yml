@@ -63,6 +63,13 @@ jobs:
           SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)
           echo "image_tag=${{ secrets.REGISTRY }}/${{ env.IMAGE_NAME }}:${SHA}" >> $GITHUB_OUTPUT
 
+      - name: Trust registry CA certificate
+        run: |
+          echo "${{ secrets.REGISTRY_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/registry-ca.crt
+          sudo update-ca-certificates
+          sudo mkdir -p /etc/docker/certs.d/${{ secrets.REGISTRY }}
+          echo "${{ secrets.REGISTRY_CA_CERT }}" | sudo tee /etc/docker/certs.d/${{ secrets.REGISTRY }}/ca.crt
+
       - name: Login to registry
         uses: docker/login-action@v3
         with:
