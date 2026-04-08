@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import hmac
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
 from app.config.config import ApifyConfig
-from app.core.errors import ForbiddenError
 from app.core.logging import correlation_context, get_logger
 from app.core.metrics import get_metrics
 from app.core.utils import utc_now
@@ -72,10 +70,7 @@ class ApifyRunLifecycleService:
     async def handle_webhook(
         self,
         payload: ApifyWebhookEnvelope,
-        authorization_header: str | None = None,
     ) -> ApifyWebhookAck:
-        self._verify_webhook_secret(authorization_header)
-
         provider_run_id = self._extract_run_id(payload)
         provider_status = self._extract_status(payload)
         if provider_run_id is None or provider_status is None:
@@ -450,16 +445,6 @@ class ApifyRunLifecycleService:
             "failed": failed,
             "ack_status": ack_status,
         }
-
-    def _verify_webhook_secret(self, authorization_header: str | None) -> None:
-        if not self.config.webhook_secret:
-            return
-
-        scheme, _, token = (authorization_header or "").partition(" ")
-        if scheme != "Bearer" or not hmac.compare_digest(
-            token, self.config.webhook_secret
-        ):
-            raise ForbiddenError("Invalid webhook secret.")
 
     def _extract_run_id(self, payload: ApifyWebhookEnvelope) -> str | None:
         resource = self._as_dict(payload.resource)

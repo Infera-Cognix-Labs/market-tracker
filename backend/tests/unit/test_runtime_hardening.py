@@ -5,63 +5,38 @@ from types import SimpleNamespace
 
 from app.config import config as config_module
 from app.config.config import ApifyConfig, StorageConfig
-from app.models.api import (
-    Job,
-    JobRunStrategy,
-    JobStatus,
-    JobSummary,
-    Provider,
-    TrackerRef,
-    TrackerType,
-    TriggerMode,
-)
+from app.models.api import TrackerRef, TrackerType
 from app.services.object_storage_service import LocalObjectStorageService
 from app.services.result_importer_service import ResultImporterService
-from app.services.run_orchestrator import RunOrchestrator
 from app.services.snapshot_service import SnapshotService
 
 
 def test_apify_actor_config_and_secret_file_helpers(monkeypatch, tmp_path):
-    apify_config_file = tmp_path / "apify-config.yaml"
-    apify_config_file.write_text(
+    app_config_file = tmp_path / "app-config.yaml"
+    app_config_file.write_text(
         """
-bindings:
-  category:
-    name: "Category Runner"
-    actor_id: "owner/category-actor"
-    build: "v2"
-        input_adapter: "saswave_category"
-  competitor:
-    task_id: "task_competitor"
-    memory_mbytes: 4096
-        input_adapter: "saswave_competitor"
+apify:
+  bindings:
+    category:
+      name: "Category Runner"
+      actor_id: "owner/category-actor"
+      build: "v2"
+    competitor:
+      task_id: "task_competitor"
+      memory_mbytes: 4096
 """.strip(),
         encoding="utf-8",
     )
-    token_file = tmp_path / "apify.token"
-    token_file.write_text("token-from-file", encoding="utf-8")
+    monkeypatch.setattr(config_module, "_APP_CONFIG_PATH", app_config_file)
+    monkeypatch.setenv("APIFY_TOKEN", "token-from-env")
 
-    monkeypatch.setenv("APIFY_CONFIG_FILE", str(apify_config_file))
-    monkeypatch.setenv("APIFY_TOKEN_FILE", str(token_file))
-    monkeypatch.delenv("APIFY_TOKEN", raising=False)
-
-    config_module._load_apify_file_config.cache_clear()
+    config_module._load_app_file_config.cache_clear()
 
     assert config_module._binding_str("category", "name") == "Category Runner"
     assert config_module._binding_str("category", "actor_id") == "owner/category-actor"
-    assert config_module._binding_str("category", "input_adapter") == "saswave_category"
     assert config_module._binding_str("competitor", "task_id") == "task_competitor"
     assert config_module._binding_int("competitor", "memory_mbytes") == 4096
-    assert (
-        config_module._binding_str("competitor", "input_adapter")
-        == "saswave_competitor"
-    )
-    assert (
-        config_module._read_secret(
-            env_name="APIFY_TOKEN", file_env_name="APIFY_TOKEN_FILE"
-        )
-        == "token-from-file"
-    )
+    assert config_module._read_secret(env_name="APIFY_TOKEN") == "token-from-env"
 
 
 def test_importer_replays_batches_from_object_storage(run_async, tmp_path):
@@ -179,76 +154,3 @@ def test_snapshot_service_append_only_does_not_overwrite_existing_payload(
     assert inserted is False
     assert existing_snapshot.title == "Original Title"
     assert existing_snapshot.save_called is False
-
-
-def test_run_orchestrator_build_run_input_uses_saswave_adapters():
-    gateway = SimpleNamespace(
-        config=SimpleNamespace(
-            webhook_url=None,
-            webhook_secret=None,
-            category_input_adapter="saswave_category",
-            category_amazon_domain="www.amazon.com",
-            competitor_input_adapter="saswave_competitor",
-            competitor_amazon_domain="www.amazon.com",
-        )
-    )
-    orchestrator = RunOrchestrator(gateway)
-
-    category_job = Job(
-        job_code="job_cat_20260408_001",
-        tracker_type=TrackerType.CATEGORY,
-        tracker_code="ct_demo",
-        snapshot_date=date(2026, 4, 8),
-        trigger_mode=TriggerMode.MANUAL,
-        status=JobStatus.QUEUED,
-        run_strategy=JobRunStrategy(
-            provider=Provider.APIFY,
-            binding_code="bind_category_top50_v1",
-        ),
-        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
-        created_at=datetime(2026, 4, 8, 2, 0, tzinfo=UTC),
-    )
-    category_tracker = SimpleNamespace(
-        marketplace="amazon_us",
-        scope=SimpleNamespace(
-            browse_node_id="123456",
-            browse_node_url="https://www.amazon.com/s?i=specialty-aps&rh=n%3A123456",
-        ),
-        tracking_config=SimpleNamespace(top_n=50),
-    )
-    category_payload = orchestrator._build_run_input(category_job, category_tracker)
-
-    assert category_payload["search_url"] == category_tracker.scope.browse_node_url
-    assert category_payload["max_pages"] == 1
-    assert category_payload["amazon_domain"] == "www.amazon.com"
-
-    competitor_job = Job(
-        job_code="job_cmp_20260408_001",
-        tracker_type=TrackerType.COMPETITOR,
-        tracker_code="cmp_demo",
-        snapshot_date=date(2026, 4, 8),
-        trigger_mode=TriggerMode.MANUAL,
-        status=JobStatus.QUEUED,
-        run_strategy=JobRunStrategy(
-            provider=Provider.APIFY,
-            binding_code="bind_competitor_tracking_v1",
-        ),
-        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
-        created_at=datetime(2026, 4, 8, 2, 0, tzinfo=UTC),
-    )
-    competitor_tracker = SimpleNamespace(
-        marketplace="amazon_us",
-        tracked_asins=[
-            SimpleNamespace(asin="B0BN72FYFG", enabled=True),
-            SimpleNamespace(asin="B09NNBBY8F", enabled=False),
-        ],
-    )
-    competitor_payload = orchestrator._build_run_input(
-        competitor_job,
-        competitor_tracker,
-    )
-
-    assert competitor_payload == {
-        "asins": ["B0BN72FYFG"],
-        "amazon_domain": "www.amazon.com",
-    }

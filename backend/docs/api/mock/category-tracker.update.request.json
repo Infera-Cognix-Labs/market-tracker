@@ -1,0 +1,10 @@
+{
+    "status": "PAUSED",
+    "tracking_config": {
+        "top10_alert_enabled": false
+    },
+    "schedule": {
+        "frequency": "DAILY",
+        "hour_utc": 7
+    }
+}

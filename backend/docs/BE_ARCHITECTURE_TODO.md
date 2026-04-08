@@ -31,7 +31,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] `tracker_management`
   Notes: category/competitor tracker CRUD, validation, and tracked ASIN replacement are implemented.
 - [x] `apify_gateway`
-  Notes: dedicated `app/integrations/apify_gateway.py` exists and resolves dispatch bindings from `apify-config.yaml` (non-secret actor config) plus secret token from env/secret file.
+  Notes: dedicated `app/integrations/apify_gateway.py` exists and resolves dispatch bindings from `app-config.yaml` (non-secret actor config) plus secret token from env/secret file.
 - [x] `run_orchestrator`
   Notes: background dispatch now moves jobs from `QUEUED` into the external-run path and records failures on the job.
 - [x] `webhook_receiver`
@@ -111,9 +111,9 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Correlation keys such as `job_code`, `tracker_code`, `apify_run_id`, and `snapshot_date` are propagated consistently.
 - [x] Apify token is loaded from environment config instead of being hardcoded in app logic.
 - [x] Secret management integration beyond local env loading exists.
-  Notes: `APIFY_TOKEN_FILE` can be used for mounted secret files while keeping non-secret actor config in `apify-config.yaml`.
-- [x] Restricted and verified webhook endpoint exists.
-  Notes: `APIFY_WEBHOOK_SECRET` is enforced when configured; local/dev can still run unsigned when the secret is intentionally unset.
+  Notes: `APIFY_TOKEN` is loaded from environment while non-secret actor config lives in `app-config.yaml`.
+- [x] Restricted webhook endpoint exists.
+  Notes: endpoint is scoped under API webhook route and processed through run lifecycle handlers.
 - [x] Data minimization and raw payload offload strategy exists.
   Notes: importer can offload large raw batches to object storage and keep only storage URI in MongoDB.
 

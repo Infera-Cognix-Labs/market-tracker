@@ -64,78 +64,47 @@ uv sync
 
 ## Cấu hình `.env`
 
-Backend đọc biến môi trường từ file `.env`.
+Backend đọc secret từ file `.env`.
 
 Ví dụ tối thiểu:
 
 ```env
-SEED_DEMO_DATA=true
-MONGO_HOST=localhost
-MONGO_PORT=27017
-MONGO_DATABASE=market_tracker
-```
-
-Ví dụ khi dùng MongoDB:
-
-```env
-MONGO_HOST=localhost
-MONGO_PORT=27017
-MONGO_DATABASE=market_tracker
 MONGO_USERNAME=admin
 MONGO_PASSWORD=secret
-SEED_DEMO_DATA=true
 APIFY_TOKEN=your_apify_token
-APIFY_TOKEN_FILE=/run/secrets/apify_token
-APIFY_WEBHOOK_URL=https://your-domain.example.com/v1/webhooks/apify/runs
-APIFY_WEBHOOK_SECRET=replace_me
-APIFY_POLL_BATCH_SIZE=25
-APIFY_POLL_INTERVAL_SECS=60
-APIFY_IMPORT_BATCH_SIZE=200
-APIFY_IMPORT_WORKER_BATCH_SIZE=10
-APIFY_IMPORT_WORKER_INTERVAL_SECS=30
-APIFY_CONFIG_FILE=apify-config.yaml
-RAW_BATCH_OFFLOAD_ENABLED=false
-RAW_BATCH_OFFLOAD_MIN_ITEMS=200
-LOCAL_OBJECT_STORE_ROOT=outputs/object-store
-SCHEDULER_WORKER_INTERVAL_SECS=60
-DIGEST_WORKER_INTERVAL_SECS=3600
 ```
 
-Bạn cũng có thể dùng:
+Bạn cũng có thể dùng một biến secret duy nhất cho Mongo:
 
 ```env
 MONGO_URI=mongodb://admin:secret@localhost:27017
 ```
 
-## Apify actor config (`apify-config.yaml`)
+## App config (`app-config.yaml`)
 
-Toan bo config actor/task/build/memory (khong phai secret) duoc dat trong file `apify-config.yaml`:
+Tat ca config khong nhay cam (app, mongodb host/port/database, apify runtime + actor bindings, storage, worker intervals) duoc dat trong `app-config.yaml` o root `backend/` va tu dong duoc nap.
 
 ```yaml
-bindings:
-	category:
-		name: "Saswave Amazon Product Scraper (Category)"
-		actor_id: "saswave/amazon-product-scraper"
-		task_id: ""
-		input_adapter: "saswave_category"
-		amazon_domain: "www.amazon.com"
-		build: "latest"
-		memory_mbytes: 4096
-	competitor:
-		name: "Saswave Amazon Product Scraper (Competitor)"
-		actor_id: "saswave/amazon-product-scraper"
-		task_id: ""
-		input_adapter: "saswave_competitor"
-		amazon_domain: "www.amazon.com"
-		build: "latest"
-		memory_mbytes: 4096
+app:
+  seed_demo_data: true
+mongodb:
+  host: "localhost"
+  port: 27017
+  database: "market_tracker"
+apify:
+  webhook_url: "https://your-domain.example.com/v1/webhooks/apify/runs"
+  bindings:
+    category:
+      actor_id: "saswave/amazon-product-scraper"
+      task_id: ""
+    competitor:
+      actor_id: "saswave/amazon-product-scraper"
+      task_id: ""
 ```
 
-Secret `APIFY_TOKEN` tiep tuc lay tu env hoac file secret (`APIFY_TOKEN_FILE`).
+Secret `APIFY_TOKEN` tiep tuc lay tu env.
 
-- `input_adapter: native`: gui payload goc theo schema job hien tai.
-- `input_adapter: saswave_category`: map category tracker thanh `search_url + max_pages + amazon_domain`.
-- `input_adapter: saswave_competitor`: map competitor tracker thanh `asins + amazon_domain`.
+Khuyen nghi hien tai: dung chung actor `saswave/amazon-product-scraper` cho ca category va competitor de giu output schema dong nhat (`asin`, `title`, `url`, `image`, `price`, `rating`, `reviewsCount`) va map on dinh vao luong normalize -> snapshot -> event.
 
 ## Storage
 
@@ -228,7 +197,7 @@ Base API prefix:
 
 ## Seed dữ liệu demo
 
-Khi `SEED_DEMO_DATA=true`, app sẽ load dữ liệu từ:
+Khi `app.seed_demo_data=true` trong `app-config.yaml`, app sẽ load dữ liệu từ:
 
 - [manifest.json](/home/duncan-nguyen/workspace/infera/market-tracker/backend/docs/api/mock/manifest.json)
 - các file mock response/request trong [docs/api/mock](/home/duncan-nguyen/workspace/infera/market-tracker/backend/docs/api/mock)

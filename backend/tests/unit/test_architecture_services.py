@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import pytest
 from app.config.config import Config
-from app.core.errors import ForbiddenError
 from app.integrations.apify_gateway import (
     ApifyBindingResolutionError,
     ApifyGateway,
@@ -300,7 +299,7 @@ def test_run_orchestrator_dispatch_job_success(
     )
 
     class Gateway:
-        config = SimpleNamespace(webhook_url=None, webhook_secret=None)
+        config = SimpleNamespace(webhook_url=None)
 
         async def start_run(self, binding_code, run_input, webhooks=None):
             assert binding_code == "bind_category_top50_v1"
@@ -401,7 +400,6 @@ def test_run_orchestrator_dispatch_job_registers_webhook(
     class Gateway:
         config = SimpleNamespace(
             webhook_url="https://example.com/v1/webhooks/apify/runs",
-            webhook_secret="topsecret",
         )
 
         async def start_run(self, binding_code, run_input, webhooks=None):
@@ -437,10 +435,6 @@ def test_run_orchestrator_dispatch_job_registers_webhook(
         "ACTOR.RUN.ABORTED",
         "ACTOR.RUN.TIMED_OUT",
     ]
-    assert (
-        captured_webhooks[0]["headers_template"]
-        == '{"Authorization": "Bearer topsecret"}'
-    )
 
 
 def test_apify_run_lifecycle_webhook_success(run_async, monkeypatch):
@@ -488,7 +482,7 @@ def test_apify_run_lifecycle_webhook_success(run_async, monkeypatch):
 
     service = ApifyRunLifecycleService(
         SimpleNamespace(),
-        Config(apify_config={"webhook_secret": None}).apify_config,
+        Config().apify_config,
     )
     ack = run_async(
         service.handle_webhook(
@@ -575,7 +569,7 @@ def test_apify_run_lifecycle_webhook_failure(
 
     service = ApifyRunLifecycleService(
         SimpleNamespace(),
-        Config(apify_config={"webhook_secret": None}).apify_config,
+        Config().apify_config,
     )
     ack = run_async(
         service.handle_webhook(
@@ -648,7 +642,7 @@ def test_apify_run_lifecycle_webhook_duplicate_is_ignored(run_async, monkeypatch
 
     service = ApifyRunLifecycleService(
         SimpleNamespace(),
-        Config(apify_config={"webhook_secret": None}).apify_config,
+        Config().apify_config,
     )
     ack = run_async(
         service.handle_webhook(
@@ -663,24 +657,6 @@ def test_apify_run_lifecycle_webhook_duplicate_is_ignored(run_async, monkeypatch
     assert ack.job_status == JobStatus.IMPORTING
     assert run_document.webhook_received_at is not None
     assert job_document.status == JobStatus.IMPORTING
-
-
-def test_apify_run_lifecycle_webhook_secret_check(run_async):
-    service = ApifyRunLifecycleService(
-        SimpleNamespace(),
-        Config(apify_config={"webhook_secret": "topsecret"}).apify_config,
-    )
-
-    with pytest.raises(ForbiddenError):
-        run_async(
-            service.handle_webhook(
-                ApifyWebhookEnvelope(
-                    eventType="ACTOR.RUN.SUCCEEDED",
-                    resource={"id": "apify_run_test_001", "status": "SUCCEEDED"},
-                ),
-                authorization_header="Bearer wrong-secret",
-            )
-        )
 
 
 def test_apify_run_lifecycle_poller_counts_and_transitions(run_async, monkeypatch):
@@ -822,9 +798,7 @@ def test_apify_run_lifecycle_poller_counts_and_transitions(run_async, monkeypatc
 
     service = ApifyRunLifecycleService(
         Gateway(),
-        Config(
-            apify_config={"poll_batch_size": 10, "webhook_secret": None}
-        ).apify_config,
+        Config(apify_config={"poll_batch_size": 10}).apify_config,
     )
     service._find_job_document = _find_job_by_run_code(jobs).__get__(
         service,
@@ -925,7 +899,7 @@ def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_conte
     )
 
     class Gateway:
-        config = SimpleNamespace(webhook_url=None, webhook_secret=None)
+        config = SimpleNamespace(webhook_url=None)
 
         async def start_run(self, binding_code, run_input, webhooks=None):
             raise ApifyBindingResolutionError(

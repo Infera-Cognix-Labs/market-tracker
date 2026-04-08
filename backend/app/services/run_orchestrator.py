@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 from datetime import UTC, datetime
 from time import perf_counter
@@ -207,64 +206,29 @@ class RunOrchestrator:
         }
 
         if job.tracker_type == TrackerType.CATEGORY:
-            category_adapter = getattr(
-                self.gateway.config,
-                "category_input_adapter",
-                "native",
-            )
-            if category_adapter == "saswave_category":
-                search_url = tracker_document.scope.browse_node_url
-                if not search_url and tracker_document.scope.browse_node_id:
-                    search_url = (
-                        "https://www.amazon.com/s"
-                        f"?i=specialty-aps&rh=n%3A{tracker_document.scope.browse_node_id}"
-                    )
-
-                if search_url:
-                    top_n = max(1, tracker_document.tracking_config.top_n)
-                    max_pages = max(1, min(10, math.ceil(top_n / 50)))
-                    return {
-                        "search_url": search_url,
-                        "max_pages": max_pages,
-                        "amazon_domain": _marketplace_to_amazon_domain(
-                            tracker_document.marketplace,
-                            override=getattr(
-                                self.gateway.config,
-                                "category_amazon_domain",
-                                None,
-                            ),
-                        ),
-                    }
+            top_n = max(1, tracker_document.tracking_config.top_n)
+            search_url = tracker_document.scope.browse_node_url
+            if not search_url and tracker_document.scope.browse_node_id:
+                search_url = (
+                    "https://www.amazon.com/s"
+                    f"?i=specialty-aps&rh=n%3A{tracker_document.scope.browse_node_id}"
+                )
 
             base_input.update(
                 {
                     "marketplace": tracker_document.marketplace,
                     "browse_node_id": tracker_document.scope.browse_node_id,
                     "browse_node_url": tracker_document.scope.browse_node_url,
-                    "top_n": tracker_document.tracking_config.top_n,
+                    "top_n": top_n,
+                    # Keep actor-compatible keys while preserving native keys.
+                    "search_url": search_url,
+                    "max_pages": max(1, min(10, math.ceil(top_n / 50))),
+                    "amazon_domain": _marketplace_to_amazon_domain(
+                        tracker_document.marketplace
+                    ),
                 }
             )
             return base_input
-
-        competitor_adapter = getattr(
-            self.gateway.config,
-            "competitor_input_adapter",
-            "native",
-        )
-        if competitor_adapter == "saswave_competitor":
-            return {
-                "asins": [
-                    item.asin for item in tracker_document.tracked_asins if item.enabled
-                ],
-                "amazon_domain": _marketplace_to_amazon_domain(
-                    tracker_document.marketplace,
-                    override=getattr(
-                        self.gateway.config,
-                        "competitor_amazon_domain",
-                        None,
-                    ),
-                ),
-            }
 
         base_input.update(
             {
@@ -273,6 +237,9 @@ class RunOrchestrator:
                     item.asin for item in tracker_document.tracked_asins if item.enabled
                 ],
                 "track_fields": tracker_document.track_fields.model_dump(mode="python"),
+                "amazon_domain": _marketplace_to_amazon_domain(
+                    tracker_document.marketplace
+                ),
             }
         )
         return base_input
@@ -282,20 +249,17 @@ class RunOrchestrator:
         if not webhook_url:
             return None
 
-        webhook: dict[str, object] = {
-            "event_types": [
-                "ACTOR.RUN.SUCCEEDED",
-                "ACTOR.RUN.FAILED",
-                "ACTOR.RUN.ABORTED",
-                "ACTOR.RUN.TIMED_OUT",
-            ],
-            "request_url": webhook_url,
-        }
-        if self.gateway.config.webhook_secret:
-            webhook["headers_template"] = json_headers(
-                {"Authorization": f"Bearer {self.gateway.config.webhook_secret}"}
-            )
-        return [webhook]
+        return [
+            {
+                "event_types": [
+                    "ACTOR.RUN.SUCCEEDED",
+                    "ACTOR.RUN.FAILED",
+                    "ACTOR.RUN.ABORTED",
+                    "ACTOR.RUN.TIMED_OUT",
+                ],
+                "request_url": webhook_url,
+            }
+        ]
 
 
 def coerce_datetime(value: object | None) -> datetime | None:
@@ -310,14 +274,7 @@ def coerce_datetime(value: object | None) -> datetime | None:
     raise ValueError(f"Unsupported datetime payload: {value!r}")
 
 
-def json_headers(values: dict[str, str]) -> str:
-    return json.dumps(values)
-
-
-def _marketplace_to_amazon_domain(marketplace: str, *, override: str | None) -> str:
-    if override:
-        return override
-
+def _marketplace_to_amazon_domain(marketplace: str) -> str:
     mapping = {
         "amazon_us": "www.amazon.com",
         "amazon_uk": "www.amazon.co.uk",

@@ -35,13 +35,28 @@ tags:
   - name: reports
     description: Weekly digest and reporting APIs.
 paths:
+  /health:
+    get:
+      tags: [dashboard]
+      operationId: healthcheck
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
   /v1/webhooks/apify/runs:
     post:
       tags: [webhooks]
       operationId: receiveApifyRunWebhook
       summary: Receive an Apify actor run lifecycle callback
-      parameters:
-        - $ref: '#/components/parameters/AuthorizationHeader'
       requestBody:
         required: true
         content:
@@ -55,8 +70,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApifyWebhookAck'
-        '403':
-          $ref: '#/components/responses/Forbidden'
 
   /v1/workspaces/{workspace_id}/dashboard/overview:
     get:

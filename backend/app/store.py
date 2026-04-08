@@ -254,7 +254,6 @@ class BaseStore:
     async def handle_apify_webhook(
         self,
         payload: ApifyWebhookEnvelope,
-        authorization_header: str | None = None,
     ) -> ApifyWebhookAck:
         raise NotImplementedError
 
@@ -417,6 +416,7 @@ class MongoStore(BaseStore):
                 ProductSnapshotDocument.snapshot_date == snapshot.snapshot_date,
             )
             payload = snapshot.model_dump(mode="python")
+            payload.setdefault("created_at", payload.get("captured_at"))
             if existing:
                 for key, value in payload.items():
                     setattr(existing, key, value)
@@ -634,12 +634,8 @@ class MongoStore(BaseStore):
     async def handle_apify_webhook(
         self,
         payload: ApifyWebhookEnvelope,
-        authorization_header: str | None = None,
     ) -> ApifyWebhookAck:
-        return await self.apify_run_lifecycle.handle_webhook(
-            payload,
-            authorization_header,
-        )
+        return await self.apify_run_lifecycle.handle_webhook(payload)
 
     async def poll_apify_runs(self) -> ApifyRunPollResult:
         return await self.apify_run_lifecycle.poll_runs()

@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 load_dotenv()
 
+_APP_CONFIG_PATH = Path(__file__).resolve().parents[2] / "app-config.yaml"
+
 
 def _env_bool(name: str, default: bool) -> bool:
     raw_value = os.getenv(name)
@@ -26,19 +28,11 @@ def _env_int(name: str, default: int | None = None) -> int | None:
     return int(raw_value)
 
 
-def _read_secret(*, env_name: str, file_env_name: str) -> str | None:
+def _read_secret(*, env_name: str) -> str | None:
     env_value = os.getenv(env_name)
     if env_value is not None and env_value.strip() != "":
         return env_value.strip()
-
-    file_path = os.getenv(file_env_name)
-    if not file_path:
-        return None
-    path = Path(file_path).expanduser()
-    if not path.exists() or not path.is_file():
-        return None
-    content = path.read_text(encoding="utf-8").strip()
-    return content or None
+    return None
 
 
 def _parse_yaml_scalar(raw_value: str) -> object:
@@ -92,9 +86,8 @@ def _parse_simple_yaml(text: str) -> dict[str, object]:
 
 
 @lru_cache(maxsize=1)
-def _load_apify_file_config() -> dict[str, object]:
-    default_path = Path(__file__).resolve().parents[2] / "apify-config.yaml"
-    config_path = Path(os.getenv("APIFY_CONFIG_FILE", str(default_path))).expanduser()
+def _load_app_file_config() -> dict[str, object]:
+    config_path = _APP_CONFIG_PATH.expanduser()
     if not config_path.exists() or not config_path.is_file():
         return {}
 
@@ -113,8 +106,74 @@ def _load_apify_file_config() -> dict[str, object]:
     return parsed_yaml if isinstance(parsed_yaml, dict) else {}
 
 
+def _config_value(path: tuple[str, ...], default: object = None) -> object:
+    current: object = _load_app_file_config()
+    for key in path:
+        if not isinstance(current, dict):
+            return default
+        current = current.get(key)
+    return default if current is None else current
+
+
+def _config_str(
+    path: tuple[str, ...],
+    default: str | None = None,
+    env_name: str | None = None,
+) -> str | None:
+    value = _config_value(path)
+    if isinstance(value, str) and value.strip() != "":
+        return value.strip()
+    if value is not None and not isinstance(value, dict):
+        return str(value)
+    if env_name:
+        env_value = os.getenv(env_name)
+        if env_value is not None and env_value.strip() != "":
+            return env_value.strip()
+    return default
+
+
+def _config_int(
+    path: tuple[str, ...],
+    default: int,
+    env_name: str | None = None,
+) -> int:
+    value = _config_value(path)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip() != "":
+        return int(value)
+    if env_name:
+        env_value = _env_int(env_name)
+        if env_value is not None:
+            return env_value
+    return default
+
+
+def _config_bool(
+    path: tuple[str, ...],
+    default: bool,
+    env_name: str | None = None,
+) -> bool:
+    value = _config_value(path)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip() != "":
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    if env_name:
+        return _env_bool(env_name, default)
+    return default
+
+
 def _binding_config(binding_key: str) -> dict[str, object]:
-    file_config = _load_apify_file_config()
+    file_config = _load_app_file_config()
+    apify_config = file_config.get("apify")
+    if isinstance(apify_config, dict):
+        bindings = apify_config.get("bindings")
+        if isinstance(bindings, dict):
+            section = bindings.get(binding_key)
+            if isinstance(section, dict):
+                return section
+
     bindings = file_config.get("bindings")
     if isinstance(bindings, dict):
         section = bindings.get(binding_key)
@@ -157,11 +216,16 @@ def _binding_int(
 
 class MongoDBConfig(BaseModel):
     uri: str | None = os.getenv("MONGO_URI")
-    host: str = os.getenv("MONGO_HOST", "localhost")
-    port: int = int(os.getenv("MONGO_PORT", "27017"))
+    host: str = (
+        _config_str(("mongodb", "host"), "localhost", "MONGO_HOST") or "localhost"
+    )
+    port: int = _config_int(("mongodb", "port"), 27017, "MONGO_PORT")
     username: str | None = os.getenv("MONGO_USERNAME")
     password: str | None = os.getenv("MONGO_PASSWORD")
-    database: str = os.getenv("MONGO_DATABASE", "market_tracker")
+    database: str = (
+        _config_str(("mongodb", "database"), "market_tracker", "MONGO_DATABASE")
+        or "market_tracker"
+    )
 
     @property
     def dsn(self) -> str:
@@ -175,21 +239,42 @@ class MongoDBConfig(BaseModel):
 
 
 class ApifyConfig(BaseModel):
-    token: str | None = _read_secret(
-        env_name="APIFY_TOKEN",
-        file_env_name="APIFY_TOKEN_FILE",
+    token: str | None = _read_secret(env_name="APIFY_TOKEN")
+    dispatch_timeout_secs: int = _config_int(
+        ("apify", "dispatch_timeout_secs"),
+        300,
+        "APIFY_DISPATCH_TIMEOUT_SECS",
     )
-    dispatch_timeout_secs: int = _env_int("APIFY_DISPATCH_TIMEOUT_SECS", 300) or 300
-    webhook_url: str | None = os.getenv("APIFY_WEBHOOK_URL")
-    webhook_secret: str | None = os.getenv("APIFY_WEBHOOK_SECRET")
-    poll_batch_size: int = _env_int("APIFY_POLL_BATCH_SIZE", 25) or 25
-    poll_interval_secs: int = _env_int("APIFY_POLL_INTERVAL_SECS", 60) or 60
-    import_batch_size: int = _env_int("APIFY_IMPORT_BATCH_SIZE", 200) or 200
-    import_worker_batch_size: int = _env_int("APIFY_IMPORT_WORKER_BATCH_SIZE", 10) or 10
-    import_worker_interval_secs: int = (
-        _env_int("APIFY_IMPORT_WORKER_INTERVAL_SECS", 30) or 30
+    webhook_url: str | None = _config_str(
+        ("apify", "webhook_url"),
+        None,
+        "APIFY_WEBHOOK_URL",
     )
-    config_file: str = os.getenv("APIFY_CONFIG_FILE", "apify-config.yaml")
+    poll_batch_size: int = _config_int(
+        ("apify", "poll_batch_size"),
+        25,
+        "APIFY_POLL_BATCH_SIZE",
+    )
+    poll_interval_secs: int = _config_int(
+        ("apify", "poll_interval_secs"),
+        60,
+        "APIFY_POLL_INTERVAL_SECS",
+    )
+    import_batch_size: int = _config_int(
+        ("apify", "import_batch_size"),
+        200,
+        "APIFY_IMPORT_BATCH_SIZE",
+    )
+    import_worker_batch_size: int = _config_int(
+        ("apify", "import_worker_batch_size"),
+        10,
+        "APIFY_IMPORT_WORKER_BATCH_SIZE",
+    )
+    import_worker_interval_secs: int = _config_int(
+        ("apify", "import_worker_interval_secs"),
+        30,
+        "APIFY_IMPORT_WORKER_INTERVAL_SECS",
+    )
     category_actor_name: str | None = _binding_str("category", "name")
     category_actor_id: str | None = _binding_str(
         "category", "actor_id", "APIFY_CATEGORY_ACTOR_ID"
@@ -203,8 +288,6 @@ class ApifyConfig(BaseModel):
     category_memory_mbytes: int | None = _binding_int(
         "category", "memory_mbytes", "APIFY_CATEGORY_MEMORY_MBYTES"
     )
-    category_input_adapter: str = _binding_str("category", "input_adapter") or "native"
-    category_amazon_domain: str | None = _binding_str("category", "amazon_domain")
     competitor_actor_name: str | None = _binding_str("competitor", "name")
     competitor_actor_id: str | None = _binding_str(
         "competitor", "actor_id", "APIFY_COMPETITOR_ACTOR_ID"
@@ -218,31 +301,50 @@ class ApifyConfig(BaseModel):
     competitor_memory_mbytes: int | None = _binding_int(
         "competitor", "memory_mbytes", "APIFY_COMPETITOR_MEMORY_MBYTES"
     )
-    competitor_input_adapter: str = (
-        _binding_str("competitor", "input_adapter") or "native"
-    )
-    competitor_amazon_domain: str | None = _binding_str("competitor", "amazon_domain")
 
 
 class StorageConfig(BaseModel):
-    raw_batch_offload_enabled: bool = _env_bool("RAW_BATCH_OFFLOAD_ENABLED", False)
-    raw_batch_offload_min_items: int = (
-        _env_int("RAW_BATCH_OFFLOAD_MIN_ITEMS", 200) or 200
+    raw_batch_offload_enabled: bool = _config_bool(
+        ("storage", "raw_batch_offload_enabled"),
+        False,
+        "RAW_BATCH_OFFLOAD_ENABLED",
     )
-    local_object_store_root: str = os.getenv(
-        "LOCAL_OBJECT_STORE_ROOT", "outputs/object-store"
+    raw_batch_offload_min_items: int = _config_int(
+        ("storage", "raw_batch_offload_min_items"),
+        200,
+        "RAW_BATCH_OFFLOAD_MIN_ITEMS",
+    )
+    local_object_store_root: str = (
+        _config_str(
+            ("storage", "local_object_store_root"),
+            "outputs/object-store",
+            "LOCAL_OBJECT_STORE_ROOT",
+        )
+        or "outputs/object-store"
     )
 
 
 class WorkerConfig(BaseModel):
-    scheduler_interval_secs: int = _env_int("SCHEDULER_WORKER_INTERVAL_SECS", 60) or 60
-    digest_interval_secs: int = _env_int("DIGEST_WORKER_INTERVAL_SECS", 3600) or 3600
+    scheduler_interval_secs: int = _config_int(
+        ("workers", "scheduler_interval_secs"),
+        60,
+        "SCHEDULER_WORKER_INTERVAL_SECS",
+    )
+    digest_interval_secs: int = _config_int(
+        ("workers", "digest_interval_secs"),
+        3600,
+        "DIGEST_WORKER_INTERVAL_SECS",
+    )
 
 
 class Config(BaseModel):
-    app_name: str = "Market Tracker API"
-    api_prefix: str = "/v1"
-    seed_demo_data: bool = _env_bool("SEED_DEMO_DATA", True)
+    app_name: str = (
+        _config_str(("app", "name"), "Market Tracker API") or "Market Tracker API"
+    )
+    api_prefix: str = _config_str(("app", "api_prefix"), "/v1") or "/v1"
+    seed_demo_data: bool = _config_bool(
+        ("app", "seed_demo_data"), True, "SEED_DEMO_DATA"
+    )
     mongodb_config: MongoDBConfig = MongoDBConfig()
     apify_config: ApifyConfig = ApifyConfig()
     storage_config: StorageConfig = StorageConfig()
