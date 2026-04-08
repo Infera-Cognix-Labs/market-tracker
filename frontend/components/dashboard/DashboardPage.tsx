@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bell, BarChart2, Package, RefreshCw, ChevronRight, TrendingUp, AlertTriangle, Zap, Star, TrendingDown, ArrowUpRight } from "lucide-react"
+import { Bell, BarChart2, Package, RefreshCw, ChevronRight, TrendingUp, AlertTriangle, Zap, Star, TrendingDown } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { KPICard } from "../shared/KPICard"

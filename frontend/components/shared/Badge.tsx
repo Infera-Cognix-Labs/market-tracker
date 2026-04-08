@@ -1,5 +1,3 @@
-import { T } from "./DesignTokens"
-
 export const Badge = ({ type, text }: { type: string; text: string }) => {
   const map: Record<string, string> = { 
     new: "tag-new", 

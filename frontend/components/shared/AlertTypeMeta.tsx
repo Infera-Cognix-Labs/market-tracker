@@ -1,5 +1,5 @@
 import { T } from "./DesignTokens"
-import { Zap, Star, TrendingDown, RefreshCw, Eye, Package, FileText, Image, Grid3x3, ShoppingCart, Tag, AlertTriangle } from "lucide-react"
+import { Zap, Star, TrendingDown, RefreshCw, Eye, Package, FileText, Image as ImageIcon, Grid3x3, ShoppingCart, Tag, AlertTriangle } from "lucide-react"
 
 /** Maps API EventType enum values to display metadata */
 export const AlertTypeMeta = (type: string) => ({
@@ -11,7 +11,7 @@ export const AlertTypeMeta = (type: string) => ({
   PRICE_CHANGED: { label: "Price Changed", color: T.blue, badgeType: "price", icon: <TrendingDown size={12} /> },
   PROMOTION_CHANGED: { label: "Promotion Changed", color: T.amber, badgeType: "price", icon: <Tag size={12} /> },
   TITLE_CHANGED: { label: "Title Changed", color: T.purple, badgeType: "listing", icon: <FileText size={12} /> },
-  MAIN_IMAGE_CHANGED: { label: "Image Changed", color: T.purple, badgeType: "listing", icon: <Image size={12} /> },
+  MAIN_IMAGE_CHANGED: { label: "Image Changed", color: T.purple, badgeType: "listing", icon: <ImageIcon size={12} /> },
   VARIATIONS_ADDED: { label: "Variations Added", color: T.teal, badgeType: "listing", icon: <Grid3x3 size={12} /> },
   CONTENT_CHANGED: { label: "Content Changed", color: T.teal, badgeType: "listing", icon: <Eye size={12} /> },
   AVAILABILITY_CHANGED: { label: "Availability Changed", color: T.purple, badgeType: "stock", icon: <Package size={12} /> },

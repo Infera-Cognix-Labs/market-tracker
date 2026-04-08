@@ -157,6 +157,7 @@ export const apiGetProductDetail = async (marketplace: string, asin: string): Pr
 export const apiGetProductTimeline = async (
   marketplace: string,
   asin: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _params?: { from_date?: string; to_date?: string; granularity?: Timeframe }
 ): Promise<ProductTimelineResponse | null> => {
   await delay()

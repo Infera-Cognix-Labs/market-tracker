@@ -332,11 +332,20 @@ export const CompetitorPage = () => {
   // Load product detail and timeline when ASIN selection changes
   useEffect(() => {
     if (!selectedProduct || !tracker) return
-    setProductDetail(null)
-    setTimeline(null)
-    apiGetProductDetail(tracker.marketplace, selectedProduct.asin).then(setProductDetail)
-    apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, { granularity: chartTimeframe }).then(setTimeline)
-  }, [selectedProduct?.asin, tracker?.marketplace, chartTimeframe])
+    let cancelled = false
+    const load = async () => {
+      const [detail, tl] = await Promise.all([
+        apiGetProductDetail(tracker.marketplace, selectedProduct.asin),
+        apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, { granularity: chartTimeframe }),
+      ])
+      if (!cancelled) {
+        setProductDetail(detail)
+        setTimeline(tl)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [selectedProduct, tracker, chartTimeframe])
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
   if (trackers.length === 0) return (
@@ -447,7 +456,7 @@ export const CompetitorPage = () => {
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
               <div style={{ width: 52, height: 52, borderRadius: 8, background: T.bg3, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: T.mono, color: T.text3, flexShrink: 0, overflow: "hidden" }}>
                 {productDetail?.main_image_url_latest
-                  ? <img src={productDetail.main_image_url_latest} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                  ? <img src={productDetail.main_image_url_latest} alt={productDetail?.title_latest || "Product image"} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
                   : "IMG"}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
