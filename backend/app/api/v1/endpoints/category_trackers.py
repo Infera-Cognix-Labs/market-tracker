@@ -14,7 +14,9 @@ from app.models.api import (
 )
 from app.store import BaseStore
 
-router = APIRouter(prefix="/workspaces/{workspace_id}/category-trackers", tags=["category-trackers"])
+router = APIRouter(
+    prefix="/workspaces/{workspace_id}/category-trackers", tags=["category-trackers"]
+)
 
 
 @router.get("", response_model=CategoryTrackerListResponse)

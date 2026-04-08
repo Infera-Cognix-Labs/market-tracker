@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 
-from app.config.config import ApifyConfig
+from app.config.config import ApifyConfig, StorageConfig
 from app.core.logging import correlation_context, get_logger
+from app.core.metrics import get_metrics
 from app.core.utils import utc_now
 from app.integrations.apify_gateway import ApifyGateway
 from app.models.api import (
@@ -20,10 +22,13 @@ from app.models.documents import (
     JobDocument,
     RawImportBatchDocument,
 )
+from app.services.event_engine import EventEngine
 from app.services.normalization_service import NormalizationService, RawImportedItem
+from app.services.object_storage_service import LocalObjectStorageService
 from app.services.snapshot_service import SnapshotService
 
 logger = get_logger(__name__)
+metrics = get_metrics()
 
 
 @dataclass(frozen=True)
@@ -38,12 +43,18 @@ class ResultImporterService:
         gateway: ApifyGateway,
         normalization_service: NormalizationService,
         snapshot_service: SnapshotService,
+        event_engine: EventEngine,
         config: ApifyConfig,
+        storage_config: StorageConfig,
+        object_storage: LocalObjectStorageService | None = None,
     ) -> None:
         self.gateway = gateway
         self.normalization_service = normalization_service
         self.snapshot_service = snapshot_service
+        self.event_engine = event_engine
         self.config = config
+        self.storage_config = storage_config
+        self.object_storage = object_storage
 
     async def process_pending_jobs(self) -> ImportWorkerResult:
         jobs = await JobDocument.find(
@@ -135,6 +146,21 @@ class ResultImporterService:
         job_document.error = None
         await job_document.save()
 
+        if run_document.finished_at is not None:
+            import_lag_seconds = max(
+                0.0,
+                (current_time - run_document.finished_at).total_seconds(),
+            )
+            metrics.observe(
+                "import_lag_seconds",
+                import_lag_seconds,
+                workspace_id=job_document.workspace_id,
+                tracker_code=job_document.tracker_code,
+                job_code=job_document.job_code,
+            )
+        else:
+            import_lag_seconds = None
+
         imported_items, expected_items = await self._load_or_import_raw_items(
             workspace_id=job_document.workspace_id,
             job_document=job_document,
@@ -146,22 +172,72 @@ class ResultImporterService:
             tracker_code=job_document.tracker_code,
         )
 
+        normalization_started = perf_counter()
         normalized = self.normalization_service.normalize_items(
             tracker_type=tracker_context.tracker_type,
             marketplace=tracker_context.marketplace,
             raw_items=imported_items,
         )
+        normalization_latency_ms = (perf_counter() - normalization_started) * 1000.0
+        metrics.observe(
+            "normalization_latency_ms",
+            normalization_latency_ms,
+            workspace_id=job_document.workspace_id,
+            tracker_code=job_document.tracker_code,
+            job_code=job_document.job_code,
+        )
+
+        invalid_rate = (
+            float(normalized.invalid_count) / float(expected_items)
+            if expected_items > 0
+            else 0.0
+        )
+        metrics.observe(
+            "normalization_invalid_rate",
+            invalid_rate,
+            workspace_id=job_document.workspace_id,
+            tracker_code=job_document.tracker_code,
+            job_code=job_document.job_code,
+        )
 
         job_document.summary.expected_items = expected_items
         job_document.summary.imported_items = len(normalized.records)
+        job_document.summary.events_emitted = 0
+        snapshot_latency_ms = 0.0
+        event_generation_latency_ms = 0.0
 
         if normalized.records:
+            snapshot_started = perf_counter()
             await self.snapshot_service.persist_snapshots(
                 workspace_id=job_document.workspace_id,
                 job_document=job_document,
                 apify_run_id=run_document.apify_run_id,
                 dataset_id=run_document.default_dataset_id or "",
                 records=normalized.records,
+            )
+            snapshot_latency_ms = (perf_counter() - snapshot_started) * 1000.0
+            metrics.observe(
+                "snapshot_latency_ms",
+                snapshot_latency_ms,
+                workspace_id=job_document.workspace_id,
+                tracker_code=job_document.tracker_code,
+                job_code=job_document.job_code,
+            )
+
+            event_started = perf_counter()
+            job_document.summary.events_emitted = (
+                await self.event_engine.generate_events_for_job(
+                    workspace_id=job_document.workspace_id,
+                    job_document=job_document,
+                )
+            )
+            event_generation_latency_ms = (perf_counter() - event_started) * 1000.0
+            metrics.observe(
+                "event_generation_latency_ms",
+                event_generation_latency_ms,
+                workspace_id=job_document.workspace_id,
+                tracker_code=job_document.tracker_code,
+                job_code=job_document.job_code,
             )
 
         if normalized.invalid_count > 0 and normalized.records:
@@ -186,6 +262,13 @@ class ResultImporterService:
         job_document.status = final_status
         job_document.finished_at = utc_now()
         await job_document.save()
+        metrics.increment(
+            "import_jobs_completed_total",
+            1.0,
+            workspace_id=job_document.workspace_id,
+            tracker_code=job_document.tracker_code,
+            final_status=final_status,
+        )
 
         await self._update_tracker_stats(
             workspace_id=job_document.workspace_id,
@@ -205,6 +288,12 @@ class ResultImporterService:
                     expected_items=expected_items,
                     imported_items=len(normalized.records),
                     invalid_items=normalized.invalid_count,
+                    normalization_invalid_rate=invalid_rate,
+                    normalization_latency_ms=normalization_latency_ms,
+                    snapshot_latency_ms=snapshot_latency_ms,
+                    event_generation_latency_ms=event_generation_latency_ms,
+                    import_lag_seconds=import_lag_seconds,
+                    events_emitted=job_document.summary.events_emitted,
                     final_status=final_status,
                 )
             },
@@ -222,7 +311,7 @@ class ResultImporterService:
             RawImportBatchDocument.apify_run_id == run_document.apify_run_id
         ).to_list()
         if existing_batches:
-            return _flatten_raw_batches(existing_batches)
+            return await self._flatten_raw_batches(existing_batches)
 
         dataset_id = run_document.default_dataset_id
         if not dataset_id:
@@ -247,6 +336,18 @@ class ResultImporterService:
             if not payload_items:
                 break
 
+            raw_storage_uri: str | None = None
+            raw_items_to_persist = payload_items
+            if self._should_offload_raw_items(payload_items):
+                raw_storage_uri = await self._offload_raw_items(
+                    workspace_id=workspace_id,
+                    apify_run_id=run_document.apify_run_id,
+                    batch_no=batch_no,
+                    items=payload_items,
+                )
+                if raw_storage_uri is not None:
+                    raw_items_to_persist = []
+
             await RawImportBatchDocument(
                 workspace_id=workspace_id,
                 tracking_job_code=job_document.job_code,
@@ -255,8 +356,8 @@ class ResultImporterService:
                 batch_no=batch_no,
                 source_item_count=len(payload_items),
                 import_status="IMPORTED",
-                raw_items=payload_items,
-                raw_storage_uri=None,
+                raw_items=raw_items_to_persist,
+                raw_storage_uri=raw_storage_uri,
                 imported_at=utc_now(),
                 created_at=utc_now(),
             ).insert()
@@ -277,6 +378,73 @@ class ResultImporterService:
             batch_no += 1
 
         expected_items = total_items if total_items is not None else len(imported_items)
+        return imported_items, expected_items
+
+    def _should_offload_raw_items(self, payload_items: list[dict[str, object]]) -> bool:
+        if not self.storage_config.raw_batch_offload_enabled:
+            return False
+        if self.object_storage is None:
+            return False
+        return len(payload_items) >= self.storage_config.raw_batch_offload_min_items
+
+    async def _offload_raw_items(
+        self,
+        *,
+        workspace_id: str,
+        apify_run_id: str,
+        batch_no: int,
+        items: list[dict[str, object]],
+    ) -> str | None:
+        if self.object_storage is None:
+            return None
+        storage_uri = await self.object_storage.write_raw_batch(
+            workspace_id=workspace_id,
+            apify_run_id=apify_run_id,
+            batch_no=batch_no,
+            items=items,
+        )
+        logger.info(
+            "Offloaded raw import batch payload to object storage.",
+            extra={
+                "context": correlation_context(
+                    workspace_id=workspace_id,
+                    apify_run_id=apify_run_id,
+                    batch_no=batch_no,
+                    source_item_count=len(items),
+                    raw_storage_uri=storage_uri,
+                )
+            },
+        )
+        return storage_uri
+
+    async def _flatten_raw_batches(
+        self,
+        batches: list[RawImportBatchDocument],
+    ) -> tuple[list[RawImportedItem], int]:
+        ordered_batches = sorted(batches, key=lambda item: item.batch_no)
+        imported_items: list[RawImportedItem] = []
+
+        for batch in ordered_batches:
+            payload_items = batch.raw_items
+            if not payload_items and batch.raw_storage_uri:
+                if self.object_storage is not None:
+                    payload_items = await self.object_storage.read_raw_batch(
+                        batch.raw_storage_uri
+                    )
+                else:
+                    payload_items = []
+
+            imported_items.extend(
+                RawImportedItem(
+                    batch_no=batch.batch_no,
+                    item_index=item_index,
+                    payload=item,
+                )
+                for item_index, item in enumerate(payload_items)
+                if isinstance(item, dict)
+            )
+
+        expected_items = sum(batch.source_item_count for batch in ordered_batches)
         return imported_items, expected_items
 
     async def _load_tracker_context(
@@ -362,22 +530,3 @@ class ResultImporterService:
         return run_document.status == ExternalRunStatus.SUCCEEDED.value and bool(
             run_document.default_dataset_id
         )
-
-
-def _flatten_raw_batches(
-    batches: list[RawImportBatchDocument],
-) -> tuple[list[RawImportedItem], int]:
-    ordered_batches = sorted(batches, key=lambda item: item.batch_no)
-    imported_items: list[RawImportedItem] = []
-    for batch in ordered_batches:
-        imported_items.extend(
-            RawImportedItem(
-                batch_no=batch.batch_no,
-                item_index=item_index,
-                payload=item,
-            )
-            for item_index, item in enumerate(batch.raw_items)
-            if isinstance(item, dict)
-        )
-    expected_items = sum(batch.source_item_count for batch in ordered_batches)
-    return imported_items, expected_items

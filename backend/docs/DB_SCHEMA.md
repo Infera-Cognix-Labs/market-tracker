@@ -653,9 +653,12 @@ db.product_snapshots.createIndex({ tracking_job_id: 1 })
 ### Key indexes
 
 ```javascript
-db.tracking_events.createIndex({ event_code: 1 }, { unique: true })
-db.tracking_events.createIndex({ dedupe_key: 1 }, { unique: true })
-db.tracking_events.createIndex({ tracker_id: 1, event_time: -1 })
+db.tracking_events.createIndex({ workspace_id: 1, event_code: 1 }, { unique: true })
+db.tracking_events.createIndex(
+  { workspace_id: 1, dedupe_key: 1 },
+  { unique: true, partialFilterExpression: { dedupe_key: { $type: "string" } } }
+)
+db.tracking_events.createIndex({ workspace_id: 1, tracker_code: 1, event_time: -1 })
 db.tracking_events.createIndex({ asin: 1, event_time: -1 })
 db.tracking_events.createIndex({ event_type: 1, event_time: -1 })
 ```

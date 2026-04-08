@@ -527,6 +527,24 @@ class ImportWorkerResult(ApiModel):
     skipped_jobs: int
 
 
+class SchedulerWorkerResult(ApiModel):
+    source: Literal["SCHEDULER_WORKER"] = "SCHEDULER_WORKER"
+    scanned_trackers: int
+    due_trackers: int
+    created_jobs: int
+    dispatched_jobs: int
+    skipped_existing: int
+    failed_jobs: int
+
+
+class DigestWorkerResult(ApiModel):
+    source: Literal["DIGEST_WORKER"] = "DIGEST_WORKER"
+    scanned_workspaces: int
+    generated_digests: int
+    skipped_digests: int
+    failed_digests: int
+
+
 class Threat(ApiModel):
     asin: AsinCode
     marketplace: MarketplaceCode

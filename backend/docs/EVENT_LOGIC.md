@@ -648,7 +648,7 @@ BUY_BOX_CHANGED|{marketplace}|{asin}|{snapshot_date}
 |---|---|
 | `NEW_ENTRANT_TOP50` | MEDIUM |
 | `RETURNING_TOP50` | MEDIUM |
-| `EXIT_TOP50` | LOW |
+| `EXIT_TOP50` | LOW | # Need up to MEDIUM
 | `ENTER_TOP10` | HIGH |
 | `EXIT_TOP10` | MEDIUM |
 | `PRICE_CHANGED` | MEDIUM |

@@ -35,6 +35,7 @@ class ApifyDatasetLookupError(ApifyGatewayError):
 @dataclass(frozen=True)
 class ApifyBindingTarget:
     binding_code: str
+    actor_name: str | None
     actor_id: str | None
     task_id: str | None
     build: str | None
@@ -82,6 +83,7 @@ class ApifyGateway:
         if binding_code == "bind_category_top50_v1":
             return ApifyBindingTarget(
                 binding_code=binding_code,
+                actor_name=self.config.category_actor_name,
                 actor_id=self.config.category_actor_id,
                 task_id=self.config.category_task_id,
                 build=self.config.category_build,
@@ -90,6 +92,7 @@ class ApifyGateway:
         if binding_code == "bind_competitor_tracking_v1":
             return ApifyBindingTarget(
                 binding_code=binding_code,
+                actor_name=self.config.competitor_actor_name,
                 actor_id=self.config.competitor_actor_id,
                 task_id=self.config.competitor_task_id,
                 build=self.config.competitor_build,

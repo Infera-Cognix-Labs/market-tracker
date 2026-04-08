@@ -18,7 +18,7 @@ Backend đang tập trung vào các read/write flows chính cho:
 - jobs
 - weekly digests
 
-Lưu ý: webhook receiver, poller fallback, import worker, normalization, và snapshot persistence da co runtime flow co the chay. Cac phan diff/event engine, scheduler, digest worker van la follow-up.
+Lưu ý: webhook receiver, poller fallback, import worker, scheduler worker, digest worker, normalization, snapshot persistence, diff/event generation, raw payload offload, va worker pool runner da co runtime flow co the chay. Observability nang cao tiep tuc duoc nang cap theo nhu cau.
 
 ## Tech Stack
 
@@ -85,6 +85,7 @@ MONGO_USERNAME=admin
 MONGO_PASSWORD=secret
 SEED_DEMO_DATA=true
 APIFY_TOKEN=your_apify_token
+APIFY_TOKEN_FILE=/run/secrets/apify_token
 APIFY_WEBHOOK_URL=https://your-domain.example.com/v1/webhooks/apify/runs
 APIFY_WEBHOOK_SECRET=replace_me
 APIFY_POLL_BATCH_SIZE=25
@@ -92,6 +93,12 @@ APIFY_POLL_INTERVAL_SECS=60
 APIFY_IMPORT_BATCH_SIZE=200
 APIFY_IMPORT_WORKER_BATCH_SIZE=10
 APIFY_IMPORT_WORKER_INTERVAL_SECS=30
+APIFY_CONFIG_FILE=apify-config.yaml
+RAW_BATCH_OFFLOAD_ENABLED=false
+RAW_BATCH_OFFLOAD_MIN_ITEMS=200
+LOCAL_OBJECT_STORE_ROOT=outputs/object-store
+SCHEDULER_WORKER_INTERVAL_SECS=60
+DIGEST_WORKER_INTERVAL_SECS=3600
 ```
 
 Bạn cũng có thể dùng:
@@ -99,6 +106,36 @@ Bạn cũng có thể dùng:
 ```env
 MONGO_URI=mongodb://admin:secret@localhost:27017
 ```
+
+## Apify actor config (`apify-config.yaml`)
+
+Toan bo config actor/task/build/memory (khong phai secret) duoc dat trong file `apify-config.yaml`:
+
+```yaml
+bindings:
+	category:
+		name: "Saswave Amazon Product Scraper (Category)"
+		actor_id: "saswave/amazon-product-scraper"
+		task_id: ""
+		input_adapter: "saswave_category"
+		amazon_domain: "www.amazon.com"
+		build: "latest"
+		memory_mbytes: 4096
+	competitor:
+		name: "Saswave Amazon Product Scraper (Competitor)"
+		actor_id: "saswave/amazon-product-scraper"
+		task_id: ""
+		input_adapter: "saswave_competitor"
+		amazon_domain: "www.amazon.com"
+		build: "latest"
+		memory_mbytes: 4096
+```
+
+Secret `APIFY_TOKEN` tiep tuc lay tu env hoac file secret (`APIFY_TOKEN_FILE`).
+
+- `input_adapter: native`: gui payload goc theo schema job hien tai.
+- `input_adapter: saswave_category`: map category tracker thanh `search_url + max_pages + amazon_domain`.
+- `input_adapter: saswave_competitor`: map competitor tracker thanh `asins + amazon_domain`.
 
 ## Storage
 
@@ -138,6 +175,42 @@ Hoac chay import worker lien tuc:
 
 ```bash
 uv run python -m app.workers.import_worker
+```
+
+Chay scheduler worker mot lan:
+
+```bash
+uv run python -m app.workers.scheduler_worker --once
+```
+
+Hoac chay scheduler worker lien tuc:
+
+```bash
+uv run python -m app.workers.scheduler_worker
+```
+
+Chay digest worker mot lan:
+
+```bash
+uv run python -m app.workers.digest_worker --once
+```
+
+Hoac chay digest worker lien tuc:
+
+```bash
+uv run python -m app.workers.digest_worker
+```
+
+Chay worker pool (scheduler + poller + importer + digest) trong 1 process:
+
+```bash
+uv run python -m app.workers.worker_pool
+```
+
+Chay worker pool 1 batch roi thoat:
+
+```bash
+uv run python -m app.workers.worker_pool --once
 ```
 
 Endpoints hữu ích:

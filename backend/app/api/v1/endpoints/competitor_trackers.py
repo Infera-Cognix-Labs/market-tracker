@@ -30,7 +30,9 @@ async def list_competitor_trackers(
     return await store.list_competitor_trackers(workspace_id, page, page_size)
 
 
-@router.post("", response_model=CompetitorTrackerDetail, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=CompetitorTrackerDetail, status_code=status.HTTP_201_CREATED
+)
 async def create_competitor_tracker(
     workspace_id: str,
     payload: CompetitorTrackerCreateRequest,

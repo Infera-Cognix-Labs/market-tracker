@@ -10,27 +10,28 @@ from app.store import build_store
 logger = get_logger(__name__)
 
 
-async def poll_once() -> None:
+async def digest_once() -> None:
     settings = get_settings()
     store = await build_store(settings)
     try:
-        result = await store.poll_apify_runs()
+        result = await store.process_digest_jobs()
         logger.info(
-            "Completed Apify run polling batch.", extra={"context": result.model_dump()}
+            "Completed digest worker batch.",
+            extra={"context": result.model_dump()},
         )
     finally:
         await store.close()
 
 
-async def run_poller() -> None:
+async def run_digest_worker() -> None:
     settings = get_settings()
-    interval_secs = settings.apify_config.poll_interval_secs
+    interval_secs = settings.worker_config.digest_interval_secs
     store = await build_store(settings)
     try:
         while True:
-            result = await store.poll_apify_runs()
+            result = await store.process_digest_jobs()
             logger.info(
-                "Completed Apify run polling batch.",
+                "Completed digest worker batch.",
                 extra={"context": result.model_dump()},
             )
             await asyncio.sleep(interval_secs)
@@ -40,20 +41,20 @@ async def run_poller() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Poll Apify run states and advance jobs."
+        description="Generate weekly digest read models from tracking events."
     )
     parser.add_argument(
         "--once",
         action="store_true",
-        help="Run a single polling batch and exit.",
+        help="Run a single digest batch and exit.",
     )
     args = parser.parse_args()
 
     configure_logging()
     if args.once:
-        asyncio.run(poll_once())
+        asyncio.run(digest_once())
         return
-    asyncio.run(run_poller())
+    asyncio.run(run_digest_worker())
 
 
 if __name__ == "__main__":

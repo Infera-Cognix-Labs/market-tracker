@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 
 from app.models.api import (
     Event,
@@ -27,7 +27,9 @@ from app.store import (
 
 
 def test_generate_tracker_code_and_job_code_increment_uniquely():
-    tracker_code = _generate_tracker_code("ct", "Bottle Warmer US", {"ct_bottle_warmer_us"})
+    tracker_code = _generate_tracker_code(
+        "ct", "Bottle Warmer US", {"ct_bottle_warmer_us"}
+    )
     job_code = _generate_job_code(
         snapshot_date=date(2026, 4, 3),
         tracker_type="CATEGORY",
@@ -59,7 +61,8 @@ def test_range_and_timeline_helpers(seed_data):
     timeline_events = [
         event
         for event in seed_data.events
-        if event.asin == seed_data.products[0].asin and event.marketplace == seed_data.products[0].marketplace
+        if event.asin == seed_data.products[0].asin
+        and event.marketplace == seed_data.products[0].marketplace
     ]
 
     assert _within_range(date(2026, 4, 3), date(2026, 4, 1), date(2026, 4, 3)) is True
@@ -104,7 +107,10 @@ def test_event_sorting_threats_and_dashboard_helpers(seed_data):
     threats = _build_top_threats(sorted_events, tracker_name_map)
 
     assert sorted_events[0].severity == Severity.HIGH
-    assert sorted_events[0].event_type in {EventType.ENTER_TOP10, EventType.AVAILABILITY_CHANGED}
+    assert sorted_events[0].event_type in {
+        EventType.ENTER_TOP10,
+        EventType.AVAILABILITY_CHANGED,
+    }
     assert overview.summary.active_category_tracker_count == 1
     assert overview.summary.active_competitor_tracker_count == 1
     assert overview.summary.price_change_count >= 1
@@ -136,7 +142,10 @@ def test_build_top_threats_keeps_single_high_severity_signal(seed_data):
 
     assert len(threats) == 1
     assert threats[0].asin == "B0HIGH00001"
-    assert threats[0].tracker_refs[0].tracker_code == seed_data.category_trackers[0].tracker_code
+    assert (
+        threats[0].tracker_refs[0].tracker_code
+        == seed_data.category_trackers[0].tracker_code
+    )
 
 
 def test_dashboard_helper_ignores_inactive_trackers(seed_data):

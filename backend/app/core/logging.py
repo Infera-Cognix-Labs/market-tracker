@@ -28,7 +28,10 @@ class StructuredFormatter(logging.Formatter):
 
 def configure_logging(level: int = logging.INFO) -> None:
     root_logger = logging.getLogger()
-    if any(isinstance(handler.formatter, StructuredFormatter) for handler in root_logger.handlers):
+    if any(
+        isinstance(handler.formatter, StructuredFormatter)
+        for handler in root_logger.handlers
+    ):
         root_logger.setLevel(level)
         return
 

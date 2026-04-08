@@ -12,26 +12,26 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - The current backend matches a contract-first `FastAPI + MongoDB` monolith more than the target modular monolith with workers.
 - Read-side APIs, tracker CRUD, and snapshot-backed product timeline reads are implemented.
 - The backend now has real `services/` and `integrations/` seams plus an Apify dispatch path.
-- Webhook/poller -> importer worker -> normalization -> snapshot persistence now runs in code; diff/event runtime generation is the main remaining gap.
+- Webhook/poller -> importer worker -> normalization -> snapshot -> diff/event runtime generation now runs in code.
 - `app/store.py` is now a thin facade over extracted services instead of the main home for business logic.
 
 ## 1. App Shell And Topology
 
 - [x] FastAPI app bootstrap, healthcheck, and API router wiring exist.
 - [x] MongoDB + Beanie is the active persistence path.
-- [ ] Background worker process pool exists.
-- [ ] Scheduler worker exists.
+- [x] Background worker process pool exists.
+- [x] Scheduler worker exists.
 - [x] Poller worker exists.
 - [x] Import worker exists.
-- [ ] Digest worker exists.
-- [ ] Object storage integration exists.
+- [x] Digest worker exists.
+- [x] Object storage integration exists.
 
 ## 2. Logical Domains And Modules
 
 - [x] `tracker_management`
   Notes: category/competitor tracker CRUD, validation, and tracked ASIN replacement are implemented.
 - [x] `apify_gateway`
-  Notes: dedicated `app/integrations/apify_gateway.py` exists and resolves dispatch bindings from env config.
+  Notes: dedicated `app/integrations/apify_gateway.py` exists and resolves dispatch bindings from `apify-config.yaml` (non-secret actor config) plus secret token from env/secret file.
 - [x] `run_orchestrator`
   Notes: background dispatch now moves jobs from `QUEUED` into the external-run path and records failures on the job.
 - [x] `webhook_receiver`
@@ -41,14 +41,15 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
   Notes: deterministic normalization now maps common provider payload shapes into internal product records.
 - [x] `snapshot_service`
   Notes: runtime writes now create/update `category_snapshots`, `product_snapshots`, and update `products`.
-- [ ] `diff_engine`
-- [ ] `event_engine`
-  Notes: `tracking_events` is queryable as a stored read model, but events are not generated in code.
+- [x] `diff_engine`
+  Notes: `app/services/diff_service.py` compares current snapshots with historical snapshots and emits diff candidates.
+- [x] `event_engine`
+  Notes: `app/services/event_engine.py` maps diff candidates into events, computes deterministic dedupe keys, and persists idempotently.
 - [x] `dashboard_query`
   Notes: dashboard, product, event, job, and digest read APIs exist; product timeline now reads from `product_snapshots` instead of `product_timelines`.
-- [ ] `report_service`
-  Notes: weekly digest read APIs exist, but digest generation/export flow is not implemented.
-- [ ] `ops_monitoring`
+- [x] `report_service`
+  Notes: weekly digest generation now runs in `app/services/digest_service.py`; read APIs continue using `weekly_digests` read model.
+- [x] `ops_monitoring`
 
 ## 3. Runtime Flow
 
@@ -60,8 +61,8 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Import dataset items into internal raw storage.
 - [x] Normalize provider payloads into stable internal models.
 - [x] Create category/product snapshots from normalized data.
-- [ ] Diff snapshots and emit event candidates.
-- [ ] Apply event rules and persist derived events.
+- [x] Diff snapshots and emit event candidates.
+- [x] Apply event rules and persist derived events.
 - [x] Update jobs through `QUEUED -> DISPATCHING -> RUNNING_EXTERNAL/FAILED` during dispatch.
 - [x] Update jobs through `IMPORTING -> PROCESSING -> SUCCESS/PARTIAL_SUCCESS/FAILED` during downstream processing.
 
@@ -71,14 +72,14 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Internal job records exist in `tracking_jobs`.
 - [x] Internal copy of external run metadata exists in `apify_runs`.
 - [x] Raw provider payload storage exists via `raw_import_batches` or object storage.
-  Notes: raw payload batches are now persisted in `raw_import_batches`; object-storage offload is still optional follow-up.
+  Notes: raw payload batches can now be offloaded to local object storage via `raw_storage_uri` and replayed back for normalization.
 - [x] Internal product registry exists in `products`.
 - [x] Internal category snapshots collection exists.
 - [x] Internal product snapshots collection exists.
 - [x] Internal tracking events collection exists.
 - [x] Internal weekly digests collection exists.
-- [ ] Append-only snapshot/event write policy is enforced in runtime code.
-  Notes: the current demo seed path upserts existing snapshots, events, jobs, and digests instead of preserving strict append-only semantics.
+- [x] Append-only snapshot/event write policy is enforced in runtime code.
+  Notes: runtime snapshot writes no longer overwrite existing snapshot payloads; existing snapshots only merge tracker refs when needed.
 
 ## 5. Idempotency
 
@@ -88,8 +89,8 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] One category snapshot per `(workspace_id, tracker_code, snapshot_date)`.
 - [x] One product snapshot per `(marketplace, asin, snapshot_date)`.
   Notes: the implemented unique index is workspace-scoped as `(workspace_id, marketplace, asin, snapshot_date)`.
-- [ ] Stable event dedupe key is enforced.
-  Notes: `dedupe_key` exists on the event document model, but there is no generator or unique index.
+- [x] Stable event dedupe key is enforced.
+  Notes: event engine now generates deterministic `dedupe_key` values and `tracking_events` enforces workspace-scoped uniqueness on `(workspace_id, dedupe_key)`.
 
 ## 6. API And Read Side
 
@@ -104,16 +105,17 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 ## 7. Observability And Security
 
 - [x] Request IDs are attached at HTTP middleware level.
-- [ ] Structured logs for job/run/import/snapshot/event lifecycle exist.
-  Notes: structured logs now cover job creation, dispatch, lifecycle updates, and import worker batches; event/digest phases are still pending.
-- [ ] Metrics for jobs, run latency, import lag, normalization error rate, snapshot latency, and digest latency exist.
-- [ ] Correlation keys such as `job_code`, `tracker_code`, `apify_run_id`, and `snapshot_date` are propagated consistently.
-  Notes: correlation context now spans dispatch, webhook/poller lifecycle, and importer flow; broader consistency still pending for future modules.
+- [x] Structured logs for job/run/import/snapshot/event lifecycle exist.
+  Notes: structured logs now span dispatch, webhook/poller lifecycle, import/snapshot/event phases, scheduler, and digest generation.
+- [x] Metrics for jobs, run latency, import lag, normalization error rate, snapshot latency, and digest latency exist.
+- [x] Correlation keys such as `job_code`, `tracker_code`, `apify_run_id`, and `snapshot_date` are propagated consistently.
 - [x] Apify token is loaded from environment config instead of being hardcoded in app logic.
-- [ ] Secret management integration beyond local env loading exists.
+- [x] Secret management integration beyond local env loading exists.
+  Notes: `APIFY_TOKEN_FILE` can be used for mounted secret files while keeping non-secret actor config in `apify-config.yaml`.
 - [x] Restricted and verified webhook endpoint exists.
   Notes: `APIFY_WEBHOOK_SECRET` is enforced when configured; local/dev can still run unsigned when the secret is intentionally unset.
-- [ ] Data minimization and raw payload offload strategy exists.
+- [x] Data minimization and raw payload offload strategy exists.
+  Notes: importer can offload large raw batches to object storage and keep only storage URI in MongoDB.
 
 ## 8. Folder Structure Alignment
 
@@ -123,7 +125,7 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 - [x] Separate `services/` package exists.
 - [x] Separate `workers/` package exists.
 - [x] Module boundaries from the architecture doc are reflected in the code layout.
-  Notes: first real seams now live in `services/`, `integrations/`, and a thinner `store` facade; scheduler/digest workers remain pending.
+  Notes: first real seams now live in `services/`, `integrations/`, and a thinner `store` facade; dedicated worker pool runner is available under `app/workers/worker_pool.py`.
 
 ## Suggested Next Steps
 
@@ -137,5 +139,6 @@ Derived from `backend/docs/BE_ARCHITECTURE.md` and reviewed against the current 
 
 1. [x] Implement `webhook_receiver` and `poller` so `RUNNING_EXTERNAL` jobs can progress without manual inspection.
 2. [x] Build `result_importer`, `normalization_service`, and `snapshot_service` on top of `raw_import_batches`.
-3. Add runtime diff/event generation plus event dedupe enforcement on top of persisted snapshots.
-4. Decide whether object storage is needed for large raw payload offload before importer volume grows.
+3. [x] Add runtime diff/event generation plus event dedupe enforcement on top of persisted snapshots.
+4. [x] Add scheduler and digest workers with periodic loops and one-shot execution mode.
+5. [x] Add optional raw payload offload and replay path before importer volume grows.

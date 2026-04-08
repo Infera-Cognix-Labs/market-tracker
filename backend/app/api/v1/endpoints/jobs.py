@@ -6,7 +6,13 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
 from app.api.v1.deps import get_store
-from app.models.api import Job, JobCreateRequest, JobListResponse, JobStatus, TrackerType
+from app.models.api import (
+    Job,
+    JobCreateRequest,
+    JobListResponse,
+    JobStatus,
+    TrackerType,
+)
 from app.store import BaseStore
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/jobs", tags=["jobs"])

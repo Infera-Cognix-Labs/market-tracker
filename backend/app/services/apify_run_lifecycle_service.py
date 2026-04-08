@@ -8,8 +8,13 @@ from typing import Literal
 from app.config.config import ApifyConfig
 from app.core.errors import ForbiddenError
 from app.core.logging import correlation_context, get_logger
+from app.core.metrics import get_metrics
 from app.core.utils import utc_now
-from app.integrations.apify_gateway import ApifyGateway, ApifyRunLookupError, map_apify_status
+from app.integrations.apify_gateway import (
+    ApifyGateway,
+    ApifyRunLookupError,
+    map_apify_status,
+)
 from app.models.api import (
     ApifyRunPollResult,
     ApifyWebhookAck,
@@ -23,6 +28,7 @@ from app.models.documents import ApifyRunDocument, JobDocument
 from app.services.run_orchestrator import coerce_datetime
 
 logger = get_logger(__name__)
+metrics = get_metrics()
 
 TERMINAL_EXTERNAL_STATUSES = {
     ExternalRunStatus.SUCCEEDED,
@@ -101,7 +107,8 @@ class ApifyRunLifecycleService:
             [
                 document
                 for document in runs
-                if document.status not in {status.value for status in TERMINAL_EXTERNAL_STATUSES}
+                if document.status
+                not in {status.value for status in TERMINAL_EXTERNAL_STATUSES}
             ],
             key=lambda document: document.updated_at,
         )[: self.config.poll_batch_size]
@@ -171,6 +178,12 @@ class ApifyRunLifecycleService:
                 jobs_advanced += 1
             if result.job_failed:
                 jobs_failed += 1
+
+        metrics.increment("apify_runs_polled_total", float(polled_runs))
+        metrics.increment("apify_runs_updated_total", float(updated_runs))
+        metrics.increment("apify_run_lookup_failures_total", float(lookup_failures))
+        metrics.increment("jobs_advanced_from_apify_total", float(jobs_advanced))
+        metrics.increment("jobs_failed_from_apify_total", float(jobs_failed))
 
         return ApifyRunPollResult(
             polled_runs=polled_runs,
@@ -279,6 +292,24 @@ class ApifyRunLifecycleService:
             },
         )
 
+        if provider_status is not None:
+            metrics.increment(
+                "apify_run_status_updates_total",
+                1.0,
+                provider_status=provider_status.value,
+                source=source,
+            )
+
+        if provider_status in TERMINAL_EXTERNAL_STATUSES:
+            run_latency_seconds = _compute_run_latency_seconds(run_document)
+            if run_latency_seconds is not None:
+                metrics.observe(
+                    "apify_run_latency_seconds",
+                    run_latency_seconds,
+                    provider_status=provider_status.value if provider_status else None,
+                    source=source,
+                )
+
         return LifecycleUpdateResult(
             ack_status=job_transition["ack_status"],
             apify_run_id=provider_run_id,
@@ -338,7 +369,10 @@ class ApifyRunLifecycleService:
             if run_document.error != error:
                 run_document.error = error
                 changed = True
-        elif provider_status == ExternalRunStatus.SUCCEEDED and run_document.error is not None:
+        elif (
+            provider_status == ExternalRunStatus.SUCCEEDED
+            and run_document.error is not None
+        ):
             run_document.error = None
             changed = True
 
@@ -422,7 +456,9 @@ class ApifyRunLifecycleService:
             return
 
         scheme, _, token = (authorization_header or "").partition(" ")
-        if scheme != "Bearer" or not hmac.compare_digest(token, self.config.webhook_secret):
+        if scheme != "Bearer" or not hmac.compare_digest(
+            token, self.config.webhook_secret
+        ):
             raise ForbiddenError("Invalid webhook secret.")
 
     def _extract_run_id(self, payload: ApifyWebhookEnvelope) -> str | None:
@@ -436,7 +472,9 @@ class ApifyRunLifecycleService:
 
         return payload.resource_id
 
-    def _extract_status(self, payload: ApifyWebhookEnvelope) -> ExternalRunStatus | None:
+    def _extract_status(
+        self, payload: ApifyWebhookEnvelope
+    ) -> ExternalRunStatus | None:
         resource = self._as_dict(payload.resource)
         if resource:
             status = map_apify_status(resource.get("status"))
@@ -484,3 +522,12 @@ class ApifyRunLifecycleService:
         if isinstance(value, dict):
             return value
         return None
+
+
+def _compute_run_latency_seconds(run_document: ApifyRunDocument) -> float | None:
+    if run_document.started_at is None or run_document.finished_at is None:
+        return None
+    latency = (run_document.finished_at - run_document.started_at).total_seconds()
+    if latency < 0:
+        return None
+    return latency

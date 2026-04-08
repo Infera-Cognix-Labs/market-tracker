@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 from datetime import UTC, datetime
+from time import perf_counter
 
 from app.core.errors import NotFoundError
 from app.core.logging import correlation_context, get_logger
+from app.core.metrics import get_metrics
 from app.core.utils import utc_now
 from app.integrations.apify_gateway import (
     ApifyBindingResolutionError,
@@ -27,6 +30,7 @@ from app.models.documents import (
 from app.services.shared import job_doc_to_model
 
 logger = get_logger(__name__)
+metrics = get_metrics()
 
 
 class RunOrchestrator:
@@ -75,11 +79,13 @@ class RunOrchestrator:
                 extra={"context": log_context},
             )
 
+            dispatch_started = perf_counter()
             launch = await self.gateway.start_run(
                 binding_code,
                 run_input,
                 webhooks=self._build_run_webhooks(),
             )
+            dispatch_latency_ms = (perf_counter() - dispatch_started) * 1000.0
 
             apify_run = ApifyRunDocument(
                 workspace_id=workspace_id,
@@ -119,16 +125,43 @@ class RunOrchestrator:
                 extra={
                     "context": correlation_context(
                         **log_context,
+                        actor_name=getattr(launch.binding, "actor_name", None),
+                        actor_id=launch.binding.actor_id,
                         apify_run_id=launch.provider_run_id,
                         dataset_id=launch.default_dataset_id,
+                        dispatch_latency_ms=dispatch_latency_ms,
                     )
                 },
+            )
+            metrics.increment(
+                "jobs_dispatched_total",
+                1.0,
+                workspace_id=workspace_id,
+                tracker_code=job_document.tracker_code,
+                tracker_type=job_document.tracker_type,
+                binding_code=binding_code,
+            )
+            metrics.observe(
+                "dispatch_latency_ms",
+                dispatch_latency_ms,
+                workspace_id=workspace_id,
+                tracker_code=job_document.tracker_code,
+                tracker_type=job_document.tracker_type,
+                binding_code=binding_code,
             )
         except (ApifyGatewayError, NotFoundError, ValueError) as exc:
             job_document.status = JobStatus.FAILED
             job_document.error = JobError(code=type(exc).__name__, message=str(exc))
             job_document.finished_at = utc_now()
             await job_document.save()
+            metrics.increment(
+                "jobs_dispatch_failed_total",
+                1.0,
+                workspace_id=workspace_id,
+                tracker_code=job_document.tracker_code,
+                tracker_type=job_document.tracker_type,
+                error_type=type(exc).__name__,
+            )
             logger.exception(
                 "Failed to dispatch tracking job.",
                 extra={
@@ -174,6 +207,35 @@ class RunOrchestrator:
         }
 
         if job.tracker_type == TrackerType.CATEGORY:
+            category_adapter = getattr(
+                self.gateway.config,
+                "category_input_adapter",
+                "native",
+            )
+            if category_adapter == "saswave_category":
+                search_url = tracker_document.scope.browse_node_url
+                if not search_url and tracker_document.scope.browse_node_id:
+                    search_url = (
+                        "https://www.amazon.com/s"
+                        f"?i=specialty-aps&rh=n%3A{tracker_document.scope.browse_node_id}"
+                    )
+
+                if search_url:
+                    top_n = max(1, tracker_document.tracking_config.top_n)
+                    max_pages = max(1, min(10, math.ceil(top_n / 50)))
+                    return {
+                        "search_url": search_url,
+                        "max_pages": max_pages,
+                        "amazon_domain": _marketplace_to_amazon_domain(
+                            tracker_document.marketplace,
+                            override=getattr(
+                                self.gateway.config,
+                                "category_amazon_domain",
+                                None,
+                            ),
+                        ),
+                    }
+
             base_input.update(
                 {
                     "marketplace": tracker_document.marketplace,
@@ -183,6 +245,26 @@ class RunOrchestrator:
                 }
             )
             return base_input
+
+        competitor_adapter = getattr(
+            self.gateway.config,
+            "competitor_input_adapter",
+            "native",
+        )
+        if competitor_adapter == "saswave_competitor":
+            return {
+                "asins": [
+                    item.asin for item in tracker_document.tracked_asins if item.enabled
+                ],
+                "amazon_domain": _marketplace_to_amazon_domain(
+                    tracker_document.marketplace,
+                    override=getattr(
+                        self.gateway.config,
+                        "competitor_amazon_domain",
+                        None,
+                    ),
+                ),
+            }
 
         base_input.update(
             {
@@ -230,3 +312,21 @@ def coerce_datetime(value: object | None) -> datetime | None:
 
 def json_headers(values: dict[str, str]) -> str:
     return json.dumps(values)
+
+
+def _marketplace_to_amazon_domain(marketplace: str, *, override: str | None) -> str:
+    if override:
+        return override
+
+    mapping = {
+        "amazon_us": "www.amazon.com",
+        "amazon_uk": "www.amazon.co.uk",
+        "amazon_de": "www.amazon.de",
+        "amazon_fr": "www.amazon.fr",
+        "amazon_it": "www.amazon.it",
+        "amazon_es": "www.amazon.es",
+        "amazon_ca": "www.amazon.ca",
+        "amazon_mx": "www.amazon.com.mx",
+        "amazon_jp": "www.amazon.co.jp",
+    }
+    return mapping.get(marketplace.lower(), "www.amazon.com")

@@ -11,7 +11,9 @@ from app.store import BaseStore
 router = APIRouter(prefix="/webhooks/apify", tags=["webhooks"])
 
 
-@router.post("/runs", response_model=ApifyWebhookAck, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/runs", response_model=ApifyWebhookAck, status_code=status.HTTP_202_ACCEPTED
+)
 async def receive_apify_run_webhook(
     payload: ApifyWebhookEnvelope,
     store: Annotated[BaseStore, Depends(get_store)],

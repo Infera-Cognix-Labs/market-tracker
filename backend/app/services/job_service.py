@@ -15,7 +15,11 @@ from app.models.api import (
     Provider,
     TrackerType,
 )
-from app.models.documents import CategoryTrackerDocument, CompetitorTrackerDocument, JobDocument
+from app.models.documents import (
+    CategoryTrackerDocument,
+    CompetitorTrackerDocument,
+    JobDocument,
+)
 from app.services.run_orchestrator import RunOrchestrator
 from app.services.shared import generate_job_code, job_doc_to_model, within_range
 
@@ -79,7 +83,9 @@ class JobService:
             if tracker_exists is None:
                 raise NotFoundError("Competitor tracker not found.")
 
-        existing_jobs = await JobDocument.find(JobDocument.workspace_id == workspace_id).to_list()
+        existing_jobs = await JobDocument.find(
+            JobDocument.workspace_id == workspace_id
+        ).to_list()
         existing_job_models = [job_doc_to_model(document) for document in existing_jobs]
         if any(
             item.tracker_type == payload.tracker_type
@@ -113,7 +119,9 @@ class JobService:
             summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
             created_at=utc_now(),
         )
-        await JobDocument(workspace_id=workspace_id, **job.model_dump(mode="python")).insert()
+        await JobDocument(
+            workspace_id=workspace_id, **job.model_dump(mode="python")
+        ).insert()
         logger.info(
             "Created tracking job.",
             extra={

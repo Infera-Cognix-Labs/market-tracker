@@ -22,6 +22,7 @@ from app.models.api import (
     CompetitorTrackerListResponse,
     CompetitorTrackerUpdateRequest,
     DashboardOverview,
+    DigestWorkerResult,
     EventListResponse,
     EventType,
     ImportWorkerResult,
@@ -31,6 +32,7 @@ from app.models.api import (
     JobStatus,
     ProductDetail,
     ProductTimelineResponse,
+    SchedulerWorkerResult,
     Severity,
     Timeframe,
     TrackedAsinReplacementRequest,
@@ -52,10 +54,25 @@ from app.models.documents import (
 from app.seed import SeedData
 from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.dashboard_query_service import DashboardQueryService
+from app.services.diff_service import DiffService
+from app.services.digest_service import DigestService
+from app.services.event_engine import EventEngine
 from app.services.job_service import JobService
 from app.services.normalization_service import NormalizationService
+from app.services.object_storage_service import LocalObjectStorageService
 from app.services.result_importer_service import ResultImporterService
 from app.services.run_orchestrator import RunOrchestrator
+from app.services.scheduler_service import SchedulerService
+from app.services.shared import (
+    aggregate_timeline_points,
+    build_dashboard_overview,
+    build_timeline_summary,
+    build_top_threats,
+    generate_job_code,
+    generate_tracker_code,
+    sort_events,
+    within_range,
+)
 from app.services.snapshot_service import SnapshotService
 from app.services.tracker_management_service import TrackerManagementService
 
@@ -65,6 +82,51 @@ LISTING_EVENT_TYPES = {
     EventType.VARIATIONS_ADDED,
     EventType.CONTENT_CHANGED,
 }
+
+
+# Backward-compatible helper re-exports used by unit tests.
+def _aggregate_timeline_points(points, granularity):
+    return aggregate_timeline_points(points, granularity)
+
+
+def _build_dashboard_overview(
+    *, timeframe, category_trackers, competitor_trackers, events
+):
+    return build_dashboard_overview(
+        timeframe=timeframe,
+        category_trackers=category_trackers,
+        competitor_trackers=competitor_trackers,
+        events=events,
+    )
+
+
+def _build_timeline_summary(events):
+    return build_timeline_summary(events)
+
+
+def _build_top_threats(events, tracker_name_map):
+    return build_top_threats(events, tracker_name_map)
+
+
+def _generate_tracker_code(prefix: str, name: str, existing_codes: set[str]) -> str:
+    return generate_tracker_code(prefix, name, existing_codes)
+
+
+def _generate_job_code(*, snapshot_date, tracker_type, existing_codes: set[str]) -> str:
+    tracker_enum = (
+        tracker_type
+        if isinstance(tracker_type, TrackerType)
+        else TrackerType(str(tracker_type))
+    )
+    return generate_job_code(tracker_enum, snapshot_date, existing_codes)
+
+
+def _sort_events(events):
+    return sort_events(events)
+
+
+def _within_range(value, from_date=None, to_date=None):
+    return within_range(value, from_date, to_date)
 
 
 class BaseStore:
@@ -202,6 +264,12 @@ class BaseStore:
     async def process_import_jobs(self) -> ImportWorkerResult:
         raise NotImplementedError
 
+    async def schedule_jobs(self) -> SchedulerWorkerResult:
+        raise NotImplementedError
+
+    async def process_digest_jobs(self) -> DigestWorkerResult:
+        raise NotImplementedError
+
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         raise NotImplementedError
 
@@ -231,19 +299,29 @@ class MongoStore(BaseStore):
         self.tracker_management = TrackerManagementService()
         self.dashboard_query = DashboardQueryService()
         self.run_orchestrator = RunOrchestrator(self.apify_gateway)
+        self.job_service = JobService(self.run_orchestrator)
+        self.scheduler_service = SchedulerService(self.job_service)
+        self.digest_service = DigestService()
         self.normalization_service = NormalizationService()
         self.snapshot_service = SnapshotService()
+        self.diff_service = DiffService()
+        self.event_engine = EventEngine(self.diff_service)
+        self.object_storage = LocalObjectStorageService(
+            settings.storage_config.local_object_store_root
+        )
         self.result_importer = ResultImporterService(
             self.apify_gateway,
             self.normalization_service,
             self.snapshot_service,
+            self.event_engine,
             settings.apify_config,
+            settings.storage_config,
+            self.object_storage,
         )
         self.apify_run_lifecycle = ApifyRunLifecycleService(
             self.apify_gateway,
             settings.apify_config,
         )
-        self.job_service = JobService(self.run_orchestrator)
 
     async def close(self) -> None:
         result = self.client.close()
@@ -568,6 +646,12 @@ class MongoStore(BaseStore):
 
     async def process_import_jobs(self) -> ImportWorkerResult:
         return await self.result_importer.process_pending_jobs()
+
+    async def schedule_jobs(self) -> SchedulerWorkerResult:
+        return await self.scheduler_service.schedule_due_jobs()
+
+    async def process_digest_jobs(self) -> DigestWorkerResult:
+        return await self.digest_service.generate_weekly_digests()
 
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         return await self.job_service.get_job(workspace_id, job_code)

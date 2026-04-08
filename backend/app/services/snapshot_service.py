@@ -50,6 +50,7 @@ class SnapshotService:
             tracker_name=tracker_document.name,
         )
 
+        product_snapshots_written = 0
         for record in records:
             source_refs = {
                 "provider": "APIFY",
@@ -58,13 +59,15 @@ class SnapshotService:
                 "batch_no": record.source_batch_no,
                 "item_index": record.source_item_index,
             }
-            await self._upsert_product_snapshot(
+            inserted_snapshot = await self._upsert_product_snapshot(
                 workspace_id=workspace_id,
                 snapshot_date=job_document.snapshot_date,
                 tracker_ref=tracker_ref,
                 record=record,
                 source_refs=source_refs,
             )
+            if inserted_snapshot:
+                product_snapshots_written += 1
             await self._upsert_product_registry(
                 workspace_id=workspace_id,
                 snapshot_date=job_document.snapshot_date,
@@ -86,7 +89,7 @@ class SnapshotService:
 
         return SnapshotPersistResult(
             category_snapshot_written=category_snapshot_written,
-            product_snapshots_written=len(records),
+            product_snapshots_written=product_snapshots_written,
         )
 
     async def _load_tracker_document(
@@ -121,7 +124,7 @@ class SnapshotService:
         tracker_ref: TrackerRef,
         record: NormalizedProductRecord,
         source_refs: dict[str, object],
-    ) -> None:
+    ) -> bool:
         existing = await ProductSnapshotDocument.find_one(
             ProductSnapshotDocument.workspace_id == workspace_id,
             ProductSnapshotDocument.marketplace == record.marketplace,
@@ -165,11 +168,16 @@ class SnapshotService:
 
         if existing is None:
             await ProductSnapshotDocument(workspace_id=workspace_id, **payload).insert()
-            return
+            return True
 
-        for key, value in payload.items():
-            setattr(existing, key, value)
-        await existing.save()
+        merged_keys = {(ref.tracker_type, ref.tracker_code) for ref in tracker_refs}
+        existing_keys = {
+            (ref.tracker_type, ref.tracker_code) for ref in existing.tracker_refs
+        }
+        if merged_keys != existing_keys:
+            existing.tracker_refs = tracker_refs
+            await existing.save()
+        return False
 
     async def _upsert_product_registry(
         self,
@@ -303,10 +311,7 @@ class SnapshotService:
             ).insert()
             return True
 
-        for key, value in payload.items():
-            setattr(existing, key, value)
-        await existing.save()
-        return True
+        return False
 
 
 def _merge_tracker_refs(existing_refs, new_ref: TrackerRef) -> list[TrackerRef]:

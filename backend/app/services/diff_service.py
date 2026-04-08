@@ -1,0 +1,402 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date, datetime
+
+from app.models.api import EventType, TrackerType
+from app.models.documents import CategorySnapshotDocument, ProductSnapshotDocument
+
+
+@dataclass(frozen=True)
+class DiffCandidate:
+    tracker_type: TrackerType
+    tracker_code: str
+    marketplace: str
+    asin: str
+    event_type: EventType
+    snapshot_date: date
+    event_time: datetime
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+class DiffService:
+    async def build_candidates(
+        self,
+        *,
+        workspace_id: str,
+        tracker_type: TrackerType,
+        tracker_code: str,
+        snapshot_date: date,
+    ) -> list[DiffCandidate]:
+        candidates: list[DiffCandidate] = []
+        if tracker_type == TrackerType.CATEGORY:
+            candidates.extend(
+                await self._build_category_movement_candidates(
+                    workspace_id=workspace_id,
+                    tracker_code=tracker_code,
+                    snapshot_date=snapshot_date,
+                )
+            )
+
+        candidates.extend(
+            await self._build_product_change_candidates(
+                workspace_id=workspace_id,
+                tracker_type=tracker_type,
+                tracker_code=tracker_code,
+                snapshot_date=snapshot_date,
+            )
+        )
+        return candidates
+
+    async def _build_category_movement_candidates(
+        self,
+        *,
+        workspace_id: str,
+        tracker_code: str,
+        snapshot_date: date,
+    ) -> list[DiffCandidate]:
+        current_snapshot = await CategorySnapshotDocument.find_one(
+            {
+                "workspace_id": workspace_id,
+                "tracker_code": tracker_code,
+                "snapshot_date": snapshot_date,
+            }
+        )
+        if current_snapshot is None:
+            return []
+
+        history_snapshots = await CategorySnapshotDocument.find(
+            {
+                "workspace_id": workspace_id,
+                "tracker_code": tracker_code,
+                "snapshot_date": {"$lt": snapshot_date},
+            }
+        ).to_list()
+        previous_snapshot = (
+            max(history_snapshots, key=lambda item: item.snapshot_date)
+            if history_snapshots
+            else None
+        )
+
+        current_rank_map = {
+            product.asin: product.rank_position for product in current_snapshot.products
+        }
+        previous_rank_map = (
+            {
+                product.asin: product.rank_position
+                for product in previous_snapshot.products
+            }
+            if previous_snapshot is not None
+            else {}
+        )
+
+        # Keep the most recent observed date for each ASIN in historical snapshots.
+        historical_last_seen: dict[str, date] = {}
+        for snapshot in history_snapshots:
+            for product in snapshot.products:
+                last_seen = historical_last_seen.get(product.asin)
+                if last_seen is None or snapshot.snapshot_date > last_seen:
+                    historical_last_seen[product.asin] = snapshot.snapshot_date
+
+        candidates: list[DiffCandidate] = []
+        event_time = current_snapshot.captured_at
+        marketplace = current_snapshot.marketplace
+
+        for asin, current_rank in current_rank_map.items():
+            previous_rank = previous_rank_map.get(asin)
+            if previous_rank is None:
+                last_seen_date = historical_last_seen.get(asin)
+                if last_seen_date is None:
+                    candidates.append(
+                        DiffCandidate(
+                            tracker_type=TrackerType.CATEGORY,
+                            tracker_code=tracker_code,
+                            marketplace=marketplace,
+                            asin=asin,
+                            event_type=EventType.NEW_ENTRANT_TOP50,
+                            snapshot_date=snapshot_date,
+                            event_time=event_time,
+                            metadata={
+                                "rank_today": current_rank,
+                                "first_seen_in_tracker": True,
+                            },
+                        )
+                    )
+                else:
+                    candidates.append(
+                        DiffCandidate(
+                            tracker_type=TrackerType.CATEGORY,
+                            tracker_code=tracker_code,
+                            marketplace=marketplace,
+                            asin=asin,
+                            event_type=EventType.RETURNING_TOP50,
+                            snapshot_date=snapshot_date,
+                            event_time=event_time,
+                            metadata={
+                                "rank_today": current_rank,
+                                "last_seen_date": last_seen_date,
+                                "days_absent": max(
+                                    0,
+                                    (snapshot_date - last_seen_date).days - 1,
+                                ),
+                            },
+                        )
+                    )
+
+            if current_rank <= 10 and (previous_rank is None or previous_rank > 10):
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=TrackerType.CATEGORY,
+                        tracker_code=tracker_code,
+                        marketplace=marketplace,
+                        asin=asin,
+                        event_type=EventType.ENTER_TOP10,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_rank": previous_rank,
+                            "current_rank": current_rank,
+                        },
+                    )
+                )
+            if previous_rank is not None and previous_rank <= 10 and current_rank > 10:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=TrackerType.CATEGORY,
+                        tracker_code=tracker_code,
+                        marketplace=marketplace,
+                        asin=asin,
+                        event_type=EventType.EXIT_TOP10,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_rank": previous_rank,
+                            "current_rank": current_rank,
+                        },
+                    )
+                )
+
+        for asin, previous_rank in previous_rank_map.items():
+            if asin in current_rank_map:
+                continue
+
+            candidates.append(
+                DiffCandidate(
+                    tracker_type=TrackerType.CATEGORY,
+                    tracker_code=tracker_code,
+                    marketplace=marketplace,
+                    asin=asin,
+                    event_type=EventType.EXIT_TOP50,
+                    snapshot_date=snapshot_date,
+                    event_time=event_time,
+                    metadata={
+                        "previous_rank": previous_rank,
+                        "present_today": False,
+                    },
+                )
+            )
+            if previous_rank <= 10:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=TrackerType.CATEGORY,
+                        tracker_code=tracker_code,
+                        marketplace=marketplace,
+                        asin=asin,
+                        event_type=EventType.EXIT_TOP10,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_rank": previous_rank,
+                            "current_rank": None,
+                        },
+                    )
+                )
+
+        return candidates
+
+    async def _build_product_change_candidates(
+        self,
+        *,
+        workspace_id: str,
+        tracker_type: TrackerType,
+        tracker_code: str,
+        snapshot_date: date,
+    ) -> list[DiffCandidate]:
+        current_snapshots = await ProductSnapshotDocument.find(
+            {
+                "workspace_id": workspace_id,
+                "snapshot_date": snapshot_date,
+                "tracker_refs.tracker_code": tracker_code,
+            }
+        ).to_list()
+        candidates: list[DiffCandidate] = []
+        for current_snapshot in current_snapshots:
+            previous_snapshots = await ProductSnapshotDocument.find(
+                {
+                    "workspace_id": workspace_id,
+                    "marketplace": current_snapshot.marketplace,
+                    "asin": current_snapshot.asin,
+                    "snapshot_date": {"$lt": snapshot_date},
+                }
+            ).to_list()
+            if not previous_snapshots:
+                continue
+
+            previous_snapshot = max(
+                previous_snapshots,
+                key=lambda item: item.snapshot_date,
+            )
+            event_time = current_snapshot.captured_at
+
+            price_changed = (
+                previous_snapshot.price_current != current_snapshot.price_current
+                or previous_snapshot.price_original != current_snapshot.price_original
+            )
+            if price_changed:
+                previous_price = previous_snapshot.price_current
+                current_price = current_snapshot.price_current
+                delta_abs = None
+                delta_pct = None
+                if previous_price is not None and current_price is not None:
+                    delta_abs = current_price - previous_price
+                    if previous_price != 0:
+                        delta_pct = (delta_abs / previous_price) * 100
+
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.PRICE_CHANGED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_price_current": previous_snapshot.price_current,
+                            "previous_price_original": previous_snapshot.price_original,
+                            "current_price_current": current_snapshot.price_current,
+                            "current_price_original": current_snapshot.price_original,
+                            "delta_abs": delta_abs,
+                            "delta_pct": delta_pct,
+                        },
+                    )
+                )
+
+            if previous_snapshot.coupon_text != current_snapshot.coupon_text:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.PROMOTION_CHANGED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_coupon_text": previous_snapshot.coupon_text,
+                            "current_coupon_text": current_snapshot.coupon_text,
+                        },
+                    )
+                )
+
+            if previous_snapshot.title_hash != current_snapshot.title_hash:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.TITLE_CHANGED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_title": previous_snapshot.title,
+                            "current_title": current_snapshot.title,
+                        },
+                    )
+                )
+
+            image_changed = (
+                previous_snapshot.main_image_hash != current_snapshot.main_image_hash
+                or previous_snapshot.main_image_url != current_snapshot.main_image_url
+            )
+            if image_changed:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.MAIN_IMAGE_CHANGED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_main_image_url": previous_snapshot.main_image_url,
+                            "current_main_image_url": current_snapshot.main_image_url,
+                        },
+                    )
+                )
+
+            previous_variation_count = previous_snapshot.variation_count or 0
+            current_variation_count = current_snapshot.variation_count or 0
+            if current_variation_count > previous_variation_count:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.VARIATIONS_ADDED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_variation_count": previous_snapshot.variation_count,
+                            "current_variation_count": current_snapshot.variation_count,
+                        },
+                    )
+                )
+
+            if (
+                previous_snapshot.availability_status
+                != current_snapshot.availability_status
+            ):
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.AVAILABILITY_CHANGED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_availability_status": previous_snapshot.availability_status,
+                            "current_availability_status": current_snapshot.availability_status,
+                        },
+                    )
+                )
+
+            if (
+                previous_snapshot.buy_box_status != current_snapshot.buy_box_status
+                or previous_snapshot.buy_box_seller_name
+                != current_snapshot.buy_box_seller_name
+            ):
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=tracker_type,
+                        tracker_code=tracker_code,
+                        marketplace=current_snapshot.marketplace,
+                        asin=current_snapshot.asin,
+                        event_type=EventType.BUY_BOX_CHANGED,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_buy_box_status": previous_snapshot.buy_box_status,
+                            "previous_buy_box_seller_name": previous_snapshot.buy_box_seller_name,
+                            "current_buy_box_status": current_snapshot.buy_box_status,
+                            "current_buy_box_seller_name": current_snapshot.buy_box_seller_name,
+                        },
+                    )
+                )
+
+        return candidates
