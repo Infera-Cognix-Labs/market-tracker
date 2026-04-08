@@ -438,3 +438,23 @@ export interface CompetitorTrackerCreateRequest {
   track_fields: CompetitorTrackFields
   schedule: TrackerScheduleInput
 }
+
+// ── Update Requests ───────────────────────────────────────────────────────────
+
+export interface CategoryTrackerUpdateRequest {
+  name?: string
+  tracking_config?: CategoryTrackingConfigInput
+  schedule?: TrackerScheduleInput
+  status?: TrackerStatus
+}
+
+export interface CompetitorTrackerUpdateRequest {
+  name?: string
+  track_fields?: CompetitorTrackFields
+  schedule?: TrackerScheduleInput
+  status?: TrackerStatus
+}
+
+export interface TrackedAsinReplacementRequest {
+  tracked_asins: TrackedAsinInput[]
+}

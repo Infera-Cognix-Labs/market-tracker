@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle } from "lucide-react"
+import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2 } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListCompetitorTrackers, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker } from "../shared/api"
-import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackFields } from "../shared/types"
+import { apiListCompetitorTrackers, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiReplaceTrackedAsins } from "../shared/api"
+import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackFields, Timeframe } from "../shared/types"
 
 const MARKETPLACES = [
   "amazon_us", "amazon_de", "amazon_uk", "amazon_fr",
@@ -25,6 +25,114 @@ const TRACK_FIELD_LABELS: Record<keyof CompetitorTrackFields, string> = {
   bsr: "BSR", price: "Price", buy_box: "Buy Box", availability: "Availability",
   promotions: "Promotions", title_change: "Title Change", main_image_change: "Image Change",
   variation_change: "Variation Change", content_change: "Content Change",
+}
+
+// ── Manage ASINs Modal ────────────────────────────────────────────────────────
+const ManageAsinsModal = ({
+  tracker,
+  onClose,
+  onUpdate,
+}: {
+  tracker: CompetitorTrackerDetail
+  onClose: () => void
+  onUpdate: (updated: CompetitorTrackerDetail) => void
+}) => {
+  const [asins, setAsins] = useState<string[]>(tracker.tracked_asins.map(a => a.asin))
+  const [asinInput, setAsinInput] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const addAsin = () => {
+    const raw = asinInput.trim().toUpperCase()
+    if (!raw) return
+    if (!/^[A-Z0-9]{10}$/.test(raw)) { setError("Invalid ASIN — must be 10 alphanumeric characters."); return }
+    if (asins.includes(raw)) { setError("ASIN already in list."); return }
+    if (asins.length >= 200) { setError("Maximum 200 ASINs per tracker."); return }
+    setAsins(prev => [...prev, raw])
+    setAsinInput("")
+    setError(null)
+  }
+
+  const removeAsin = (asin: string) => setAsins(prev => prev.filter(a => a !== asin))
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (asins.length === 0) { setError("At least one ASIN is required."); return }
+    setSubmitting(true)
+    try {
+      const updated = await apiReplaceTrackedAsins(
+        tracker.tracker_code,
+        asins.map(asin => ({ asin, enabled: true }))
+      )
+      onUpdate(updated)
+    } catch {
+      setError("Failed to update ASINs. Please try again.")
+      setSubmitting(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px", borderRadius: 8,
+    border: `1px solid ${T.border}`, background: T.bg3,
+    color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none",
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
+      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
+          <div>
+            <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>Manage ASINs</span>
+            <div style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>{tracker.name}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.text2, cursor: "pointer", padding: 4, display: "flex" }}><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSave} style={{ padding: "20px" }}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: T.text2, marginBottom: 5, letterSpacing: ".04em", textTransform: "uppercase" }}>ASINs ({asins.length}/200)</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="text" value={asinInput}
+                onChange={e => { setAsinInput(e.target.value.toUpperCase()); setError(null) }}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addAsin() } }}
+                placeholder="B0ABC12345"
+                maxLength={10}
+                style={{ ...inputStyle, fontFamily: T.mono, flex: 1 }}
+              />
+              <button type="button" onClick={addAsin}
+                style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg4, color: T.text0, cursor: "pointer", fontSize: 13, fontFamily: T.sans, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                <Plus size={13} /> Add
+              </button>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, maxHeight: 200, overflowY: "auto" }}>
+            {asins.map(asin => (
+              <span key={asin} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: T.bg4, border: `1px solid ${T.border2}`, borderRadius: 6, fontSize: 11, fontFamily: T.mono, color: T.amber }}>
+                {asin}
+                <button type="button" onClick={() => removeAsin(asin)} style={{ background: "none", border: "none", color: T.text3, cursor: "pointer", padding: 0, display: "flex", lineHeight: 1 }}><Trash2 size={10} /></button>
+              </span>
+            ))}
+          </div>
+          {error && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 16 }}>
+              <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: T.red }}>{error}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer" }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting}
+              style={{ flex: 2, padding: "10px 0", borderRadius: 8, border: "none", background: submitting ? T.bg4 : `linear-gradient(135deg, ${T.amber} 0%, ${T.amberD} 100%)`, color: submitting ? T.text3 : T.bg0, fontSize: 13, fontWeight: 700, fontFamily: T.sans, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {submitting ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }
 
 // ── Create Tracker Modal ──────────────────────────────────────────────────────
@@ -206,6 +314,8 @@ export const CompetitorPage = () => {
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [showManageAsins, setShowManageAsins] = useState(false)
+  const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("DAILY")
 
   // Load trackers list
   useEffect(() => {
@@ -222,9 +332,11 @@ export const CompetitorPage = () => {
   // Load product detail and timeline when ASIN selection changes
   useEffect(() => {
     if (!selectedProduct || !tracker) return
+    setProductDetail(null)
+    setTimeline(null)
     apiGetProductDetail(tracker.marketplace, selectedProduct.asin).then(setProductDetail)
-    apiGetProductTimeline(tracker.marketplace, selectedProduct.asin).then(setTimeline)
-  }, [selectedProduct?.asin, tracker?.marketplace])
+    apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, { granularity: chartTimeframe }).then(setTimeline)
+  }, [selectedProduct?.asin, tracker?.marketplace, chartTimeframe])
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
   if (trackers.length === 0) return (
@@ -253,6 +365,16 @@ export const CompetitorPage = () => {
           onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedTrackerIdx(0); setShowCreate(false) }}
         />
       )}
+      {showManageAsins && tracker && (
+        <ManageAsinsModal
+          tracker={tracker}
+          onClose={() => setShowManageAsins(false)}
+          onUpdate={updated => {
+            setTrackers(prev => prev.map(t => t.tracker_code === updated.tracker_code ? updated : t))
+            setShowManageAsins(false)
+          }}
+        />
+      )}
       <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
         actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
 
@@ -271,13 +393,19 @@ export const CompetitorPage = () => {
               <span><Clock size={10} /> Last: {tracker.stats.last_success_at ? new Date(tracker.stats.last_success_at).toLocaleString() : "—"}</span>
             </div>
           </div>
-          {/* Track fields */}
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
-              <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
-                {k.replace(/_/g, " ")}
-              </span>
-            ))}
+          {/* Track fields + Manage ASINs */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
+                <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
+                  {k.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
+            <button className="btn-ghost" onClick={() => setShowManageAsins(true)}
+              style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+              <Edit2 size={11} /> Manage ASINs
+            </button>
           </div>
         </div>
       </div>
@@ -377,13 +505,24 @@ export const CompetitorPage = () => {
                     {timeline?.from_date} to {timeline?.to_date}
                   </span>
                 </div>
-                {timeline?.summary && (
-                  <div style={{ display: "flex", gap: 8, fontSize: 10, fontFamily: T.mono }}>
-                    <span style={{ color: T.blue }}>💰 {timeline.summary.price_change_count} price</span>
-                    <span style={{ color: T.teal }}>📝 {timeline.summary.listing_change_count} listing</span>
-                    <span style={{ color: T.purple }}>📦 {timeline.summary.availability_change_count} stock</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {/* Timeframe toggle — US 3.3 */}
+                  <div style={{ display: "flex", gap: 3 }}>
+                    {(["DAILY", "WEEKLY", "MONTHLY"] as Timeframe[]).map(t => (
+                      <button key={t} onClick={() => setChartTimeframe(t)}
+                        style={{ padding: "4px 8px", borderRadius: 5, border: `1px solid ${t === chartTimeframe ? T.amber : T.border}`, background: t === chartTimeframe ? T.bg4 : "transparent", color: t === chartTimeframe ? T.amber : T.text3, fontSize: 10, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>
+                        {t.toLowerCase()}
+                      </button>
+                    ))}
                   </div>
-                )}
+                  {timeline?.summary && (
+                    <div style={{ display: "flex", gap: 8, fontSize: 10, fontFamily: T.mono }}>
+                      <span style={{ color: T.blue }}>💰 {timeline.summary.price_change_count} price</span>
+                      <span style={{ color: T.teal }}>📝 {timeline.summary.listing_change_count} listing</span>
+                      <span style={{ color: T.purple }}>📦 {timeline.summary.availability_change_count} stock</span>
+                    </div>
+                  )}
+                </div>
               </div>
               <ResponsiveContainer width="100%" height={250}>
                 <ComposedChart data={dualAxisData} margin={{ top: 20, right: 80, left: 0, bottom: 0 }}>

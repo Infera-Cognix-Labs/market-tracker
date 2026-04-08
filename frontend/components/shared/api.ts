@@ -5,6 +5,9 @@ import type {
   Event, WeeklyDigest, Job, PagedResponse, Timeframe, EventType, Severity, TrackerType, JobStatus,
   CategoryTrackerCreateRequest,
   CompetitorTrackerCreateRequest,
+  TrackedAsinInput,
+  CompetitorTrackerUpdateRequest,
+  CategoryTrackerUpdateRequest,
 } from "./types"
 
 import {
@@ -59,6 +62,26 @@ export const apiCreateCategoryTracker = async (payload: CategoryTrackerCreateReq
   }
 }
 
+export const apiUpdateCategoryTracker = async (
+  trackerCode: string,
+  payload: CategoryTrackerUpdateRequest
+): Promise<CategoryTracker> => {
+  await delay(500)
+  const tracker = MOCK_CATEGORY_TRACKERS.items.find(t => t.tracker_code === trackerCode)
+  if (!tracker) throw new Error(`Tracker ${trackerCode} not found`)
+  const now = new Date().toISOString()
+  return {
+    ...tracker,
+    ...(payload.name !== undefined && { name: payload.name }),
+    ...(payload.tracking_config !== undefined && {
+      tracking_config: { ...tracker.tracking_config, ...payload.tracking_config },
+    }),
+    ...(payload.schedule !== undefined && { schedule: { frequency: payload.schedule.frequency, hour_utc: payload.schedule.hour_utc } }),
+    ...(payload.status !== undefined && { status: payload.status }),
+    updated_at: now,
+  }
+}
+
 // ── Competitor Trackers ──────────────────────────────────────────────────────
 
 export const apiListCompetitorTrackers = async (): Promise<PagedResponse<CompetitorTrackerDetail>> => {
@@ -85,6 +108,41 @@ export const apiCreateCompetitorTracker = async (payload: CompetitorTrackerCreat
     stats: { tracked_asin_count: payload.tracked_asins.length, last_job_at: null, last_success_at: null },
     tracked_products: [],
     created_at: now,
+    updated_at: now,
+  }
+}
+
+export const apiUpdateCompetitorTracker = async (
+  trackerCode: string,
+  payload: CompetitorTrackerUpdateRequest
+): Promise<CompetitorTrackerDetail> => {
+  await delay(500)
+  const tracker = MOCK_COMPETITOR_TRACKERS.items.find(t => t.tracker_code === trackerCode)
+  if (!tracker) throw new Error(`Tracker ${trackerCode} not found`)
+  const now = new Date().toISOString()
+  return {
+    ...tracker,
+    ...(payload.name !== undefined && { name: payload.name }),
+    ...(payload.track_fields !== undefined && { track_fields: payload.track_fields }),
+    ...(payload.schedule !== undefined && { schedule: { frequency: payload.schedule.frequency, hour_utc: payload.schedule.hour_utc } }),
+    ...(payload.status !== undefined && { status: payload.status }),
+    updated_at: now,
+  }
+}
+
+export const apiReplaceTrackedAsins = async (
+  trackerCode: string,
+  asins: TrackedAsinInput[]
+): Promise<CompetitorTrackerDetail> => {
+  await delay(500)
+  const tracker = MOCK_COMPETITOR_TRACKERS.items.find(t => t.tracker_code === trackerCode)
+  if (!tracker) throw new Error(`Tracker ${trackerCode} not found`)
+  const now = new Date().toISOString()
+  return {
+    ...tracker,
+    tracked_asins: asins.map(a => ({ ...a, added_at: now })),
+    stats: { ...tracker.stats, tracked_asin_count: asins.length },
+    tracked_products: tracker.tracked_products?.filter(p => asins.some(a => a.asin === p.asin)),
     updated_at: now,
   }
 }
