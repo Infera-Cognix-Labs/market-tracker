@@ -52,9 +52,29 @@ services:
     networks:
       - market-tracker-network-staging
 
-services:
-  # 
-
+    # ── Backend ───────────────────────────────────────────────────────────────────
+  backend:
+    image: ${BACKEND_IMAGE:-217.216.34.228:5000/market-tracker/backend:latest}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    env_file:
+      - .env.staging
+    environment:
+      - MONGO_URI=mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/?authSource=admin
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - market-tracker-network-staging
   # ── MongoDB ───────────────────────────────────────────────────────────────────
   mongodb:
     image: mongo:latest
