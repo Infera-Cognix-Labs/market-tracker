@@ -7,8 +7,8 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListCompetitorTrackers, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiReplaceTrackedAsins } from "../shared/api"
-import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackFields, Timeframe } from "../shared/types"
+import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents } from "../shared/api"
+import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackFields, Timeframe, Event } from "../shared/types"
 
 const MARKETPLACES = [
   "amazon_us", "amazon_de", "amazon_uk", "amazon_fr",
@@ -312,15 +312,19 @@ export const CompetitorPage = () => {
   const [selectedAsinIdx, setSelectedAsinIdx] = useState(0)
   const [productDetail, setProductDetail] = useState<ProductDetail | null>(null)
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
+  const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [showManageAsins, setShowManageAsins] = useState(false)
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("DAILY")
 
-  // Load trackers list
+  // Load trackers list, then fetch details to get tracked_products
   useEffect(() => {
-    apiListCompetitorTrackers().then(res => {
-      setTrackers(res.items)
+    apiListCompetitorTrackers().then(async res => {
+      const details = await Promise.all(
+        res.items.map(t => apiGetCompetitorTracker(t.tracker_code).catch(() => t as unknown as CompetitorTrackerDetail))
+      )
+      setTrackers(details.filter((d): d is CompetitorTrackerDetail => d !== null))
       setLoading(false)
     })
   }, [])
@@ -334,14 +338,16 @@ export const CompetitorPage = () => {
     if (!selectedProduct || !tracker) return
     let cancelled = false
     const load = async () => {
-      const [detail, tl] = await Promise.all([
-        apiGetProductDetail(tracker.marketplace, selectedProduct.asin),
-        apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, { granularity: chartTimeframe }),
-      ])
-      if (!cancelled) {
-        setProductDetail(detail)
-        setTimeline(tl)
-      }
+      const detail = await apiGetProductDetail(tracker.marketplace, selectedProduct.asin).catch(() => null)
+      if (!cancelled) setProductDetail(detail)
+
+      // Timeline may 500 due to backend bug — handle gracefully
+      const tl = await apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, { granularity: chartTimeframe }).catch(() => null)
+      if (!cancelled) setTimeline(tl)
+
+      // Load events independently so they show even when timeline fails
+      const evRes = await apiListEvents({ marketplace: tracker.marketplace, asin: selectedProduct.asin, page_size: 50 }).catch(() => null)
+      if (!cancelled) setEvents(evRes?.items ?? [])
     }
     load()
     return () => { cancelled = true }
@@ -548,13 +554,13 @@ export const CompetitorPage = () => {
             </div>
           )}
 
-          {/* Events from timeline */}
+          {/* Events — uses standalone events state (works even when timeline 500s) */}
           <div className="card">
             <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 12 }}>Product Events</div>
-            {(!timeline || timeline.events.length === 0) && (
+            {events.length === 0 && (
               <div style={{ textAlign: "center", padding: "30px 0", color: T.text3, fontSize: 12 }}>No events recorded for this product</div>
             )}
-            {timeline?.events.map((ev) => {
+            {events.map((ev) => {
               const meta = AlertTypeMeta(ev.event_type)
               return (
                 <div key={ev.event_code} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
