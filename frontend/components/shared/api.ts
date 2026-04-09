@@ -1,7 +1,7 @@
-// ── API Service — Matches backend OpenAPI endpoints ──────────────────────────
+// ── API Service — Real backend calls ─────────────────────────────────────────
 import type {
   DashboardOverview, CategoryTracker, CategorySnapshot,
-  CompetitorTrackerDetail, ProductDetail, ProductTimelineResponse,
+  CompetitorTracker, CompetitorTrackerDetail, ProductDetail, ProductTimelineResponse,
   Event, WeeklyDigest, Job, PagedResponse, Timeframe, EventType, Severity, TrackerType, JobStatus,
   CategoryTrackerCreateRequest,
   CompetitorTrackerCreateRequest,
@@ -10,158 +10,119 @@ import type {
   CategoryTrackerUpdateRequest,
 } from "./types"
 
-import {
-  MOCK_DASHBOARD_OVERVIEW, MOCK_CATEGORY_TRACKERS, MOCK_CATEGORY_SNAPSHOTS,
-  MOCK_COMPETITOR_TRACKERS, MOCK_PRODUCT_DETAILS, MOCK_PRODUCT_TIMELINES,
-  MOCK_EVENTS, MOCK_JOBS, MOCK_WEEKLY_DIGESTS,
-} from "./MockData"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api"
+const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID || "ws_demo_us"
+const API_PREFIX = `${BASE_URL}/v1/workspaces/${WORKSPACE_ID}`
 
-const delay = (ms: number = 300) => new Promise(res => setTimeout(res, ms))
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_PREFIX}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...init?.headers },
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`API ${res.status}: ${body}`)
+  }
+  return res.json() as Promise<T>
+}
+
+function qs(params: Record<string, string | number | boolean | undefined | null>): string {
+  const sp = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") sp.set(k, String(v))
+  }
+  const s = sp.toString()
+  return s ? `?${s}` : ""
+}
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
 export const apiGetDashboardOverview = async (timeframe: Timeframe = "WEEKLY"): Promise<DashboardOverview> => {
-  await delay()
-  return { ...MOCK_DASHBOARD_OVERVIEW, timeframe }
+  return apiFetch<DashboardOverview>(`/dashboard/overview${qs({ timeframe })}`)
 }
 
 // ── Category Trackers ────────────────────────────────────────────────────────
 
-export const apiListCategoryTrackers = async (): Promise<PagedResponse<CategoryTracker>> => {
-  await delay()
-  return MOCK_CATEGORY_TRACKERS
+export const apiListCategoryTrackers = async (page = 1, pageSize = 20): Promise<PagedResponse<CategoryTracker>> => {
+  return apiFetch<PagedResponse<CategoryTracker>>(`/category-trackers${qs({ page, page_size: pageSize })}`)
 }
 
 export const apiGetCategoryTracker = async (trackerCode: string): Promise<CategoryTracker | null> => {
-  await delay()
-  return MOCK_CATEGORY_TRACKERS.items.find(t => t.tracker_code === trackerCode) || null
+  return apiFetch<CategoryTracker>(`/category-trackers/${trackerCode}`)
 }
 
 export const apiGetLatestCategorySnapshot = async (trackerCode: string): Promise<CategorySnapshot | null> => {
-  await delay()
-  return MOCK_CATEGORY_SNAPSHOTS[trackerCode] || null
+  return apiFetch<CategorySnapshot>(`/category-trackers/${trackerCode}/snapshots/latest`)
 }
 
 export const apiCreateCategoryTracker = async (payload: CategoryTrackerCreateRequest): Promise<CategoryTracker> => {
-  await delay(500)
-  const now = new Date().toISOString()
-  return {
-    tracker_code: `cat_${Date.now()}`,
-    name: payload.name,
-    marketplace: payload.marketplace,
-    scope: payload.scope,
-    tracking_config: {
-      top_n: 50,
-      top10_alert_enabled: payload.tracking_config?.top10_alert_enabled ?? true,
-    },
-    schedule: { frequency: payload.schedule.frequency, hour_utc: payload.schedule.hour_utc },
-    status: "ACTIVE",
-    stats: { last_job_at: null, last_success_at: null, snapshot_count: 0 },
-    created_at: now,
-    updated_at: now,
-  }
+  return apiFetch<CategoryTracker>("/category-trackers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
 }
 
 export const apiUpdateCategoryTracker = async (
   trackerCode: string,
   payload: CategoryTrackerUpdateRequest
 ): Promise<CategoryTracker> => {
-  await delay(500)
-  const tracker = MOCK_CATEGORY_TRACKERS.items.find(t => t.tracker_code === trackerCode)
-  if (!tracker) throw new Error(`Tracker ${trackerCode} not found`)
-  const now = new Date().toISOString()
-  return {
-    ...tracker,
-    ...(payload.name !== undefined && { name: payload.name }),
-    ...(payload.tracking_config !== undefined && {
-      tracking_config: { ...tracker.tracking_config, ...payload.tracking_config },
-    }),
-    ...(payload.schedule !== undefined && { schedule: { frequency: payload.schedule.frequency, hour_utc: payload.schedule.hour_utc } }),
-    ...(payload.status !== undefined && { status: payload.status }),
-    updated_at: now,
-  }
+  return apiFetch<CategoryTracker>(`/category-trackers/${trackerCode}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
 }
 
 // ── Competitor Trackers ──────────────────────────────────────────────────────
 
-export const apiListCompetitorTrackers = async (): Promise<PagedResponse<CompetitorTrackerDetail>> => {
-  await delay()
-  return MOCK_COMPETITOR_TRACKERS
+export const apiListCompetitorTrackers = async (page = 1, pageSize = 20): Promise<PagedResponse<CompetitorTracker>> => {
+  return apiFetch<PagedResponse<CompetitorTracker>>(`/competitor-trackers${qs({ page, page_size: pageSize })}`)
 }
 
 export const apiGetCompetitorTracker = async (trackerCode: string): Promise<CompetitorTrackerDetail | null> => {
-  await delay()
-  return MOCK_COMPETITOR_TRACKERS.items.find(t => t.tracker_code === trackerCode) || null
+  return apiFetch<CompetitorTrackerDetail>(`/competitor-trackers/${trackerCode}`)
 }
 
 export const apiCreateCompetitorTracker = async (payload: CompetitorTrackerCreateRequest): Promise<CompetitorTrackerDetail> => {
-  await delay(500)
-  const now = new Date().toISOString()
-  return {
-    tracker_code: `comp_${Date.now()}`,
-    name: payload.name,
-    marketplace: payload.marketplace,
-    tracked_asins: payload.tracked_asins.map(a => ({ ...a, added_at: now })),
-    track_fields: payload.track_fields,
-    schedule: { frequency: payload.schedule.frequency, hour_utc: payload.schedule.hour_utc },
-    status: "ACTIVE",
-    stats: { tracked_asin_count: payload.tracked_asins.length, last_job_at: null, last_success_at: null },
-    tracked_products: [],
-    created_at: now,
-    updated_at: now,
-  }
+  return apiFetch<CompetitorTrackerDetail>("/competitor-trackers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
 }
 
 export const apiUpdateCompetitorTracker = async (
   trackerCode: string,
   payload: CompetitorTrackerUpdateRequest
 ): Promise<CompetitorTrackerDetail> => {
-  await delay(500)
-  const tracker = MOCK_COMPETITOR_TRACKERS.items.find(t => t.tracker_code === trackerCode)
-  if (!tracker) throw new Error(`Tracker ${trackerCode} not found`)
-  const now = new Date().toISOString()
-  return {
-    ...tracker,
-    ...(payload.name !== undefined && { name: payload.name }),
-    ...(payload.track_fields !== undefined && { track_fields: payload.track_fields }),
-    ...(payload.schedule !== undefined && { schedule: { frequency: payload.schedule.frequency, hour_utc: payload.schedule.hour_utc } }),
-    ...(payload.status !== undefined && { status: payload.status }),
-    updated_at: now,
-  }
+  return apiFetch<CompetitorTrackerDetail>(`/competitor-trackers/${trackerCode}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
 }
 
 export const apiReplaceTrackedAsins = async (
   trackerCode: string,
   asins: TrackedAsinInput[]
 ): Promise<CompetitorTrackerDetail> => {
-  await delay(500)
-  const tracker = MOCK_COMPETITOR_TRACKERS.items.find(t => t.tracker_code === trackerCode)
-  if (!tracker) throw new Error(`Tracker ${trackerCode} not found`)
-  const now = new Date().toISOString()
-  return {
-    ...tracker,
-    tracked_asins: asins.map(a => ({ ...a, added_at: now })),
-    stats: { ...tracker.stats, tracked_asin_count: asins.length },
-    tracked_products: tracker.tracked_products?.filter(p => asins.some(a => a.asin === p.asin)),
-    updated_at: now,
-  }
+  return apiFetch<CompetitorTrackerDetail>(`/competitor-trackers/${trackerCode}/tracked-asins`, {
+    method: "PUT",
+    body: JSON.stringify({ tracked_asins: asins }),
+  })
 }
 
 // ── Products ─────────────────────────────────────────────────────────────────
 
 export const apiGetProductDetail = async (marketplace: string, asin: string): Promise<ProductDetail | null> => {
-  await delay()
-  return MOCK_PRODUCT_DETAILS[`${marketplace}|${asin}`] || null
+  return apiFetch<ProductDetail>(`/products/${marketplace}/${asin}`)
 }
 
 export const apiGetProductTimeline = async (
   marketplace: string,
   asin: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _params?: { from_date?: string; to_date?: string; granularity?: Timeframe }
+  params?: { from_date?: string; to_date?: string; granularity?: Timeframe }
 ): Promise<ProductTimelineResponse | null> => {
-  await delay()
-  return MOCK_PRODUCT_TIMELINES[`${marketplace}|${asin}`] || null
+  return apiFetch<ProductTimelineResponse>(
+    `/products/${marketplace}/${asin}/timeline${qs({ from_date: params?.from_date, to_date: params?.to_date, granularity: params?.granularity })}`
+  )
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────
@@ -178,14 +139,18 @@ export const apiListEvents = async (params?: {
   page?: number
   page_size?: number
 }): Promise<PagedResponse<Event>> => {
-  await delay()
-  let items = [...MOCK_EVENTS.items]
-  if (params?.event_type) items = items.filter(e => e.event_type === params.event_type)
-  if (params?.severity) items = items.filter(e => e.severity === params.severity)
-  if (params?.tracker_type) items = items.filter(e => e.tracker_type === params.tracker_type)
-  if (params?.tracker_code) items = items.filter(e => e.tracker_code === params.tracker_code)
-  if (params?.asin) items = items.filter(e => e.asin === params.asin)
-  return { items, page: params?.page || 1, page_size: params?.page_size || 20, total: items.length }
+  return apiFetch<PagedResponse<Event>>(`/events${qs({
+    event_type: params?.event_type,
+    severity: params?.severity,
+    tracker_type: params?.tracker_type,
+    tracker_code: params?.tracker_code,
+    marketplace: params?.marketplace,
+    asin: params?.asin,
+    from_date: params?.from_date,
+    to_date: params?.to_date,
+    page: params?.page,
+    page_size: params?.page_size,
+  })}`)
 }
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
@@ -194,44 +159,53 @@ export const apiListJobs = async (params?: {
   tracker_type?: TrackerType
   tracker_code?: string
   status?: JobStatus
+  from_date?: string
+  to_date?: string
   page?: number
   page_size?: number
 }): Promise<PagedResponse<Job>> => {
-  await delay()
-  let items = [...MOCK_JOBS.items]
-  if (params?.tracker_type) items = items.filter(j => j.tracker_type === params.tracker_type)
-  if (params?.status) items = items.filter(j => j.status === params.status)
-  return { items, page: params?.page || 1, page_size: params?.page_size || 20, total: items.length }
+  return apiFetch<PagedResponse<Job>>(`/jobs${qs({
+    tracker_type: params?.tracker_type,
+    tracker_code: params?.tracker_code,
+    status: params?.status,
+    from_date: params?.from_date,
+    to_date: params?.to_date,
+    page: params?.page,
+    page_size: params?.page_size,
+  })}`)
+}
+
+export const apiGetJob = async (jobCode: string): Promise<Job | null> => {
+  return apiFetch<Job>(`/jobs/${jobCode}`)
 }
 
 export const apiTriggerJob = async (trackerType: TrackerType, trackerCode: string): Promise<Job> => {
-  await delay(500)
-  const now = new Date().toISOString()
-  const today = now.slice(0, 10)
-  return {
-    job_code: `job_manual_${Date.now()}`,
-    tracker_type: trackerType,
-    tracker_code: trackerCode,
-    snapshot_date: today,
-    trigger_mode: "MANUAL",
-    status: "QUEUED",
-    run_strategy: { provider: "APIFY" },
-    summary: { expected_items: trackerType === "CATEGORY" ? 50 : 3, imported_items: 0, events_emitted: 0 },
-    error: null,
-    created_at: now,
-    started_at: null,
-    finished_at: null,
-  }
+  const today = new Date().toISOString().slice(0, 10)
+  return apiFetch<Job>("/jobs", {
+    method: "POST",
+    body: JSON.stringify({
+      tracker_type: trackerType,
+      tracker_code: trackerCode,
+      snapshot_date: today,
+      trigger_mode: "MANUAL",
+    }),
+  })
 }
 
 // ── Reports / Weekly Digests ─────────────────────────────────────────────────
 
-export const apiListWeeklyDigests = async (): Promise<PagedResponse<WeeklyDigest>> => {
-  await delay()
-  return MOCK_WEEKLY_DIGESTS
+export const apiListWeeklyDigests = async (params?: {
+  week_start?: string
+  page?: number
+  page_size?: number
+}): Promise<PagedResponse<WeeklyDigest>> => {
+  return apiFetch<PagedResponse<WeeklyDigest>>(`/reports/weekly-digests${qs({
+    week_start: params?.week_start,
+    page: params?.page,
+    page_size: params?.page_size,
+  })}`)
 }
 
 export const apiGetWeeklyDigest = async (digestCode: string): Promise<WeeklyDigest | null> => {
-  await delay()
-  return MOCK_WEEKLY_DIGESTS.items.find(d => d.digest_code === digestCode) || null
+  return apiFetch<WeeklyDigest>(`/reports/weekly-digests/${digestCode}`)
 }
