@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+!env.example
 .envrc
 .venv
 env/
@@ -207,3 +208,6 @@ marimo/_lsp/
 __marimo__/
 
 .idea/
+
+# AI Coding Files
+.codex
