@@ -511,34 +511,36 @@ export const CompetitorPage = () => {
           </div>
 
           {/* BSR vs Price Chart from Timeline */}
-          {dualAxisData.length > 0 && (
-            <div className="card" style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>BSR vs Price Trend</span>
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>BSR vs Price Trend</span>
+                {timeline && (
                   <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>
-                    {timeline?.from_date} to {timeline?.to_date}
+                    {timeline.from_date} to {timeline.to_date}
                   </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {/* Timeframe toggle — US 3.3 */}
-                  <div style={{ display: "flex", gap: 3 }}>
-                    {(["DAILY", "WEEKLY", "MONTHLY"] as Timeframe[]).map(t => (
-                      <button key={t} onClick={() => setChartTimeframe(t)}
-                        style={{ padding: "4px 8px", borderRadius: 5, border: `1px solid ${t === chartTimeframe ? T.amber : T.border}`, background: t === chartTimeframe ? T.bg4 : "transparent", color: t === chartTimeframe ? T.amber : T.text3, fontSize: 10, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>
-                        {t.toLowerCase()}
-                      </button>
-                    ))}
-                  </div>
-                  {timeline?.summary && (
-                    <div style={{ display: "flex", gap: 8, fontSize: 10, fontFamily: T.mono }}>
-                      <span style={{ color: T.blue }}>💰 {timeline.summary.price_change_count} price</span>
-                      <span style={{ color: T.teal }}>📝 {timeline.summary.listing_change_count} listing</span>
-                      <span style={{ color: T.purple }}>📦 {timeline.summary.availability_change_count} stock</span>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {/* Timeframe toggle — US 3.3 */}
+                <div style={{ display: "flex", gap: 3 }}>
+                  {(["DAILY", "WEEKLY", "MONTHLY"] as Timeframe[]).map(t => (
+                    <button key={t} onClick={() => setChartTimeframe(t)}
+                      style={{ padding: "4px 8px", borderRadius: 5, border: `1px solid ${t === chartTimeframe ? T.amber : T.border}`, background: t === chartTimeframe ? T.bg4 : "transparent", color: t === chartTimeframe ? T.amber : T.text3, fontSize: 10, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>
+                      {t.toLowerCase()}
+                    </button>
+                  ))}
+                </div>
+                {timeline?.summary && (
+                  <div style={{ display: "flex", gap: 8, fontSize: 10, fontFamily: T.mono }}>
+                    <span style={{ color: T.blue }}>💰 {timeline.summary.price_change_count} price</span>
+                    <span style={{ color: T.teal }}>📝 {timeline.summary.listing_change_count} listing</span>
+                    <span style={{ color: T.purple }}>📦 {timeline.summary.availability_change_count} stock</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            {dualAxisData.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <ComposedChart data={dualAxisData} margin={{ top: 20, right: 80, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
@@ -551,8 +553,14 @@ export const CompetitorPage = () => {
                   <Line yAxisId="right" type="monotone" dataKey="price" stroke={T.green} strokeWidth={2.5} strokeDasharray="5 5" name="Price ($)" dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
-            </div>
-          )}
+            ) : (
+              <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 12 }}>
+                <AlertCircle size={20} style={{ marginBottom: 6, opacity: 0.5 }} /><br />
+                Timeline data unavailable — chart cannot be rendered.<br />
+                <span style={{ fontSize: 11, opacity: 0.7 }}>The server returned an error for the timeline endpoint.</span>
+              </div>
+            )}
+          </div>
 
           {/* Events — uses standalone events state (works even when timeline 500s) */}
           <div className="card">
