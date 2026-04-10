@@ -182,6 +182,21 @@ Chay worker pool 1 batch roi thoat:
 uv run python -m app.workers.worker_pool --once
 ```
 
+## Airflow 3 orchestration
+
+Repo hiện có sẵn DAG code trong [backend/dags](/home/duncan-nguyen/workspace/infera/market-tracker/backend/dags) để migrate background scheduling sang Airflow 3:
+
+- `market_tracker_schedule_reconcile`
+- `market_tracker_apify_poller`
+- `market_tracker_importer`
+- `market_tracker_weekly_digest`
+
+Các loop worker hiện tại vẫn được giữ để compatibility/manual-run trong giai đoạn cutover, nhưng production orchestration nên chuyển sang Airflow.
+
+Khi tạo mới category tracker hoặc competitor tracker, backend sẽ enqueue một initial fetch ngay sau khi create thành công. Các lịch schedule sau đó vẫn tiếp tục chạy theo cron hoặc scheduler như cấu hình.
+
+Tài liệu deploy và biến môi trường DAG nằm ở [AIRFLOW.md](/home/duncan-nguyen/workspace/infera/market-tracker/backend/docs/AIRFLOW.md).
+
 Endpoints hữu ích:
 
 - Health check: `GET /health`

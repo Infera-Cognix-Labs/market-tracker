@@ -142,6 +142,37 @@ def test_mongo_store_delegates_to_extracted_services(run_async, seed_data):
     assert import_result.succeeded_jobs == 1
 
 
+def test_mongo_store_forwards_airflow_reference_inputs(run_async):
+    class DummyClient:
+        def close(self):
+            return None
+
+    store = MongoStore(DummyClient(), "market_tracker", Config(seed_demo_data=False))
+    captured: dict[str, object] = {}
+
+    class SchedulerService:
+        async def schedule_due_jobs(self, *, reference_time=None):
+            captured["schedule_reference_time"] = reference_time
+            return SimpleNamespace(model_dump=lambda: {"created_jobs": 0})
+
+    class DigestService:
+        async def generate_weekly_digests(self, *, reference_date=None):
+            captured["digest_reference_date"] = reference_date
+            return SimpleNamespace(model_dump=lambda: {"generated_digests": 0})
+
+    schedule_reference_time = datetime(2026, 4, 8, 4, 15, tzinfo=UTC)
+    digest_reference_date = date(2026, 4, 3)
+
+    store.scheduler_service = SchedulerService()
+    store.digest_service = DigestService()
+
+    run_async(store.schedule_jobs(reference_time=schedule_reference_time))
+    run_async(store.process_digest_jobs(reference_date=digest_reference_date))
+
+    assert captured["schedule_reference_time"] == schedule_reference_time
+    assert captured["digest_reference_date"] == digest_reference_date
+
+
 def test_apify_gateway_list_dataset_items_maps_response(run_async, monkeypatch):
     gateway = ApifyGateway(Config(apify_config={"token": "token"}).apify_config)
 
