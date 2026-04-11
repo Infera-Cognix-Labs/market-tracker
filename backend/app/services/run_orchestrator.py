@@ -30,6 +30,14 @@ from app.services.shared import job_doc_to_model
 
 logger = get_logger(__name__)
 metrics = get_metrics()
+TERMINAL_APIFY_SUCCEEDED_STATUSES = {
+    ExternalRunStatus.SUCCEEDED,
+}
+TERMINAL_APIFY_FAILED_STATUSES = {
+    ExternalRunStatus.FAILED,
+    ExternalRunStatus.TIMED_OUT,
+    ExternalRunStatus.ABORTED,
+}
 
 
 class RunOrchestrator:
@@ -115,8 +123,21 @@ class RunOrchestrator:
                 or job_document.started_at,
                 finished_at=coerce_datetime(launch.finished_at),
             )
-            job_document.status = JobStatus.RUNNING_EXTERNAL
-            job_document.error = None
+            if launch.status in TERMINAL_APIFY_SUCCEEDED_STATUSES:
+                job_document.status = JobStatus.IMPORTING
+                job_document.error = None
+            elif launch.status in TERMINAL_APIFY_FAILED_STATUSES:
+                job_document.status = JobStatus.FAILED
+                job_document.error = JobError(
+                    code=launch.status.value,
+                    message=f"Apify run finished with status `{launch.status.value}`.",
+                )
+                job_document.finished_at = (
+                    coerce_datetime(launch.finished_at) or utc_now()
+                )
+            else:
+                job_document.status = JobStatus.RUNNING_EXTERNAL
+                job_document.error = None
             await job_document.save()
 
             logger.info(
@@ -263,7 +284,11 @@ class RunOrchestrator:
 
 
 def coerce_datetime(value: object | None) -> datetime | None:
-    if value is None or isinstance(value, datetime):
+    if value is None:
+        return value
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
         return value
     if isinstance(value, str):
         normalized = value.replace("Z", "+00:00")

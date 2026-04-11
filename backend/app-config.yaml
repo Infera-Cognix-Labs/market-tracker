@@ -3,11 +3,6 @@ app:
   api_prefix: "/v1"
   seed_demo_data: true
 
-mongodb:
-  host: "localhost"
-  port: 27017
-  database: "market_tracker"
-
 apify:
   dispatch_timeout_secs: 300
   webhook_url: ""

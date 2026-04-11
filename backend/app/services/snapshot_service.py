@@ -7,6 +7,7 @@ from app.core.utils import utc_now
 from app.models.api import (
     CategorySnapshotProduct,
     CategorySnapshotSummary,
+    CategoryTrackerLatestSnapshotSummary,
     ProductCurrentState,
     TrackerRef,
     TrackerType,
@@ -256,7 +257,7 @@ class SnapshotService:
         products = [
             CategorySnapshotProduct(
                 asin=record.asin,
-                rank_position=(record.rank_position or index),
+                rank_position=index,
                 title=record.title,
                 brand=record.brand,
                 product_url=record.product_url,
@@ -299,6 +300,14 @@ class SnapshotService:
                 "dataset_id": dataset_id,
             },
         }
+        latest_snapshot_summary = CategoryTrackerLatestSnapshotSummary(
+            snapshot_date=snapshot_date,
+            captured_at=payload["captured_at"],
+            top10_asins=[item.asin for item in products[:10]],
+        )
+        tracker_document.latest_snapshot_summary = latest_snapshot_summary
+        tracker_document.updated_at = utc_now()
+        await tracker_document.save()
 
         existing = await CategorySnapshotDocument.find_one(
             CategorySnapshotDocument.workspace_id == workspace_id,

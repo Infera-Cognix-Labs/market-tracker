@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
@@ -215,16 +215,13 @@ def _binding_int(
 
 
 class MongoDBConfig(BaseModel):
-    uri: str | None = os.getenv("MONGO_URI")
-    host: str = (
-        _config_str(("mongodb", "host"), "localhost", "MONGO_HOST") or "localhost"
-    )
-    port: int = _config_int(("mongodb", "port"), 27017, "MONGO_PORT")
-    username: str | None = os.getenv("MONGO_USERNAME")
-    password: str | None = os.getenv("MONGO_PASSWORD")
-    database: str = (
-        _config_str(("mongodb", "database"), "market_tracker", "MONGO_DATABASE")
-        or "market_tracker"
+    uri: str | None = Field(default_factory=lambda: os.getenv("MONGO_URI"))
+    host: str = Field(default_factory=lambda: os.getenv("MONGO_HOST") or "localhost")
+    port: int = Field(default_factory=lambda: _env_int("MONGO_PORT", 27017) or 27017)
+    username: str | None = Field(default_factory=lambda: os.getenv("MONGO_USERNAME"))
+    password: str | None = Field(default_factory=lambda: os.getenv("MONGO_PASSWORD"))
+    database: str = Field(
+        default_factory=lambda: os.getenv("MONGO_DATABASE") or "market_tracker"
     )
 
     @property
@@ -345,7 +342,7 @@ class Config(BaseModel):
     seed_demo_data: bool = _config_bool(
         ("app", "seed_demo_data"), True, "SEED_DEMO_DATA"
     )
-    mongodb_config: MongoDBConfig = MongoDBConfig()
+    mongodb_config: MongoDBConfig = Field(default_factory=MongoDBConfig)
     apify_config: ApifyConfig = ApifyConfig()
     storage_config: StorageConfig = StorageConfig()
     worker_config: WorkerConfig = WorkerConfig()
