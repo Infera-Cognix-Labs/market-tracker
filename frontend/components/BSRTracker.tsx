@@ -10,9 +10,8 @@ import { CompetitorPage } from "./competitors/CompetitorPage"
 import { EventsPage } from "./alerts/EventsPage"
 import { JobsPage } from "./jobs/JobsPage"
 import { ReportsPage } from "./reports/ReportsPage"
-import { NodeSearchPage } from "./search/NodeSearchPage"
 
-type PageKey = "dashboard" | "categories" | "competitors" | "events" | "jobs" | "reports" | "search"
+type PageKey = "dashboard" | "categories" | "competitors" | "events" | "jobs" | "reports"
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("dashboard")
@@ -24,7 +23,6 @@ export default function App() {
     events: <EventsPage />,
     jobs: <JobsPage />,
     reports: <ReportsPage />,
-    search: <NodeSearchPage />,
   }
 
   return (
