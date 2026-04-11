@@ -391,7 +391,17 @@ export const CompetitorPage = () => {
         />
       )}
       <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
-        actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
+        actions={
+          <div style={{ display: "flex", gap: 8 }}>
+            {tracker && (
+              <button className="btn-ghost" onClick={() => setShowManageAsins(true)}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                <Edit2 size={14} /> Manage ASINs
+              </button>
+            )}
+            <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>
+          </div>
+        } />
 
       {/* Tracker Info Header */}
       <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
@@ -408,19 +418,13 @@ export const CompetitorPage = () => {
               <span><Clock size={10} /> Last: {tracker.stats.last_success_at ? new Date(tracker.stats.last_success_at).toLocaleString() : "—"}</span>
             </div>
           </div>
-          {/* Track fields + Manage ASINs */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
-                <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
-                  {k.replace(/_/g, " ")}
-                </span>
-              ))}
-            </div>
-            <button className="btn-ghost" onClick={() => setShowManageAsins(true)}
-              style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
-              <Edit2 size={11} /> Manage ASINs
-            </button>
+          {/* Track fields */}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
+              <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
+                {k.replace(/_/g, " ")}
+              </span>
+            ))}
           </div>
         </div>
       </div>

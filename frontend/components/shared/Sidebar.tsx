@@ -1,11 +1,10 @@
-import { Activity, BarChart2, Package, Bell, Briefcase, FileText, Search } from "lucide-react"
+import { Activity, BarChart2, Package, Bell, Briefcase, FileText } from "lucide-react"
 import { T } from "./DesignTokens"
 
 const NAV = [
   { id: "dashboard", label: "Dashboard", icon: <Activity size={16} /> },
   { id: "categories", label: "Categories", icon: <BarChart2 size={16} /> },
   { id: "competitors", label: "Competitors", icon: <Package size={16} /> },
-  { id: "search", label: "Node Search", icon: <Search size={16} /> },
   { id: "events", label: "Events", icon: <Bell size={16} /> },
   { id: "jobs", label: "Jobs", icon: <Briefcase size={16} /> },
   { id: "reports", label: "Reports", icon: <FileText size={16} /> },
