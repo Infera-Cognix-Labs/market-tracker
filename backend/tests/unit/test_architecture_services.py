@@ -12,7 +12,9 @@ from app.integrations.apify_gateway import (
     ApifyRunLookupError,
 )
 from app.models.api import (
+    AvailabilityStatus,
     ApifyWebhookEnvelope,
+    BuyBoxStatus,
     CategoryTrackerCreateRequest,
     CategoryTrackingConfigInput,
     ExternalRunStatus,
@@ -29,6 +31,12 @@ from app.models.api import (
 )
 from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.dashboard_query_service import DashboardQueryService
+from app.services.normalization_service import (
+    NormalizationResult,
+    NormalizedProductRecord,
+)
+from app.services.result_importer_service import ResultImporterService, TrackerContext
+from app.services.snapshot_service import SnapshotService
 from app.services.run_orchestrator import RunOrchestrator
 from app.store import MongoStore
 
@@ -468,6 +476,104 @@ def test_run_orchestrator_dispatch_job_registers_webhook(
     ]
 
 
+def test_run_orchestrator_dispatch_job_advances_terminal_success_runs_to_importing(
+    run_async, monkeypatch, seed_data
+):
+    job_document = FakeDocument(
+        workspace_id=seed_data.workspace_id,
+        job_code="job_cat_20260405_003",
+        tracker_type=TrackerType.CATEGORY,
+        tracker_code=seed_data.category_trackers[0].tracker_code,
+        snapshot_date=date(2026, 4, 5),
+        trigger_mode="MANUAL",
+        status=JobStatus.QUEUED,
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY, binding_code="bind_category_top50_v1"
+        ),
+        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
+        created_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        started_at=None,
+        finished_at=None,
+        error=None,
+        external_run=None,
+    )
+    tracker_document = seed_data.category_trackers[0].model_copy(deep=True)
+    inserted_runs: list[object] = []
+    saved_statuses: list[JobStatus] = []
+
+    async def fake_save(self, *args, **kwargs):
+        saved_statuses.append(JobStatus(self.status))
+
+    async def fake_job_find_one(*args, **kwargs):
+        return job_document
+
+    async def fake_tracker_find_one(*args, **kwargs):
+        return tracker_document
+
+    class FakeApifyRunDocument:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        async def insert(self):
+            inserted_runs.append(self)
+
+    job_document.save = fake_save.__get__(job_document, FakeDocument)
+
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.JobDocument",
+        SimpleNamespace(
+            find_one=fake_job_find_one,
+            workspace_id="workspace_id",
+            job_code="job_code",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.CategoryTrackerDocument",
+        SimpleNamespace(
+            find_one=fake_tracker_find_one,
+            workspace_id="workspace_id",
+            tracker_code="tracker_code",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.run_orchestrator.ApifyRunDocument", FakeApifyRunDocument
+    )
+
+    class Gateway:
+        config = SimpleNamespace(webhook_url=None)
+
+        async def start_run(self, binding_code, run_input, webhooks=None):
+            return ApifyRunLaunch(
+                provider_run_id="apify_run_test_003",
+                default_dataset_id="dataset_test_003",
+                status=ExternalRunStatus.SUCCEEDED,
+                raw_status="SUCCEEDED",
+                started_at=datetime(2026, 4, 5, 2, 0, 3),
+                finished_at=datetime(2026, 4, 5, 2, 5, 0),
+                input_hash="hash123",
+                binding=SimpleNamespace(
+                    binding_code=binding_code,
+                    actor_id="owner/category-actor",
+                    task_id=None,
+                ),
+                run_input=run_input,
+            )
+
+    orchestrator = RunOrchestrator(Gateway())
+    run_async(orchestrator.dispatch_job(seed_data.workspace_id, job_document.job_code))
+
+    assert saved_statuses == [JobStatus.DISPATCHING, JobStatus.IMPORTING]
+    assert job_document.status == JobStatus.IMPORTING
+    assert job_document.error is None
+    assert job_document.external_run is not None
+    assert job_document.external_run.status == ExternalRunStatus.SUCCEEDED
+    assert job_document.external_run.started_at.tzinfo == UTC
+    assert job_document.external_run.finished_at.tzinfo == UTC
+    assert inserted_runs[0].status == ExternalRunStatus.SUCCEEDED.value
+    assert inserted_runs[0].started_at.tzinfo == UTC
+    assert inserted_runs[0].finished_at.tzinfo == UTC
+
+
 def test_apify_run_lifecycle_webhook_success(run_async, monkeypatch):
     run_document = FakeDocument(
         workspace_id="ws_demo_us",
@@ -872,6 +978,193 @@ def _find_job_by_run_code(jobs):
         return jobs.get(run_document.tracking_job_code)
 
     return _inner
+
+
+def test_result_importer_process_pending_jobs_handles_naive_run_finished_at(
+    run_async, monkeypatch
+):
+    job_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        job_code="job_import_001",
+        tracker_type=TrackerType.CATEGORY,
+        tracker_code="ct_demo",
+        snapshot_date=date(2026, 4, 5),
+        status=JobStatus.IMPORTING,
+        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
+        error=None,
+        created_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        started_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+        finished_at=None,
+    )
+    run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_import_001",
+        apify_run_id="apify_run_test_004",
+        status=ExternalRunStatus.SUCCEEDED.value,
+        default_dataset_id="dataset_test_004",
+        finished_at=datetime(2026, 4, 5, 2, 5, 0),
+    )
+
+    saved_statuses: list[JobStatus] = []
+    saved_finished_at_values: list[datetime] = []
+    tracker_updates: list[JobStatus] = []
+
+    async def fake_job_save(self, *args, **kwargs):
+        saved_statuses.append(JobStatus(self.status))
+
+    async def fake_run_save(self, *args, **kwargs):
+        saved_finished_at_values.append(self.finished_at)
+
+    job_document.save = fake_job_save.__get__(job_document, FakeDocument)
+    run_document.save = fake_run_save.__get__(run_document, FakeDocument)
+
+    monkeypatch.setattr(
+        "app.services.result_importer_service.JobDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor([job_document]),
+            status="status",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.result_importer_service.ApifyRunDocument",
+        SimpleNamespace(
+            find_one=_async_return(run_document),
+            workspace_id="workspace_id",
+            tracking_job_code="tracking_job_code",
+        ),
+    )
+
+    normalization_service = SimpleNamespace(
+        normalize_items=lambda **kwargs: NormalizationResult(records=[], invalid_count=0)
+    )
+    service = ResultImporterService(
+        gateway=SimpleNamespace(),
+        normalization_service=normalization_service,
+        snapshot_service=SimpleNamespace(),
+        event_engine=SimpleNamespace(),
+        config=Config().apify_config,
+        storage_config=Config().storage_config,
+    )
+
+    async def fake_load_or_import_raw_items(**kwargs):
+        return [], 0
+
+    async def fake_load_tracker_context(**kwargs):
+        return TrackerContext(
+            tracker_type=TrackerType.CATEGORY,
+            marketplace="amazon_de",
+        )
+
+    async def fake_update_tracker_stats(**kwargs):
+        tracker_updates.append(kwargs["final_status"])
+
+    service._load_or_import_raw_items = fake_load_or_import_raw_items
+    service._load_tracker_context = fake_load_tracker_context
+    service._update_tracker_stats = fake_update_tracker_stats
+
+    result = run_async(service.process_pending_jobs())
+
+    assert result.succeeded_jobs == 1
+    assert job_document.status == JobStatus.SUCCESS
+    assert saved_statuses == [JobStatus.PROCESSING, JobStatus.SUCCESS]
+    assert run_document.finished_at.tzinfo == UTC
+    assert saved_finished_at_values[0].tzinfo == UTC
+    assert tracker_updates == [JobStatus.SUCCESS]
+
+
+def test_snapshot_service_uses_top_list_position_for_category_snapshot_rank(
+    run_async, monkeypatch
+):
+    inserted_snapshots: list[object] = []
+
+    class FakeCategoryTrackerDocument(FakeDocument):
+        pass
+
+    tracker_document = FakeCategoryTrackerDocument(
+        name="Tracker",
+        marketplace="amazon_de",
+        scope=SimpleNamespace(browse_node_id="3098778031", browse_node_url=None),
+        tracking_config=SimpleNamespace(top_n=50),
+        latest_snapshot_summary=None,
+        updated_at=datetime(2026, 4, 5, 2, 0, tzinfo=UTC),
+    )
+
+    async def fake_tracker_save(self, *args, **kwargs):
+        return None
+
+    tracker_document.save = fake_tracker_save.__get__(tracker_document, FakeDocument)
+
+    class FakeCategorySnapshotDocument:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        async def insert(self):
+            inserted_snapshots.append(self)
+
+    class SnapshotDocumentFactory:
+        workspace_id = "workspace_id"
+        tracker_code = "tracker_code"
+        snapshot_date = "snapshot_date"
+
+        @staticmethod
+        async def find_one(*args, **kwargs):
+            return None
+
+        def __new__(cls, **kwargs):
+            return FakeCategorySnapshotDocument(**kwargs)
+
+    monkeypatch.setattr(
+        "app.services.snapshot_service.CategorySnapshotDocument",
+        SnapshotDocumentFactory,
+    )
+    monkeypatch.setattr(
+        "app.services.snapshot_service.CategoryTrackerDocument",
+        FakeCategoryTrackerDocument,
+    )
+
+    service = SnapshotService()
+    result = run_async(
+        service._upsert_category_snapshot(
+            workspace_id="ws_demo_us",
+            snapshot_date=date(2026, 4, 5),
+            tracker_code="ct_demo",
+            tracker_document=tracker_document,
+            records=[
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin="B0TEST1234",
+                    rank_position=1623,
+                    captured_at=datetime(2026, 4, 5, 2, 5, tzinfo=UTC),
+                    brand="Brand",
+                    title="Title",
+                    product_url="https://www.amazon.de/dp/B0TEST1234",
+                    main_image_url="https://images.example.com/B0TEST1234.jpg",
+                    title_hash="title_hash",
+                    main_image_hash="image_hash",
+                    bsr_position=1623,
+                    price_current=19.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller",
+                    rating_value=4.5,
+                    review_count=42,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=0,
+                )
+            ],
+            apify_run_id="apify_run_test_005",
+            dataset_id="dataset_test_005",
+        )
+    )
+
+    assert result is True
+    assert inserted_snapshots[0].products[0].rank_position == 1
+    assert tracker_document.latest_snapshot_summary is not None
+    assert tracker_document.latest_snapshot_summary.top10_asins == ["B0TEST1234"]
 
 
 def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_context(

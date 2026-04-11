@@ -25,6 +25,7 @@ from app.models.documents import (
 from app.services.event_engine import EventEngine
 from app.services.normalization_service import NormalizationService, RawImportedItem
 from app.services.object_storage_service import LocalObjectStorageService
+from app.services.run_orchestrator import coerce_datetime
 from app.services.snapshot_service import SnapshotService
 
 logger = get_logger(__name__)
@@ -146,10 +147,18 @@ class ResultImporterService:
         job_document.error = None
         await job_document.save()
 
-        if run_document.finished_at is not None:
+        run_finished_at = coerce_datetime(run_document.finished_at)
+        if (
+            run_finished_at is not None
+            and run_document.finished_at != run_finished_at
+        ):
+            run_document.finished_at = run_finished_at
+            await run_document.save()
+
+        if run_finished_at is not None:
             import_lag_seconds = max(
                 0.0,
-                (current_time - run_document.finished_at).total_seconds(),
+                (current_time - run_finished_at).total_seconds(),
             )
             metrics.observe(
                 "import_lag_seconds",

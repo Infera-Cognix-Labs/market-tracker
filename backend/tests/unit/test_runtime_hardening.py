@@ -4,7 +4,7 @@ from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 from app.config import config as config_module
-from app.config.config import ApifyConfig, StorageConfig
+from app.config.config import ApifyConfig, Config, StorageConfig
 from app.models.api import TrackerRef, TrackerType
 from app.services.object_storage_service import LocalObjectStorageService
 from app.services.result_importer_service import ResultImporterService
@@ -37,6 +37,36 @@ apify:
     assert config_module._binding_str("competitor", "task_id") == "task_competitor"
     assert config_module._binding_int("competitor", "memory_mbytes") == 4096
     assert config_module._read_secret(env_name="APIFY_TOKEN") == "token-from-env"
+
+
+def test_mongodb_settings_are_loaded_from_env_not_app_config(
+    monkeypatch, tmp_path
+):
+    app_config_file = tmp_path / "app-config.yaml"
+    app_config_file.write_text(
+        """
+mongodb:
+  host: "yaml-host"
+  port: 9999
+  database: "yaml-db"
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_module, "_APP_CONFIG_PATH", app_config_file)
+    monkeypatch.setenv("MONGO_HOST", "env-host")
+    monkeypatch.setenv("MONGO_PORT", "27018")
+    monkeypatch.setenv("MONGO_DATABASE", "env-db")
+    monkeypatch.setenv("MONGO_USERNAME", "env-user")
+    monkeypatch.setenv("MONGO_PASSWORD", "env-pass")
+
+    config_module._load_app_file_config.cache_clear()
+
+    config = Config(seed_demo_data=False)
+
+    assert config.mongodb_config.host == "env-host"
+    assert config.mongodb_config.port == 27018
+    assert config.mongodb_config.database == "env-db"
+    assert config.mongodb_config.dsn == "mongodb://env-user:env-pass@env-host:27018"
 
 
 def test_importer_replays_batches_from_object_storage(run_async, tmp_path):
