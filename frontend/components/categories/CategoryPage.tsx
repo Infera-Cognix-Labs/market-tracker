@@ -72,8 +72,9 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div className="card" style={{ width: "100%", maxWidth: 560, maxHeight: "90vh", overflowY: "auto", padding: "24px 28px", position: "relative" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
+    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div className="card" style={{ width: "100%", maxWidth: 560, padding: "24px 28px", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>New Category Tracker</span>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "flex" }}><X size={18} /></button>
@@ -144,6 +145,7 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
         </form>
       </div>
     </div>
+    </div>
   )
 }
 
@@ -179,7 +181,8 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
+    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div className="card" style={{ width: "100%", maxWidth: 480, padding: "24px 28px", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>Edit Tracker</span>
@@ -232,6 +235,7 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
         </form>
       </div>
     </div>
+    </div>
   )
 }
 
@@ -275,7 +279,7 @@ export const CategoryPage = () => {
   if (loading && trackers.length === 0) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading trackers...</div>
 
   return (
-    <div className="anim-fade">
+    <>
       {showCreate && (
         <CreateCategoryTrackerModal
           onClose={() => setShowCreate(false)}
@@ -289,6 +293,7 @@ export const CategoryPage = () => {
           onUpdate={t => { setTrackers(prev => prev.map(x => x.tracker_code === t.tracker_code ? t : x)); setShowEdit(false) }}
         />
       )}
+    <div className="anim-fade">
       <PageHeader title="Category Tracker" sub="Top 50 BSR — Daily snapshots from normalized data"
         actions={
           <div style={{ display: "flex", gap: 8 }}>
@@ -451,5 +456,6 @@ export const CategoryPage = () => {
         )}
       </div>
     </div>
+    </>
   )
 }
