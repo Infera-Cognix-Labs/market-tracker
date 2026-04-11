@@ -19,11 +19,16 @@ x-airflow-common:
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    PYTHONPATH: /opt/market-tracker/backend
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    #_PIP_ADDITIONAL_REQUIREMENTS: beanie motor pymongo
   volumes:
-    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/backend/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/backend/app:/opt/market-tracker/backend/app
+    - ${AIRFLOW_PROJ_DIR:-.}/backend/app-config.yaml:/opt/market-tracker/backend/app-config.yaml
   user: "${AIRFLOW_UID:-50000}:0"
   networks:
     - market-tracker-network-staging
@@ -44,15 +49,15 @@ services:
       - NODE_ENV=production
     restart: always
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - market-tracker-network-staging
 
-    # ── Backend ───────────────────────────────────────────────────────────────────
+  # ── Backend ───────────────────────────────────────────────────────────────────
   backend:
     image: ${BACKEND_IMAGE:-217.216.34.228:5000/market-tracker/backend:latest}
     ports:
@@ -75,6 +80,8 @@ services:
         condition: service_healthy
     networks:
       - market-tracker-network-staging
+
+
   # ── MongoDB ───────────────────────────────────────────────────────────────────
   mongodb:
     image: mongo:latest
@@ -230,7 +237,7 @@ services:
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
-      _PIP_ADDITIONAL_REQUIREMENTS: ''
+      #_PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
 
   airflow-cli:
