@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
 from app.api.v1.deps import get_store
+from app.api.v1.endpoints._tracker_initial_jobs import (
+    create_and_dispatch_initial_job,
+)
 from app.models.api import (
     CompetitorTrackerCreateRequest,
     CompetitorTrackerDetail,
     CompetitorTrackerListResponse,
     CompetitorTrackerUpdateRequest,
+    TrackerType,
     TrackedAsinReplacementRequest,
 )
 from app.store import BaseStore
@@ -36,9 +40,18 @@ async def list_competitor_trackers(
 async def create_competitor_tracker(
     workspace_id: str,
     payload: CompetitorTrackerCreateRequest,
+    background_tasks: BackgroundTasks,
     store: Annotated[BaseStore, Depends(get_store)],
 ) -> CompetitorTrackerDetail:
-    return await store.create_competitor_tracker(workspace_id, payload)
+    tracker = await store.create_competitor_tracker(workspace_id, payload)
+    background_tasks.add_task(
+        create_and_dispatch_initial_job,
+        store=store,
+        workspace_id=workspace_id,
+        tracker_type=TrackerType.COMPETITOR,
+        tracker_code=tracker.tracker_code,
+    )
+    return tracker
 
 
 @router.get("/{tracker_code}", response_model=CompetitorTrackerDetail)

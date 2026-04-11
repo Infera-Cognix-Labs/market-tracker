@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from inspect import isawaitable
 
 from beanie import init_beanie
@@ -263,10 +263,14 @@ class BaseStore:
     async def process_import_jobs(self) -> ImportWorkerResult:
         raise NotImplementedError
 
-    async def schedule_jobs(self) -> SchedulerWorkerResult:
+    async def schedule_jobs(
+        self, reference_time: datetime | None = None
+    ) -> SchedulerWorkerResult:
         raise NotImplementedError
 
-    async def process_digest_jobs(self) -> DigestWorkerResult:
+    async def process_digest_jobs(
+        self, reference_date: date | None = None
+    ) -> DigestWorkerResult:
         raise NotImplementedError
 
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
@@ -643,11 +647,19 @@ class MongoStore(BaseStore):
     async def process_import_jobs(self) -> ImportWorkerResult:
         return await self.result_importer.process_pending_jobs()
 
-    async def schedule_jobs(self) -> SchedulerWorkerResult:
-        return await self.scheduler_service.schedule_due_jobs()
+    async def schedule_jobs(
+        self, reference_time: datetime | None = None
+    ) -> SchedulerWorkerResult:
+        return await self.scheduler_service.schedule_due_jobs(
+            reference_time=reference_time
+        )
 
-    async def process_digest_jobs(self) -> DigestWorkerResult:
-        return await self.digest_service.generate_weekly_digests()
+    async def process_digest_jobs(
+        self, reference_date: date | None = None
+    ) -> DigestWorkerResult:
+        return await self.digest_service.generate_weekly_digests(
+            reference_date=reference_date
+        )
 
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         return await self.job_service.get_job(workspace_id, job_code)
