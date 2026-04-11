@@ -21,6 +21,7 @@ x-airflow-common:
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
     PYTHONPATH: /opt/market-tracker/backend
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    MONGO_URI: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/?authSource=admin
     #_PIP_ADDITIONAL_REQUIREMENTS: beanie motor pymongo
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/backend/dags:/opt/airflow/dags
