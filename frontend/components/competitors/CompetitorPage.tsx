@@ -466,6 +466,7 @@ export const CompetitorPage = () => {
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
               <div style={{ width: 52, height: 52, borderRadius: 8, background: T.bg3, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: T.mono, color: T.text3, flexShrink: 0, overflow: "hidden" }}>
                 {productDetail?.main_image_url_latest
+                  // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={productDetail.main_image_url_latest} alt={productDetail?.title_latest || "Product image"} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
                   : "IMG"}
               </div>

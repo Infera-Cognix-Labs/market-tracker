@@ -256,11 +256,11 @@ export const CategoryPage = () => {
   // Load snapshot when tracker changes
   useEffect(() => {
     if (!selectedCode) return
-    setSnapshot(null)
-    setLoading(true)
+    let cancelled = false
     apiGetLatestCategorySnapshot(selectedCode)
-      .then(snap => { setSnapshot(snap); setLoading(false) })
-      .catch(() => { setSnapshot(null); setLoading(false) })
+      .then(snap => { if (!cancelled) { setSnapshot(snap); setLoading(false) } })
+      .catch(() => { if (!cancelled) { setSnapshot(null); setLoading(false) } })
+    return () => { cancelled = true }
   }, [selectedCode])
 
   const selectedTracker = trackers.find(t => t.tracker_code === selectedCode)
@@ -308,7 +308,7 @@ export const CategoryPage = () => {
       {/* Tracker selector tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {trackers.map(t => (
-          <button key={t.tracker_code} onClick={() => setSelectedCode(t.tracker_code)}
+          <button key={t.tracker_code} onClick={() => { setSnapshot(null); setLoading(true); setSelectedCode(t.tracker_code) }}
             style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${t.tracker_code === selectedCode ? T.amber : T.border}`, background: t.tracker_code === selectedCode ? T.bg4 : T.bg2, color: t.tracker_code === selectedCode ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
             {t.tracker_code === selectedCode && <span className="dot-live" />}
             {t.name}
