@@ -78,8 +78,9 @@ const ManageAsinsModal = ({
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
-      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", zIndex: 1000, overflowY: "auto" }}>
+    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 480 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
           <div>
             <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>Manage ASINs</span>
@@ -131,6 +132,7 @@ const ManageAsinsModal = ({
           </div>
         </form>
       </div>
+    </div>
     </div>
   )
 }
@@ -189,8 +191,9 @@ const EditTrackerModal = ({
   const STATUS_COLORS: Record<TrackerStatus, string> = { ACTIVE: T.green, PAUSED: T.amber, ARCHIVED: T.text3 }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
-      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", zIndex: 1000, overflowY: "auto" }}>
+    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 500 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
           <div>
             <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>Edit Tracker</span>
@@ -262,6 +265,7 @@ const EditTrackerModal = ({
         </form>
       </div>
     </div>
+    </div>
   )
 }
 
@@ -332,15 +336,16 @@ const CreateTrackerModal = ({
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
-      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", zIndex: 1000, overflowY: "auto" }}>
+    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 540 }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>New Competitor Tracker</span>
           <button onClick={onClose} style={{ background: "none", border: "none", color: T.text2, cursor: "pointer", padding: 4, display: "flex" }}><X size={16} /></button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: "20px 20px" }}>
+        <form onSubmit={handleSubmit} style={{ padding: "20px" }}>
           {/* Name */}
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Tracker Name</label>
@@ -432,6 +437,7 @@ const CreateTrackerModal = ({
         </form>
       </div>
     </div>
+    </div>
   )
 }
 
@@ -502,15 +508,17 @@ export const CompetitorPage = () => {
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
   if (trackers.length === 0) return (
-    <div className="anim-fade">
-      <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
-        actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
-      <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>
-        No competitor trackers configured.{" "}
-        <button onClick={() => setShowCreate(true)} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 13 }}>Create one &rarr;</button>
-      </div>
+    <>
       {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setSelectedCode(t.tracker_code); setShowCreate(false) }} />}
-    </div>
+      <div className="anim-fade">
+        <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
+          actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
+        <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>
+          No competitor trackers configured.{" "}
+          <button onClick={() => setShowCreate(true)} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 13 }}>Create one &rarr;</button>
+        </div>
+      </div>
+    </>
   )
 
   const dualAxisData = timeline?.points.map(pt => ({
@@ -520,7 +528,7 @@ export const CompetitorPage = () => {
   })) || []
 
   return (
-    <div className="anim-fade">
+    <>
       {showCreate && (
         <CreateTrackerModal
           onClose={() => setShowCreate(false)}
@@ -549,6 +557,7 @@ export const CompetitorPage = () => {
           }}
         />
       )}
+    <div className="anim-fade">
       <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
         actions={
           <div style={{ display: "flex", gap: 8 }}>
@@ -790,5 +799,6 @@ export const CompetitorPage = () => {
         </div>
       </div>
     </div>
+    </>
   )
 }
