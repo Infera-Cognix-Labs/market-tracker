@@ -8,10 +8,9 @@ import { DashboardPage } from "./dashboard/DashboardPage"
 import { CategoryPage } from "./categories/CategoryPage"
 import { CompetitorPage } from "./competitors/CompetitorPage"
 import { EventsPage } from "./alerts/EventsPage"
-import { JobsPage } from "./jobs/JobsPage"
 import { ReportsPage } from "./reports/ReportsPage"
 
-type PageKey = "dashboard" | "categories" | "competitors" | "events" | "jobs" | "reports"
+type PageKey = "dashboard" | "categories" | "competitors" | "events" | "reports"
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("dashboard")
@@ -21,7 +20,6 @@ export default function App() {
     categories: <CategoryPage />,
     competitors: <CompetitorPage />,
     events: <EventsPage />,
-    jobs: <JobsPage />,
     reports: <ReportsPage />,
   }
 

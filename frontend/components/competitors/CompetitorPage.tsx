@@ -7,8 +7,8 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents } from "../shared/api"
-import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackFields, Timeframe, Event } from "../shared/types"
+import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents } from "../shared/api"
+import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus } from "../shared/types"
 
 const MARKETPLACES = [
   "amazon_us", "amazon_de", "amazon_uk", "amazon_fr",
@@ -119,6 +119,136 @@ const ManageAsinsModal = ({
               <span style={{ fontSize: 12, color: T.red }}>{error}</span>
             </div>
           )}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer" }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting}
+              style={{ flex: 2, padding: "10px 0", borderRadius: 8, border: "none", background: submitting ? T.bg4 : `linear-gradient(135deg, ${T.amber} 0%, ${T.amberD} 100%)`, color: submitting ? T.text3 : T.bg0, fontSize: 13, fontWeight: 700, fontFamily: T.sans, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {submitting ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Edit Tracker Modal ───────────────────────────────────────────────────────
+const EditTrackerModal = ({
+  tracker,
+  onClose,
+  onUpdate,
+}: {
+  tracker: CompetitorTrackerDetail
+  onClose: () => void
+  onUpdate: (updated: CompetitorTrackerDetail) => void
+}) => {
+  const [name, setName] = useState(tracker.name)
+  const [trackFields, setTrackFields] = useState<CompetitorTrackFields>({ ...tracker.track_fields })
+  const [hourUtc, setHourUtc] = useState(tracker.schedule.hour_utc)
+  const [status, setStatus] = useState<TrackerStatus>(tracker.status)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const toggleField = (key: keyof CompetitorTrackFields) =>
+    setTrackFields(prev => ({ ...prev, [key]: !prev[key] }))
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    if (!name.trim()) { setError("Tracker name is required."); return }
+    const payload: CompetitorTrackerUpdateRequest = {
+      name: name.trim(),
+      track_fields: trackFields,
+      schedule: { frequency: "DAILY", hour_utc: hourUtc },
+      status,
+    }
+    setSubmitting(true)
+    try {
+      const updated = await apiUpdateCompetitorTracker(tracker.tracker_code, payload)
+      onUpdate(updated)
+    } catch {
+      setError("Failed to update tracker. Please try again.")
+      setSubmitting(false)
+    }
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", padding: "9px 12px", borderRadius: 8,
+    border: `1px solid ${T.border}`, background: T.bg3,
+    color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none",
+  }
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 11, fontWeight: 600, color: T.text2,
+    marginBottom: 5, letterSpacing: ".04em", textTransform: "uppercase",
+  }
+
+  const STATUS_OPTIONS: TrackerStatus[] = ["ACTIVE", "PAUSED", "ARCHIVED"]
+  const STATUS_COLORS: Record<TrackerStatus, string> = { ACTIVE: T.green, PAUSED: T.amber, ARCHIVED: T.text3 }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 24 }}>
+      <div style={{ background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 12, width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${T.border}` }}>
+          <div>
+            <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>Edit Tracker</span>
+            <div style={{ fontSize: 11, color: T.text3, marginTop: 2, fontFamily: T.mono }}>{tracker.tracker_code}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.text2, cursor: "pointer", padding: 4, display: "flex" }}><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: "20px" }}>
+          {/* Name */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Tracker Name</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
+          </div>
+
+          {/* Track fields */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Track Fields</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {(Object.keys(trackFields) as (keyof CompetitorTrackFields)[]).map(key => (
+                <button key={key} type="button" onClick={() => toggleField(key)}
+                  style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${trackFields[key] ? T.amber : T.border}`, background: trackFields[key] ? `${T.amber}18` : T.bg3, color: trackFields[key] ? T.amber : T.text2, fontSize: 11, fontFamily: T.sans, cursor: "pointer", transition: "all .12s" }}>
+                  {trackFields[key] && <CheckCircle size={10} style={{ display: "inline", marginRight: 4 }} />}
+                  {TRACK_FIELD_LABELS[key]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Schedule */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Run at (UTC hour)</label>
+            <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
+              {Array.from({ length: 24 }, (_, i) => (
+                <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Status</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {STATUS_OPTIONS.map(s => (
+                <button key={s} type="button" onClick={() => setStatus(s)}
+                  style={{ flex: 1, padding: "8px 0", borderRadius: 7, border: `1px solid ${s === status ? STATUS_COLORS[s] : T.border}`, background: s === status ? `${STATUS_COLORS[s]}18` : T.bg3, color: s === status ? STATUS_COLORS[s] : T.text2, fontSize: 12, fontFamily: T.sans, cursor: "pointer", fontWeight: s === status ? 700 : 400, transition: "all .12s" }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 16 }}>
+              <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: T.red }}>{error}</span>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 10 }}>
             <button type="button" onClick={onClose}
               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer" }}>
@@ -308,28 +438,45 @@ const CreateTrackerModal = ({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export const CompetitorPage = () => {
   const [trackers, setTrackers] = useState<CompetitorTrackerDetail[]>([])
-  const [selectedTrackerIdx, setSelectedTrackerIdx] = useState(0)
+  const [selectedCode, setSelectedCode] = useState<string>("")
+  const [trackerDetail, setTrackerDetail] = useState<CompetitorTrackerDetail | null>(null)
   const [selectedAsinIdx, setSelectedAsinIdx] = useState(0)
   const [productDetail, setProductDetail] = useState<ProductDetail | null>(null)
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [showManageAsins, setShowManageAsins] = useState(false)
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("DAILY")
 
-  // Load trackers list, then fetch details to get tracked_products
+  // Load tracker list only
   useEffect(() => {
-    apiListCompetitorTrackers().then(async res => {
-      const details = await Promise.all(
-        res.items.map(t => apiGetCompetitorTracker(t.tracker_code).catch(() => t as unknown as CompetitorTrackerDetail))
-      )
-      setTrackers(details.filter((d): d is CompetitorTrackerDetail => d !== null))
+    apiListCompetitorTrackers().then(res => {
+      setTrackers(res.items as CompetitorTrackerDetail[])
+      if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
       setLoading(false)
     })
   }, [])
 
-  const tracker = trackers[selectedTrackerIdx]
+  // Fetch detail (tracked_products) for selected tracker
+  useEffect(() => {
+    if (!selectedCode) return
+    let cancelled = false
+    apiGetCompetitorTracker(selectedCode)
+      .then(d => { if (!cancelled) { setTrackerDetail(d); setLoadingDetail(false) } })
+      .catch(() => {
+        if (!cancelled) {
+          const fallback = trackers.find(t => t.tracker_code === selectedCode) ?? null
+          setTrackerDetail(fallback)
+          setLoadingDetail(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [selectedCode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tracker = trackerDetail ?? trackers.find(t => t.tracker_code === selectedCode) ?? null
   const products = tracker?.tracked_products || []
   const selectedProduct = products[selectedAsinIdx]
 
@@ -362,7 +509,7 @@ export const CompetitorPage = () => {
         No competitor trackers configured.{" "}
         <button onClick={() => setShowCreate(true)} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 13 }}>Create one &rarr;</button>
       </div>
-      {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setShowCreate(false) }} />}
+      {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setSelectedCode(t.tracker_code); setShowCreate(false) }} />}
     </div>
   )
 
@@ -377,7 +524,18 @@ export const CompetitorPage = () => {
       {showCreate && (
         <CreateTrackerModal
           onClose={() => setShowCreate(false)}
-          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedTrackerIdx(0); setShowCreate(false) }}
+          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedCode(t.tracker_code); setShowCreate(false) }}
+        />
+      )}
+      {showEdit && tracker && (
+        <EditTrackerModal
+          tracker={tracker}
+          onClose={() => setShowEdit(false)}
+          onUpdate={updated => {
+            setTrackers(prev => prev.map(t => t.tracker_code === updated.tracker_code ? updated : t))
+            setTrackerDetail(updated)
+            setShowEdit(false)
+          }}
         />
       )}
       {showManageAsins && tracker && (
@@ -386,6 +544,7 @@ export const CompetitorPage = () => {
           onClose={() => setShowManageAsins(false)}
           onUpdate={updated => {
             setTrackers(prev => prev.map(t => t.tracker_code === updated.tracker_code ? updated : t))
+            setTrackerDetail(updated)
             setShowManageAsins(false)
           }}
         />
@@ -394,16 +553,43 @@ export const CompetitorPage = () => {
         actions={
           <div style={{ display: "flex", gap: 8 }}>
             {tracker && (
-              <button className="btn-ghost" onClick={() => setShowManageAsins(true)}
-                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                <Edit2 size={14} /> Manage ASINs
-              </button>
+              <>
+                <button className="btn-ghost" onClick={() => setShowEdit(true)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <Edit2 size={14} /> Edit Tracker
+                </button>
+                <button className="btn-ghost" onClick={() => setShowManageAsins(true)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <Settings size={14} /> Manage ASINs
+                </button>
+              </>
             )}
             <button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>
           </div>
         } />
 
+      {/* Tracker selector tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {trackers.map(t => (
+          <button key={t.tracker_code} onClick={() => {
+              setTrackerDetail(null)
+              setSelectedAsinIdx(0)
+              setProductDetail(null)
+              setTimeline(null)
+              setEvents([])
+              setLoadingDetail(true)
+              setSelectedCode(t.tracker_code)
+            }}
+            style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${t.tracker_code === selectedCode ? T.amber : T.border}`, background: t.tracker_code === selectedCode ? T.bg4 : T.bg2, color: t.tracker_code === selectedCode ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
+            {t.tracker_code === selectedCode && <span className="dot-live" />}
+            {t.name}
+            <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>({t.marketplace})</span>
+          </button>
+        ))}
+      </div>
+
       {/* Tracker Info Header */}
+      {tracker && (
       <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -428,12 +614,13 @@ export const CompetitorPage = () => {
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16 }}>
         {/* ASIN list */}
         <div>
           <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px" }}>
-            {products.length} ASINs tracked
+            {loadingDetail ? "Loading…" : `${products.length} ASINs tracked`}
           </div>
           {products.map((p: TrackedProductSummary, i: number) => (
             <div key={p.asin} className="row-hover" onClick={() => setSelectedAsinIdx(i)}
