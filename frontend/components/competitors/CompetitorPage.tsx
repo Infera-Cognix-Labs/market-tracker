@@ -333,12 +333,6 @@ export const CompetitorPage = () => {
   useEffect(() => {
     if (!selectedCode) return
     let cancelled = false
-    setTrackerDetail(null)
-    setSelectedAsinIdx(0)
-    setProductDetail(null)
-    setTimeline(null)
-    setEvents([])
-    setLoadingDetail(true)
     apiGetCompetitorTracker(selectedCode)
       .then(d => { if (!cancelled) { setTrackerDetail(d); setLoadingDetail(false) } })
       .catch(() => {
@@ -429,7 +423,15 @@ export const CompetitorPage = () => {
       {/* Tracker selector tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {trackers.map(t => (
-          <button key={t.tracker_code} onClick={() => setSelectedCode(t.tracker_code)}
+          <button key={t.tracker_code} onClick={() => {
+              setTrackerDetail(null)
+              setSelectedAsinIdx(0)
+              setProductDetail(null)
+              setTimeline(null)
+              setEvents([])
+              setLoadingDetail(true)
+              setSelectedCode(t.tracker_code)
+            }}
             style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${t.tracker_code === selectedCode ? T.amber : T.border}`, background: t.tracker_code === selectedCode ? T.bg4 : T.bg2, color: t.tracker_code === selectedCode ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
             {t.tracker_code === selectedCode && <span className="dot-live" />}
             {t.name}
