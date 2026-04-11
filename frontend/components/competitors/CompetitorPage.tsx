@@ -308,28 +308,50 @@ const CreateTrackerModal = ({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export const CompetitorPage = () => {
   const [trackers, setTrackers] = useState<CompetitorTrackerDetail[]>([])
-  const [selectedTrackerIdx, setSelectedTrackerIdx] = useState(0)
+  const [selectedCode, setSelectedCode] = useState<string>("")
+  const [trackerDetail, setTrackerDetail] = useState<CompetitorTrackerDetail | null>(null)
   const [selectedAsinIdx, setSelectedAsinIdx] = useState(0)
   const [productDetail, setProductDetail] = useState<ProductDetail | null>(null)
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [showManageAsins, setShowManageAsins] = useState(false)
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("DAILY")
 
-  // Load trackers list, then fetch details to get tracked_products
+  // Load tracker list only
   useEffect(() => {
-    apiListCompetitorTrackers().then(async res => {
-      const details = await Promise.all(
-        res.items.map(t => apiGetCompetitorTracker(t.tracker_code).catch(() => t as unknown as CompetitorTrackerDetail))
-      )
-      setTrackers(details.filter((d): d is CompetitorTrackerDetail => d !== null))
+    apiListCompetitorTrackers().then(res => {
+      setTrackers(res.items as CompetitorTrackerDetail[])
+      if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
       setLoading(false)
     })
   }, [])
 
-  const tracker = trackers[selectedTrackerIdx]
+  // Fetch detail (tracked_products) for selected tracker
+  useEffect(() => {
+    if (!selectedCode) return
+    let cancelled = false
+    setTrackerDetail(null)
+    setSelectedAsinIdx(0)
+    setProductDetail(null)
+    setTimeline(null)
+    setEvents([])
+    setLoadingDetail(true)
+    apiGetCompetitorTracker(selectedCode)
+      .then(d => { if (!cancelled) { setTrackerDetail(d); setLoadingDetail(false) } })
+      .catch(() => {
+        if (!cancelled) {
+          const fallback = trackers.find(t => t.tracker_code === selectedCode) ?? null
+          setTrackerDetail(fallback)
+          setLoadingDetail(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [selectedCode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tracker = trackerDetail ?? trackers.find(t => t.tracker_code === selectedCode) ?? null
   const products = tracker?.tracked_products || []
   const selectedProduct = products[selectedAsinIdx]
 
@@ -362,7 +384,7 @@ export const CompetitorPage = () => {
         No competitor trackers configured.{" "}
         <button onClick={() => setShowCreate(true)} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 13 }}>Create one &rarr;</button>
       </div>
-      {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setShowCreate(false) }} />}
+      {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setSelectedCode(t.tracker_code); setShowCreate(false) }} />}
     </div>
   )
 
@@ -377,7 +399,7 @@ export const CompetitorPage = () => {
       {showCreate && (
         <CreateTrackerModal
           onClose={() => setShowCreate(false)}
-          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedTrackerIdx(0); setShowCreate(false) }}
+          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedCode(t.tracker_code); setShowCreate(false) }}
         />
       )}
       {showManageAsins && tracker && (
@@ -386,6 +408,7 @@ export const CompetitorPage = () => {
           onClose={() => setShowManageAsins(false)}
           onUpdate={updated => {
             setTrackers(prev => prev.map(t => t.tracker_code === updated.tracker_code ? updated : t))
+            setTrackerDetail(updated)
             setShowManageAsins(false)
           }}
         />
@@ -403,7 +426,20 @@ export const CompetitorPage = () => {
           </div>
         } />
 
+      {/* Tracker selector tabs */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        {trackers.map(t => (
+          <button key={t.tracker_code} onClick={() => setSelectedCode(t.tracker_code)}
+            style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${t.tracker_code === selectedCode ? T.amber : T.border}`, background: t.tracker_code === selectedCode ? T.bg4 : T.bg2, color: t.tracker_code === selectedCode ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
+            {t.tracker_code === selectedCode && <span className="dot-live" />}
+            {t.name}
+            <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>({t.marketplace})</span>
+          </button>
+        ))}
+      </div>
+
       {/* Tracker Info Header */}
+      {tracker && (
       <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
@@ -428,12 +464,13 @@ export const CompetitorPage = () => {
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16 }}>
         {/* ASIN list */}
         <div>
           <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px" }}>
-            {products.length} ASINs tracked
+            {loadingDetail ? "Loading…" : `${products.length} ASINs tracked`}
           </div>
           {products.map((p: TrackedProductSummary, i: number) => (
             <div key={p.asin} className="row-hover" onClick={() => setSelectedAsinIdx(i)}
