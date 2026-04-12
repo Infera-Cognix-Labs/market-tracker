@@ -40,6 +40,29 @@ from app.services.shared import (
 
 
 class TrackerManagementService:
+    async def _hydrate_competitor_tracker_detail(
+        self, workspace_id: str, document: CompetitorTrackerDocument
+    ) -> CompetitorTrackerDetail:
+        tracker = competitor_doc_to_model(document).model_copy(deep=True)
+        product_docs = await ProductDocument.find(
+            ProductDocument.workspace_id == workspace_id
+        ).to_list()
+        event_docs = await EventDocument.find(
+            EventDocument.workspace_id == workspace_id
+        ).to_list()
+        refreshed_tracked_products = build_competitor_summaries(
+            marketplace=tracker.marketplace,
+            tracked_asins=tracker.tracked_asins,
+            products=[product_doc_to_model(doc) for doc in product_docs],
+            events=[event_doc_to_model(doc) for doc in event_docs],
+            existing=tracker.tracked_products,
+        )
+        if refreshed_tracked_products != tracker.tracked_products:
+            tracker.tracked_products = refreshed_tracked_products
+            document.tracked_products = refreshed_tracked_products
+            await document.save()
+        return tracker
+
     async def list_category_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CategoryTrackerListResponse:
@@ -245,7 +268,7 @@ class TrackerManagementService:
         )
         if document is None:
             raise NotFoundError("Competitor tracker not found.")
-        return competitor_doc_to_model(document)
+        return await self._hydrate_competitor_tracker_detail(workspace_id, document)
 
     async def update_competitor_tracker(
         self,
