@@ -139,6 +139,8 @@ export interface CategorySnapshot {
   source_refs?: {
     job_code?: string
     provider?: string
+    apify_run_id?: string
+    dataset_id?: string
   }
 }
 

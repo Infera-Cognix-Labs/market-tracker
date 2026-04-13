@@ -74,10 +74,13 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
       </div>
 
       {/* Highlights + Threats */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 20 }}>
         {/* Category Highlights */}
         <div className="card">
           <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 14 }}>Category Highlights</div>
+          {data.category_highlights.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 0", color: T.text3, fontSize: 12 }}>No category data</div>
+          )}
           {data.category_highlights.map(h => (
             <div key={h.tracker_code} style={{ padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
@@ -88,21 +91,29 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
               </div>
             </div>
           ))}
+          <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("categories")}>
+            View categories <ChevronRight size={13} />
+          </button>
+        </div>
+
+        {/* Competitor Highlights */}
+        <div className="card">
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 14 }}>Competitor Highlights</div>
+          {data.competitor_highlights.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 0", color: T.text3, fontSize: 12 }}>No competitor data</div>
+          )}
           {data.competitor_highlights.map(h => (
             <div key={h.tracker_code} style={{ padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <span style={{ fontSize: 12, color: T.text0, fontWeight: 500 }}>{h.tracker_name}</span>
-                <Badge type="info" text="Competitor" />
-              </div>
+              <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
               <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
-                <span style={{ color: T.blue }}>💰{h.price_change_count} price</span>
-                <span style={{ color: T.purple }}>📦{h.availability_change_count} stock</span>
-                <span style={{ color: T.teal }}>📝{h.listing_change_count} listing</span>
+                <span style={{ color: T.blue }}>💰 {h.price_change_count} price</span>
+                <span style={{ color: T.purple }}>📦 {h.availability_change_count} stock</span>
+                <span style={{ color: T.teal }}>📝 {h.listing_change_count} listing</span>
               </div>
             </div>
           ))}
-          <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("categories")}>
-            View categories <ChevronRight size={13} />
+          <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("competitors")}>
+            View competitors <ChevronRight size={13} />
           </button>
         </div>
 

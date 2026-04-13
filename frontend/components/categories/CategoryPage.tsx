@@ -385,10 +385,11 @@ export const CategoryPage = () => {
 
       {/* Snapshot metadata */}
       {snapshot && (
-        <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+        <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap" }}>
           <span>Snapshot: {snapshot.snapshot_date}</span>
           <span>Captured: {new Date(snapshot.captured_at).toLocaleString()}</span>
-          {snapshot.source_refs?.job_code && <span>Job: {snapshot.source_refs.job_code}</span>}
+          {snapshot.source_refs?.provider && <span>Provider: {snapshot.source_refs.provider}</span>}
+          {snapshot.source_refs?.apify_run_id && <span>Run: {snapshot.source_refs.apify_run_id}</span>}
         </div>
       )}
 
@@ -410,7 +411,7 @@ export const CategoryPage = () => {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                {["#", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
+                {["#", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
                   <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -421,26 +422,44 @@ export const CategoryPage = () => {
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: p.rank_position <= 10 ? 700 : 400, color: p.rank_position <= 10 ? T.amber : T.text1 }}>
                     {String(p.rank_position).padStart(2, "0")}
                   </td>
-                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text3 }}>
-                    <a href={p.product_url} target="_blank" rel="noopener noreferrer" style={{ color: T.text3, textDecoration: "none" }}>{p.asin}</a>
+                  <td style={{ padding: "6px 10px" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.image_url} alt={p.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11 }}>
+                    <a href={p.product_url} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      {p.asin}<ExternalLink size={9} />
+                    </a>
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2 }}>{p.brand}</td>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
-                    {p.currency === "USD" ? "$" : "€"}{p.price_current.toFixed(2)}
-                    {p.price_original && p.price_original > p.price_current && (
-                      <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>{p.price_original.toFixed(2)}</span>
-                    )}
+                    {p.price_current > 0 ? (
+                      <>
+                        {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_current.toFixed(2)}
+                        {p.price_original && p.price_original > p.price_current && (
+                          <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
+                            {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_original.toFixed(2)}
+                          </span>
+                        )}
+                      </>
+                    ) : <span style={{ color: T.text3 }}>—</span>}
                   </td>
-                  <td style={{ padding: "9px 10px", fontSize: 12, color: T.green }}>{p.rating_value}★</td>
-                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{p.review_count.toLocaleString()}</td>
+                  <td style={{ padding: "9px 10px", fontSize: 12, color: T.green }}>
+                    {p.rating_value > 0 ? `${p.rating_value}★` : <span style={{ color: T.text3 }}>—</span>}
+                  </td>
+                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>
+                    {p.review_count > 0 ? p.review_count.toLocaleString() : <span style={{ color: T.text3 }}>—</span>}
+                  </td>
                   <td style={{ padding: "9px 10px" }}>
                     <Badge type={p.availability_status === "IN_STOCK" ? "listing" : "stock"} text={p.availability_status === "IN_STOCK" ? "In Stock" : p.availability_status === "OUT_OF_STOCK" ? "OOS" : p.availability_status} />
                   </td>
                   <td style={{ padding: "9px 10px" }}>
-                    <Badge type={p.buy_box_status === "HAS_BUY_BOX" ? "listing" : "stock"} text={p.buy_box_status === "HAS_BUY_BOX" ? "Has BB" : "No BB"} />
+                    <Badge type={p.buy_box_status === "HAS_BUY_BOX" ? "listing" : p.buy_box_status === "NO_BUY_BOX" ? "stock" : "info"} text={p.buy_box_status === "HAS_BUY_BOX" ? "Has BB" : p.buy_box_status === "NO_BUY_BOX" ? "No BB" : "—"} />
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.amber }}>
                     {p.coupon_text || "—"}

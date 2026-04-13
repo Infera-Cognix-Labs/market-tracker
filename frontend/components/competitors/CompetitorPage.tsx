@@ -527,6 +527,16 @@ export const CompetitorPage = () => {
     price: pt.price_current,
   })) || []
 
+  const ratingData = timeline?.points.map(pt => ({
+    date: pt.snapshot_date,
+    rating: pt.rating_value,
+    reviews: pt.review_count,
+    availability: pt.availability_status,
+    buyBox: pt.buy_box_status,
+    coupon: pt.coupon_text,
+    variations: pt.variation_count,
+  })) || []
+
   return (
     <>
       {showCreate && (
@@ -696,17 +706,31 @@ export const CompetitorPage = () => {
                     ))}
                   </div>
                 )}
+                {/* First/Last seen */}
+                {(productDetail?.first_seen_at || productDetail?.last_seen_at) && (
+                  <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 10, color: T.text3, fontFamily: T.mono }}>
+                    {productDetail.first_seen_at && <span>First seen: {new Date(productDetail.first_seen_at).toLocaleDateString()}</span>}
+                    {productDetail.last_seen_at && <span>Last seen: {new Date(productDetail.last_seen_at).toLocaleDateString()}</span>}
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 20, flexShrink: 0 }}>
-                {[
-                  { label: "BSR", v: productDetail?.current_state.bsr_position ? `#${productDetail.current_state.bsr_position}` : (selectedProduct?.current_bsr_position ? `#${selectedProduct.current_bsr_position}` : "—"), color: T.amber },
-                  { label: "Price", v: `$${(productDetail?.current_state.price_current ?? selectedProduct?.current_price ?? 0).toFixed(2)}`, color: T.text0 },
-                ].map(s => (
-                  <div key={s.label} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: T.mono, color: s.color }}>{s.v}</div>
-                    <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{s.label}</div>
-                  </div>
-                ))}
+                {(() => {
+                  const currency = productDetail?.current_state.currency ?? selectedProduct?.currency ?? "USD"
+                  const sym = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$"
+                  const latestPt = timeline?.points[timeline.points.length - 1]
+                  return [
+                    { label: "BSR", v: productDetail?.current_state.bsr_position ? `#${productDetail.current_state.bsr_position.toLocaleString()}` : (selectedProduct?.current_bsr_position ? `#${selectedProduct.current_bsr_position.toLocaleString()}` : "—"), color: T.amber },
+                    { label: "Price", v: `${sym}${(productDetail?.current_state.price_current ?? selectedProduct?.current_price ?? 0).toFixed(2)}`, color: T.text0 },
+                    { label: "Rating", v: latestPt?.rating_value ? `${latestPt.rating_value}★` : "—", color: T.green },
+                    { label: "Reviews", v: latestPt?.review_count ? latestPt.review_count.toLocaleString() : "—", color: T.text2 },
+                  ].map(s => (
+                    <div key={s.label} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: s.color }}>{s.v}</div>
+                      <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{s.label}</div>
+                    </div>
+                  ))
+                })()}
               </div>
             </div>
           </div>
@@ -759,6 +783,69 @@ export const CompetitorPage = () => {
                 <AlertCircle size={20} style={{ marginBottom: 6, opacity: 0.5 }} /><br />
                 Timeline data unavailable — chart cannot be rendered.<br />
                 <span style={{ fontSize: 11, opacity: 0.7 }}>The server returned an error for the timeline endpoint.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Rating & Reviews Chart */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>Rating &amp; Reviews Trend</span>
+                {timeline && (
+                  <span style={{ fontSize: 11, color: T.text3, marginLeft: 8 }}>
+                    {timeline.from_date} to {timeline.to_date}
+                  </span>
+                )}
+              </div>
+            </div>
+            {ratingData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={ratingData} margin={{ top: 20, right: 80, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+                    <XAxis dataKey="date" tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" domain={[0, 5]} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${v}★`} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                    <Tooltip contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
+                    <Legend wrapperStyle={{ color: T.text1, fontSize: 11 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="rating" stroke={T.green} strokeWidth={2.5} name="Rating ★" dot={{ r: 3, fill: T.green }} />
+                    <Line yAxisId="right" type="monotone" dataKey="reviews" stroke={T.blue} strokeWidth={2.5} strokeDasharray="5 5" name="Reviews" dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+
+                {/* Per-day status strip */}
+                <div style={{ overflowX: "auto", marginTop: 14 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
+                    <thead>
+                      <tr>
+                        {["Date", "Availability", "Buy Box", "Coupon", "Variants"].map(h => (
+                          <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, borderBottom: `1px solid ${T.border}` }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ratingData.map(r => (
+                        <tr key={r.date} style={{ borderBottom: `1px solid ${T.border}` }}>
+                          <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.date}</td>
+                          <td style={{ padding: "6px 10px" }}>
+                            <Badge type={r.availability === "IN_STOCK" ? "listing" : "stock"} text={r.availability === "IN_STOCK" ? "In Stock" : r.availability === "OUT_OF_STOCK" ? "OOS" : r.availability ?? "—"} />
+                          </td>
+                          <td style={{ padding: "6px 10px" }}>
+                            <Badge type={r.buyBox === "HAS_BUY_BOX" ? "listing" : r.buyBox === "NO_BUY_BOX" ? "stock" : "info"} text={r.buyBox === "HAS_BUY_BOX" ? "Has BB" : r.buyBox === "NO_BUY_BOX" ? "No BB" : "—"} />
+                          </td>
+                          <td style={{ padding: "6px 10px", fontSize: 11, color: r.coupon ? T.amber : T.text3 }}>{r.coupon ?? "—"}</td>
+                          <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.variations != null ? r.variations : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 12 }}>
+                <AlertCircle size={20} style={{ marginBottom: 6, opacity: 0.5 }} /><br />
+                Timeline data unavailable — chart cannot be rendered.
               </div>
             )}
           </div>
