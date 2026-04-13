@@ -495,11 +495,20 @@ export const CompetitorPage = () => {
       if (!cancelled) setProductDetail(detail)
 
       // Timeline may 500 due to backend bug — handle gracefully
-      const tl = await apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, { granularity: chartTimeframe }).catch(() => null)
+      const tl = await apiGetProductTimeline(tracker.marketplace, selectedProduct.asin, {
+        granularity: chartTimeframe,
+        tracker_code: tracker.tracker_code,
+      }).catch(() => null)
       if (!cancelled) setTimeline(tl)
 
       // Load events independently so they show even when timeline fails
-      const evRes = await apiListEvents({ marketplace: tracker.marketplace, asin: selectedProduct.asin, page_size: 50 }).catch(() => null)
+      const evRes = await apiListEvents({
+        marketplace: tracker.marketplace,
+        asin: selectedProduct.asin,
+        tracker_type: "COMPETITOR",
+        tracker_code: tracker.tracker_code,
+        page_size: 50,
+      }).catch(() => null)
       if (!cancelled) setEvents(evRes?.items ?? [])
     }
     load()

@@ -230,8 +230,11 @@ class RunOrchestrator:
             top_n = max(1, tracker_document.tracking_config.top_n)
             search_url = tracker_document.scope.browse_node_url
             if not search_url and tracker_document.scope.browse_node_id:
+                amazon_domain = _marketplace_to_amazon_domain(
+                    tracker_document.marketplace
+                )
                 search_url = (
-                    "https://www.amazon.com/s"
+                    f"https://{amazon_domain}/s"
                     f"?i=specialty-aps&rh=n%3A{tracker_document.scope.browse_node_id}"
                 )
 
@@ -243,7 +246,7 @@ class RunOrchestrator:
                     "top_n": top_n,
                     # Keep actor-compatible keys while preserving native keys.
                     "search_url": search_url,
-                    "max_pages": max(1, min(10, math.ceil(top_n / 50))),
+                    "max_pages": _category_search_max_pages(top_n),
                     "amazon_domain": _marketplace_to_amazon_domain(
                         tracker_document.marketplace
                     ),
@@ -312,3 +315,10 @@ def _marketplace_to_amazon_domain(marketplace: str) -> str:
         "amazon_jp": "www.amazon.co.jp",
     }
     return mapping.get(marketplace.lower(), "www.amazon.com")
+
+
+def _category_search_max_pages(top_n: int) -> int:
+    # Search result pages usually expose far fewer than 50 organic products,
+    # so 1 page is not enough to reliably build a top-50 snapshot.
+    estimated_items_per_page = 16
+    return max(1, min(10, math.ceil(top_n / estimated_items_per_page)))

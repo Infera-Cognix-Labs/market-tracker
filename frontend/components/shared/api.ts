@@ -118,10 +118,20 @@ export const apiGetProductDetail = async (marketplace: string, asin: string): Pr
 export const apiGetProductTimeline = async (
   marketplace: string,
   asin: string,
-  params?: { from_date?: string; to_date?: string; granularity?: Timeframe }
+  params?: {
+    from_date?: string
+    to_date?: string
+    granularity?: Timeframe
+    tracker_code?: string
+  }
 ): Promise<ProductTimelineResponse | null> => {
   return apiFetch<ProductTimelineResponse>(
-    `/products/${marketplace}/${asin}/timeline${qs({ from_date: params?.from_date, to_date: params?.to_date, granularity: params?.granularity })}`
+    `/products/${marketplace}/${asin}/timeline${qs({
+      from_date: params?.from_date,
+      to_date: params?.to_date,
+      granularity: params?.granularity,
+      tracker_code: params?.tracker_code,
+    })}`
   )
 }
 

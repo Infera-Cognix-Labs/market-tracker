@@ -31,6 +31,7 @@ async def get_product_timeline(
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
     granularity: Timeframe = Query(default=Timeframe.DAILY),
+    tracker_code: str | None = Query(default=None),
 ) -> ProductTimelineResponse:
     return await store.get_product_timeline(
         workspace_id=workspace_id,
@@ -39,4 +40,5 @@ async def get_product_timeline(
         from_date=from_date,
         to_date=to_date,
         granularity=granularity,
+        tracker_code=tracker_code,
     )

@@ -26,6 +26,7 @@ from app.models.api import (
     ProductTimelineResponse,
     Provider,
     Timeframe,
+    TrackerRef,
     TrackerScheduleInput,
     TrackerType,
 )
@@ -38,6 +39,7 @@ from app.services.normalization_service import (
 from app.services.result_importer_service import ResultImporterService, TrackerContext
 from app.services.snapshot_service import SnapshotService
 from app.services.run_orchestrator import RunOrchestrator
+from app.services.shared import product_snapshot_doc_to_model
 from app.store import MongoStore
 
 
@@ -271,6 +273,128 @@ def test_dashboard_query_builds_timeline_from_product_snapshots(
     assert response.summary.listing_change_count == 1
 
 
+def test_dashboard_query_filters_product_timeline_by_tracker_code(
+    run_async, monkeypatch, seed_data
+):
+    target_tracker_code = "cmp_target_tracker"
+    other_tracker_code = "ct_other_tracker"
+    snapshots = [
+        FakeDocument(
+            workspace_id=seed_data.workspace_id,
+            **snapshot.model_dump(mode="python", exclude={"tracker_refs"}),
+            tracker_refs=[
+                TrackerRef(
+                    tracker_type=TrackerType.COMPETITOR,
+                    tracker_code=target_tracker_code,
+                    tracker_name="Target Tracker",
+                )
+            ],
+            created_at=datetime(2026, 4, 1, tzinfo=UTC),
+        )
+        for snapshot in seed_data.product_snapshots[:2]
+    ] + [
+        FakeDocument(
+            workspace_id=seed_data.workspace_id,
+            **seed_data.product_snapshots[2].model_dump(
+                mode="python", exclude={"tracker_refs"}
+            ),
+            tracker_refs=[
+                TrackerRef(
+                    tracker_type=TrackerType.CATEGORY,
+                    tracker_code=other_tracker_code,
+                    tracker_name="Other Tracker",
+                )
+            ],
+            created_at=datetime(2026, 4, 3, tzinfo=UTC),
+        )
+    ]
+    events = [
+        FakeDocument(
+            workspace_id=seed_data.workspace_id,
+            **seed_data.events[0].model_dump(mode="python", exclude={"tracker_code"}),
+            tracker_code=target_tracker_code,
+        ),
+        FakeDocument(
+            workspace_id=seed_data.workspace_id,
+            **seed_data.events[1].model_dump(mode="python", exclude={"tracker_code"}),
+            tracker_code=other_tracker_code,
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "app.services.dashboard_query_service.ProductSnapshotDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor(snapshots),
+            workspace_id="workspace_id",
+            marketplace="marketplace",
+            asin="asin",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.dashboard_query_service.EventDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor(events),
+            workspace_id="workspace_id",
+            marketplace="marketplace",
+            asin="asin",
+        ),
+    )
+
+    response = run_async(
+        DashboardQueryService().get_product_timeline(
+            workspace_id=seed_data.workspace_id,
+            marketplace=seed_data.products[0].marketplace,
+            asin=seed_data.products[0].asin,
+            from_date=None,
+            to_date=None,
+            granularity=Timeframe.DAILY,
+            tracker_code=target_tracker_code,
+        )
+    )
+
+    assert [point.snapshot_date for point in response.points] == [
+        seed_data.product_snapshots[0].snapshot_date,
+        seed_data.product_snapshots[1].snapshot_date,
+    ]
+    assert [event.tracker_code for event in response.events] == [target_tracker_code]
+
+
+def test_product_snapshot_doc_to_model_ignores_created_at():
+    document = FakeDocument(
+        workspace_id="ws_test",
+        marketplace="amazon_de",
+        asin="B08TSF3MRG",
+        snapshot_date=date(2026, 4, 13),
+        captured_at=datetime(2026, 4, 13, 0, 0, tzinfo=UTC),
+        tracker_refs=[],
+        parent_asin=None,
+        brand="Philips",
+        title="Philips Steamer",
+        title_hash="title_hash",
+        product_url="https://www.amazon.de/dp/B08TSF3MRG",
+        main_image_url="https://images.example.com/B08TSF3MRG.jpg",
+        main_image_hash="image_hash",
+        bsr_position=10,
+        price_current=39.99,
+        price_original=49.99,
+        currency="EUR",
+        coupon_text=None,
+        availability_status=AvailabilityStatus.IN_STOCK,
+        buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+        buy_box_seller_name="Amazon",
+        rating_value=4.5,
+        review_count=100,
+        variation_count=2,
+        source_refs={"provider": "APIFY"},
+        created_at=datetime(2026, 4, 13, 0, 0, tzinfo=UTC),
+    )
+
+    model = product_snapshot_doc_to_model(document)
+
+    assert model.asin == "B08TSF3MRG"
+    assert model.price_current == 39.99
+
+
 def test_run_orchestrator_dispatch_job_success(
     run_async, monkeypatch, seed_data, caplog
 ):
@@ -474,6 +598,35 @@ def test_run_orchestrator_dispatch_job_registers_webhook(
         "ACTOR.RUN.ABORTED",
         "ACTOR.RUN.TIMED_OUT",
     ]
+
+
+def test_run_orchestrator_builds_category_run_input_with_marketplace_domain():
+    tracker_document = SimpleNamespace(
+        marketplace="amazon_de",
+        scope=SimpleNamespace(browse_node_id="3098778031", browse_node_url=None),
+        tracking_config=SimpleNamespace(top_n=50),
+    )
+    job_document = FakeDocument(
+        job_code="job_cat_20260413_001",
+        tracker_type=TrackerType.CATEGORY,
+        tracker_code="ct_kaffeekannen",
+        snapshot_date=date(2026, 4, 13),
+        trigger_mode="MANUAL",
+        status=JobStatus.QUEUED,
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY, binding_code="bind_category_top50_v1"
+        ),
+        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
+        created_at=datetime(2026, 4, 13, tzinfo=UTC),
+    )
+
+    run_input = RunOrchestrator(SimpleNamespace())._build_run_input(
+        job_document, tracker_document
+    )
+
+    assert run_input["amazon_domain"] == "www.amazon.de"
+    assert run_input["search_url"] == "https://www.amazon.de/s?i=specialty-aps&rh=n%3A3098778031"
+    assert run_input["max_pages"] == 4
 
 
 def test_run_orchestrator_dispatch_job_advances_terminal_success_runs_to_importing(

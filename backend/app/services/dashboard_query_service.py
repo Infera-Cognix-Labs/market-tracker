@@ -79,6 +79,7 @@ class DashboardQueryService:
         from_date: date | None,
         to_date: date | None,
         granularity: Timeframe,
+        tracker_code: str | None = None,
     ) -> ProductTimelineResponse:
         if from_date and to_date and from_date > to_date:
             raise BadRequestError("from_date must be less than or equal to to_date.")
@@ -93,6 +94,18 @@ class DashboardQueryService:
             EventDocument.marketplace == marketplace,
             EventDocument.asin == asin,
         ).to_list()
+
+        if tracker_code is not None:
+            snapshot_documents = [
+                document
+                for document in snapshot_documents
+                if any(ref.tracker_code == tracker_code for ref in document.tracker_refs)
+            ]
+            event_documents = [
+                document
+                for document in event_documents
+                if document.tracker_code == tracker_code
+            ]
 
         return build_product_timeline_response(
             marketplace=marketplace,
