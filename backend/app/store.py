@@ -213,6 +213,7 @@ class BaseStore:
         from_date: date | None,
         to_date: date | None,
         granularity: Timeframe,
+        tracker_code: str | None = None,
     ) -> ProductTimelineResponse:
         raise NotImplementedError
 
@@ -569,6 +570,7 @@ class MongoStore(BaseStore):
         from_date: date | None,
         to_date: date | None,
         granularity: Timeframe,
+        tracker_code: str | None = None,
     ) -> ProductTimelineResponse:
         return await self.dashboard_query.get_product_timeline(
             workspace_id=workspace_id,
@@ -577,6 +579,7 @@ class MongoStore(BaseStore):
             from_date=from_date,
             to_date=to_date,
             granularity=granularity,
+            tracker_code=tracker_code,
         )
 
     async def list_events(
