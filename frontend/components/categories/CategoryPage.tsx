@@ -247,6 +247,8 @@ export const CategoryPage = () => {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
 
   // Load trackers
   useEffect(() => {
@@ -265,7 +267,9 @@ export const CategoryPage = () => {
       .then(snap => { if (!cancelled) { setSnapshot(snap); setLoading(false) } })
       .catch(() => { if (!cancelled) { setSnapshot(null); setLoading(false) } })
     return () => { cancelled = true }
-  }, [selectedCode])
+  }, [selectedCode, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
   const selectedTracker = trackers.find(t => t.tracker_code === selectedCode)
 
@@ -310,16 +314,32 @@ export const CategoryPage = () => {
           </div>
         } />
 
-      {/* Tracker selector tabs */}
+      {/* Tracker selector */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+        {(["ACTIVE", "PAUSED", "ARCHIVED"] as const).map(s => {
+          const sc = statusColor(s)
+          const count = trackers.filter(t => (t.status ?? "ACTIVE") === s).length
+          if (count === 0) return null
+          return (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${statusFilter === s ? sc : T.border}`, background: statusFilter === s ? `${sc}18` : T.bg2, color: statusFilter === s ? sc : T.text3, fontSize: 11, fontFamily: T.mono, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+              {s} <span style={{ opacity: .7 }}>({count})</span>
+            </button>
+          )
+        })}
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {trackers.map(t => (
-          <button key={t.tracker_code} onClick={() => { setSnapshot(null); setLoading(true); setSelectedCode(t.tracker_code) }}
-            style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${t.tracker_code === selectedCode ? T.amber : T.border}`, background: t.tracker_code === selectedCode ? T.bg4 : T.bg2, color: t.tracker_code === selectedCode ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
-            {t.tracker_code === selectedCode && <span className="dot-live" />}
-            {t.name}
-            <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>({t.status})</span>
-          </button>
-        ))}
+        {trackers.filter(t => (t.status ?? "ACTIVE") === statusFilter).map(t => {
+          const sc = statusColor(t.status)
+          const isSelected = t.tracker_code === selectedCode
+          return (
+            <button key={t.tracker_code} onClick={() => { setSnapshot(null); setLoading(true); setSelectedCode(t.tracker_code); setRefreshKey(k => k + 1) }}
+              style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? sc : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? sc : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
+              {isSelected && <span className="dot-live" style={{ background: sc, boxShadow: `0 0 0 3px ${sc}30` }} />}
+              {t.name}
+            </button>
+          )
+        })}
       </div>
 
       {/* Tracker info card */}
@@ -418,7 +438,7 @@ export const CategoryPage = () => {
             </thead>
             <tbody>
               {filtered.map((p: CategorySnapshotProduct) => (
-                <tr key={p.asin} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
+                <tr key={p.rank_position} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: p.rank_position <= 10 ? 700 : 400, color: p.rank_position <= 10 ? T.amber : T.text1 }}>
                     {String(p.rank_position).padStart(2, "0")}
                   </td>
