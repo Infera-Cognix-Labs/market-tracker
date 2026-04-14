@@ -456,6 +456,8 @@ export const CompetitorPage = () => {
   const [showEdit, setShowEdit] = useState(false)
   const [showManageAsins, setShowManageAsins] = useState(false)
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("DAILY")
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
 
   // Load tracker list only
   useEffect(() => {
@@ -480,7 +482,7 @@ export const CompetitorPage = () => {
         }
       })
     return () => { cancelled = true }
-  }, [selectedCode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedCode, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tracker = trackerDetail ?? trackers.find(t => t.tracker_code === selectedCode) ?? null
   const products = tracker?.tracked_products || []
@@ -505,6 +507,8 @@ export const CompetitorPage = () => {
     load()
     return () => { cancelled = true }
   }, [selectedProduct, tracker, chartTimeframe])
+
+  const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
   if (trackers.length === 0) return (
@@ -587,24 +591,42 @@ export const CompetitorPage = () => {
           </div>
         } />
 
-      {/* Tracker selector tabs */}
+      {/* Tracker selector */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+        {(["ACTIVE", "PAUSED", "ARCHIVED"] as const).map(s => {
+          const sc = statusColor(s)
+          const count = trackers.filter(t => (t.status ?? "ACTIVE") === s).length
+          if (count === 0) return null
+          return (
+            <button key={s} onClick={() => setStatusFilter(s)}
+              style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${statusFilter === s ? sc : T.border}`, background: statusFilter === s ? `${sc}18` : T.bg2, color: statusFilter === s ? sc : T.text3, fontSize: 11, fontFamily: T.mono, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+              {s} <span style={{ opacity: .7 }}>({count})</span>
+            </button>
+          )
+        })}
+      </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {trackers.map(t => (
-          <button key={t.tracker_code} onClick={() => {
-              setTrackerDetail(null)
-              setSelectedAsinIdx(0)
-              setProductDetail(null)
-              setTimeline(null)
-              setEvents([])
-              setLoadingDetail(true)
-              setSelectedCode(t.tracker_code)
-            }}
-            style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${t.tracker_code === selectedCode ? T.amber : T.border}`, background: t.tracker_code === selectedCode ? T.bg4 : T.bg2, color: t.tracker_code === selectedCode ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
-            {t.tracker_code === selectedCode && <span className="dot-live" />}
-            {t.name}
-            <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>({t.marketplace})</span>
-          </button>
-        ))}
+        {trackers.filter(t => (t.status ?? "ACTIVE") === statusFilter).map(t => {
+          const sc = statusColor(t.status)
+          const isSelected = t.tracker_code === selectedCode
+          return (
+            <button key={t.tracker_code} onClick={() => {
+                setTrackerDetail(null)
+                setSelectedAsinIdx(0)
+                setProductDetail(null)
+                setTimeline(null)
+                setEvents([])
+                setLoadingDetail(true)
+                setSelectedCode(t.tracker_code)
+                setRefreshKey(k => k + 1)
+              }}
+              style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? sc : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? sc : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
+              {isSelected && <span className="dot-live" style={{ background: sc, boxShadow: `0 0 0 3px ${sc}30` }} />}
+              {t.name}
+              <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>({t.marketplace})</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Tracker Info Header */}
@@ -642,7 +664,7 @@ export const CompetitorPage = () => {
             {loadingDetail ? "Loading…" : `${products.length} ASINs tracked`}
           </div>
           {products.map((p: TrackedProductSummary, i: number) => (
-            <div key={p.asin} className="row-hover" onClick={() => setSelectedAsinIdx(i)}
+            <div key={i} className="row-hover" onClick={() => setSelectedAsinIdx(i)}
               style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === selectedAsinIdx ? T.bg4 : T.bg2, border: `1px solid ${i === selectedAsinIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
               <div style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3 }}>{p.asin}</div>
               <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
