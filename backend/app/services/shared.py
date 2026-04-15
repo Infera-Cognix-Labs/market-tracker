@@ -9,6 +9,7 @@ from app.core.utils import slugify, utc_now
 from app.models.api import (
     CategoryHighlight,
     CategorySnapshot,
+    CategorySnapshotProduct,
     CategoryTracker,
     CompetitorHighlight,
     CompetitorTracker,
@@ -64,8 +65,20 @@ def category_doc_to_model(document: CategoryTrackerDocument) -> CategoryTracker:
 
 
 def snapshot_doc_to_model(document: CategorySnapshotDocument) -> CategorySnapshot:
-    return CategorySnapshot.model_validate(
+    snapshot = CategorySnapshot.model_validate(
         document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+    )
+    deduped_products = _dedupe_category_snapshot_products(snapshot.products)
+    if len(deduped_products) == len(snapshot.products):
+        return snapshot
+
+    return snapshot.model_copy(
+        update={
+            "products": deduped_products,
+            "summary": snapshot.summary.model_copy(
+                update={"asin_count": len(deduped_products)}
+            ),
+        }
     )
 
 
@@ -233,6 +246,23 @@ def build_top_threats(
         )
 
     return threats[:5]
+
+
+def _dedupe_category_snapshot_products(
+    products: list[CategorySnapshotProduct],
+) -> list[CategorySnapshotProduct]:
+    deduped_products: list[CategorySnapshotProduct] = []
+    seen_asins: set[str] = set()
+
+    for product in products:
+        if product.asin in seen_asins:
+            continue
+        seen_asins.add(product.asin)
+        deduped_products.append(
+            product.model_copy(update={"rank_position": len(deduped_products) + 1})
+        )
+
+    return deduped_products
 
 
 def build_dashboard_overview(

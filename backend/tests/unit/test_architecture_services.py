@@ -39,7 +39,7 @@ from app.services.normalization_service import (
 from app.services.result_importer_service import ResultImporterService, TrackerContext
 from app.services.snapshot_service import SnapshotService
 from app.services.run_orchestrator import RunOrchestrator
-from app.services.shared import product_snapshot_doc_to_model
+from app.services.shared import product_snapshot_doc_to_model, snapshot_doc_to_model
 from app.store import MongoStore
 
 
@@ -1181,7 +1181,7 @@ def test_result_importer_process_pending_jobs_handles_naive_run_finished_at(
     monkeypatch.setattr(
         "app.services.result_importer_service.ApifyRunDocument",
         SimpleNamespace(
-            find_one=_async_return(run_document),
+            find=lambda *args, **kwargs: FakeCursor([run_document]),
             workspace_id="workspace_id",
             tracking_job_code="tracking_job_code",
         ),
@@ -1223,6 +1223,336 @@ def test_result_importer_process_pending_jobs_handles_naive_run_finished_at(
     assert run_document.finished_at.tzinfo == UTC
     assert saved_finished_at_values[0].tzinfo == UTC
     assert tracker_updates == [JobStatus.SUCCESS]
+
+
+def test_result_importer_redispatches_category_run_when_unique_coverage_is_low(
+    run_async, monkeypatch
+):
+    job_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        job_code="job_import_coverage_001",
+        tracker_type=TrackerType.CATEGORY,
+        tracker_code="ct_demo",
+        snapshot_date=date(2026, 4, 6),
+        status=JobStatus.IMPORTING,
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY,
+            binding_code="bind_category_top50_v1",
+        ),
+        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
+        error=None,
+        created_at=datetime(2026, 4, 6, 2, 0, tzinfo=UTC),
+        started_at=datetime(2026, 4, 6, 2, 0, tzinfo=UTC),
+        finished_at=None,
+        external_run=None,
+    )
+    latest_run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_import_coverage_001",
+        apify_run_id="apify_run_test_010",
+        status=ExternalRunStatus.SUCCEEDED.value,
+        default_dataset_id="dataset_test_010",
+        run_input={"max_pages": 4, "top_n": 50, "search_url": "https://example.com"},
+        created_at=datetime(2026, 4, 6, 2, 5, tzinfo=UTC),
+        updated_at=datetime(2026, 4, 6, 2, 5, tzinfo=UTC),
+        finished_at=datetime(2026, 4, 6, 2, 10, tzinfo=UTC),
+    )
+    older_run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_import_coverage_001",
+        apify_run_id="apify_run_test_009",
+        status=ExternalRunStatus.SUCCEEDED.value,
+        default_dataset_id="dataset_test_009",
+        run_input={"max_pages": 3, "top_n": 50, "search_url": "https://example.com"},
+        created_at=datetime(2026, 4, 6, 2, 4, tzinfo=UTC),
+        updated_at=datetime(2026, 4, 6, 2, 4, tzinfo=UTC),
+        finished_at=datetime(2026, 4, 6, 2, 9, tzinfo=UTC),
+    )
+
+    saved_statuses: list[JobStatus] = []
+    inserted_runs: list[object] = []
+
+    async def fake_job_save(self, *args, **kwargs):
+        saved_statuses.append(JobStatus(self.status))
+
+    job_document.save = fake_job_save.__get__(job_document, FakeDocument)
+
+    class FakeApifyRunDocument:
+        workspace_id = "workspace_id"
+        tracking_job_code = "tracking_job_code"
+
+        @staticmethod
+        def find(*args, **kwargs):
+            return FakeCursor([older_run_document, latest_run_document])
+
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        async def insert(self):
+            inserted_runs.append(self)
+
+    monkeypatch.setattr(
+        "app.services.result_importer_service.JobDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor([job_document]),
+            status="status",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.result_importer_service.ApifyRunDocument",
+        FakeApifyRunDocument,
+    )
+
+    normalization_service = SimpleNamespace(
+        normalize_items=lambda **kwargs: NormalizationResult(
+            records=[
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin=f"B0UNIQUE{i:04d}",
+                    rank_position=i,
+                    captured_at=datetime(2026, 4, 6, 2, 10, tzinfo=UTC),
+                    brand="Brand",
+                    title=f"Product {i}",
+                    product_url=f"https://www.amazon.de/dp/B0UNIQUE{i:04d}",
+                    main_image_url=f"https://images.example.com/B0UNIQUE{i:04d}.jpg",
+                    title_hash=f"title_hash_{i}",
+                    main_image_hash=f"image_hash_{i}",
+                    bsr_position=i,
+                    price_current=19.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller",
+                    rating_value=4.5,
+                    review_count=42,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=i,
+                )
+                for i in range(1, 41)
+            ],
+            invalid_count=0,
+        )
+    )
+
+    dispatched_inputs: list[dict[str, object]] = []
+
+    class Gateway:
+        async def start_run(self, binding_code, run_input, webhooks=None):
+            dispatched_inputs.append(
+                {
+                    "binding_code": binding_code,
+                    "run_input": run_input,
+                    "webhooks": webhooks,
+                }
+            )
+            return ApifyRunLaunch(
+                provider_run_id="apify_run_test_011",
+                default_dataset_id="dataset_test_011",
+                status=ExternalRunStatus.READY,
+                raw_status="READY",
+                started_at="2026-04-06T02:10:30Z",
+                finished_at=None,
+                input_hash="hash_retry_011",
+                binding=SimpleNamespace(
+                    binding_code=binding_code,
+                    actor_id="owner/category-actor",
+                    task_id=None,
+                ),
+                run_input=run_input,
+            )
+
+    snapshot_service = SimpleNamespace(
+        persist_snapshots=lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("should not persist snapshots before expanded crawl finishes")
+        )
+    )
+    event_engine = SimpleNamespace(
+        generate_events_for_job=lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("should not emit events before expanded crawl finishes")
+        )
+    )
+
+    service = ResultImporterService(
+        gateway=Gateway(),
+        normalization_service=normalization_service,
+        snapshot_service=snapshot_service,
+        event_engine=event_engine,
+        config=Config().apify_config,
+        storage_config=Config().storage_config,
+    )
+
+    async def fake_load_or_import_raw_items(**kwargs):
+        return [SimpleNamespace(payload={"asin": "B0UNIQUE0001"})], 40
+
+    async def fake_load_tracker_context(**kwargs):
+        return TrackerContext(
+            tracker_type=TrackerType.CATEGORY,
+            marketplace="amazon_de",
+            category_top_n=50,
+        )
+
+    async def fake_update_tracker_stats(**kwargs):
+        raise AssertionError("tracker stats should not be updated while crawl is expanding")
+
+    service._load_or_import_raw_items = fake_load_or_import_raw_items
+    service._load_tracker_context = fake_load_tracker_context
+    service._update_tracker_stats = fake_update_tracker_stats
+
+    result = run_async(service.process_pending_jobs())
+
+    assert result.processed_jobs == 1
+    assert result.succeeded_jobs == 0
+    assert result.partial_jobs == 0
+    assert result.failed_jobs == 0
+    assert dispatched_inputs[0]["binding_code"] == "bind_category_top50_v1"
+    assert dispatched_inputs[0]["run_input"]["max_pages"] == 5
+    assert inserted_runs[0].origin == "IMPORT_RETRY"
+    assert inserted_runs[0].apify_run_id == "apify_run_test_011"
+    assert job_document.status == JobStatus.RUNNING_EXTERNAL
+    assert job_document.external_run.provider_run_id == "apify_run_test_011"
+    assert job_document.summary.expected_items == 40
+    assert job_document.summary.imported_items == 40
+    assert saved_statuses == [JobStatus.PROCESSING, JobStatus.RUNNING_EXTERNAL]
+
+
+def test_result_importer_marks_partial_success_when_category_unique_coverage_stays_low(
+    run_async, monkeypatch
+):
+    job_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        job_code="job_import_coverage_002",
+        tracker_type=TrackerType.CATEGORY,
+        tracker_code="ct_demo",
+        snapshot_date=date(2026, 4, 7),
+        status=JobStatus.IMPORTING,
+        run_strategy=JobRunStrategy(
+            provider=Provider.APIFY,
+            binding_code="bind_category_top50_v1",
+        ),
+        summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
+        error=None,
+        created_at=datetime(2026, 4, 7, 2, 0, tzinfo=UTC),
+        started_at=datetime(2026, 4, 7, 2, 0, tzinfo=UTC),
+        finished_at=None,
+        external_run=None,
+    )
+    run_document = FakeDocument(
+        workspace_id="ws_demo_us",
+        tracking_job_code="job_import_coverage_002",
+        apify_run_id="apify_run_test_012",
+        status=ExternalRunStatus.SUCCEEDED.value,
+        default_dataset_id="dataset_test_012",
+        run_input={"max_pages": 10, "top_n": 50, "search_url": "https://example.com"},
+        created_at=datetime(2026, 4, 7, 2, 5, tzinfo=UTC),
+        updated_at=datetime(2026, 4, 7, 2, 5, tzinfo=UTC),
+        finished_at=datetime(2026, 4, 7, 2, 10, tzinfo=UTC),
+    )
+
+    saved_statuses: list[JobStatus] = []
+    tracker_updates: list[JobStatus] = []
+    persisted_snapshots: list[str] = []
+    generated_events: list[str] = []
+
+    async def fake_job_save(self, *args, **kwargs):
+        saved_statuses.append(JobStatus(self.status))
+
+    job_document.save = fake_job_save.__get__(job_document, FakeDocument)
+
+    monkeypatch.setattr(
+        "app.services.result_importer_service.JobDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor([job_document]),
+            status="status",
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.result_importer_service.ApifyRunDocument",
+        SimpleNamespace(
+            find=lambda *args, **kwargs: FakeCursor([run_document]),
+            workspace_id="workspace_id",
+            tracking_job_code="tracking_job_code",
+        ),
+    )
+
+    normalization_service = SimpleNamespace(
+        normalize_items=lambda **kwargs: NormalizationResult(
+            records=[
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin=f"B0LOWUNIQ{i:04d}",
+                    rank_position=i,
+                    captured_at=datetime(2026, 4, 7, 2, 10, tzinfo=UTC),
+                    brand="Brand",
+                    title=f"Product {i}",
+                    product_url=f"https://www.amazon.de/dp/B0LOWUNIQ{i:04d}",
+                    main_image_url=f"https://images.example.com/B0LOWUNIQ{i:04d}.jpg",
+                    title_hash=f"title_hash_{i}",
+                    main_image_hash=f"image_hash_{i}",
+                    bsr_position=i,
+                    price_current=19.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller",
+                    rating_value=4.5,
+                    review_count=42,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=i,
+                )
+                for i in range(1, 39)
+            ],
+            invalid_count=0,
+        )
+    )
+
+    async def fake_persist_snapshots(**kwargs):
+        persisted_snapshots.append(kwargs["apify_run_id"])
+
+    async def fake_generate_events_for_job(**kwargs):
+        generated_events.append(kwargs["job_document"].job_code)
+        return 0
+
+    service = ResultImporterService(
+        gateway=SimpleNamespace(),
+        normalization_service=normalization_service,
+        snapshot_service=SimpleNamespace(persist_snapshots=fake_persist_snapshots),
+        event_engine=SimpleNamespace(generate_events_for_job=fake_generate_events_for_job),
+        config=Config().apify_config,
+        storage_config=Config().storage_config,
+    )
+
+    async def fake_load_or_import_raw_items(**kwargs):
+        return [SimpleNamespace(payload={"asin": "B0LOWUNIQ0001"})], 38
+
+    async def fake_load_tracker_context(**kwargs):
+        return TrackerContext(
+            tracker_type=TrackerType.CATEGORY,
+            marketplace="amazon_de",
+            category_top_n=50,
+        )
+
+    async def fake_update_tracker_stats(**kwargs):
+        tracker_updates.append(kwargs["final_status"])
+
+    service._load_or_import_raw_items = fake_load_or_import_raw_items
+    service._load_tracker_context = fake_load_tracker_context
+    service._update_tracker_stats = fake_update_tracker_stats
+
+    result = run_async(service.process_pending_jobs())
+
+    assert result.partial_jobs == 1
+    assert job_document.status == JobStatus.PARTIAL_SUCCESS
+    assert job_document.error.code == "CATEGORY_UNIQUE_INSUFFICIENT"
+    assert persisted_snapshots == ["apify_run_test_012"]
+    assert generated_events == ["job_import_coverage_002"]
+    assert tracker_updates == [JobStatus.PARTIAL_SUCCESS]
+    assert saved_statuses == [JobStatus.PROCESSING, JobStatus.PARTIAL_SUCCESS]
 
 
 def test_snapshot_service_uses_top_list_position_for_category_snapshot_rank(
@@ -1318,6 +1648,268 @@ def test_snapshot_service_uses_top_list_position_for_category_snapshot_rank(
     assert inserted_snapshots[0].products[0].rank_position == 1
     assert tracker_document.latest_snapshot_summary is not None
     assert tracker_document.latest_snapshot_summary.top10_asins == ["B0TEST1234"]
+
+
+def test_snapshot_service_dedupes_duplicate_asins_in_category_snapshot(
+    run_async, monkeypatch
+):
+    inserted_snapshots: list[object] = []
+
+    class FakeCategoryTrackerDocument(FakeDocument):
+        pass
+
+    tracker_document = FakeCategoryTrackerDocument(
+        name="Tracker",
+        marketplace="amazon_de",
+        scope=SimpleNamespace(browse_node_id="3169451", browse_node_url=None),
+        tracking_config=SimpleNamespace(top_n=3),
+        latest_snapshot_summary=None,
+        updated_at=datetime(2026, 4, 13, 19, 34, tzinfo=UTC),
+    )
+
+    async def fake_tracker_save(self, *args, **kwargs):
+        return None
+
+    tracker_document.save = fake_tracker_save.__get__(tracker_document, FakeDocument)
+
+    class FakeCategorySnapshotDocument:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+        async def insert(self):
+            inserted_snapshots.append(self)
+
+    class SnapshotDocumentFactory:
+        workspace_id = "workspace_id"
+        tracker_code = "tracker_code"
+        snapshot_date = "snapshot_date"
+
+        @staticmethod
+        async def find_one(*args, **kwargs):
+            return None
+
+        def __new__(cls, **kwargs):
+            return FakeCategorySnapshotDocument(**kwargs)
+
+    monkeypatch.setattr(
+        "app.services.snapshot_service.CategorySnapshotDocument",
+        SnapshotDocumentFactory,
+    )
+    monkeypatch.setattr(
+        "app.services.snapshot_service.CategoryTrackerDocument",
+        FakeCategoryTrackerDocument,
+    )
+
+    service = SnapshotService()
+    result = run_async(
+        service._upsert_category_snapshot(
+            workspace_id="ws_demo_us",
+            snapshot_date=date(2026, 4, 13),
+            tracker_code="ct_elektrische_zitruspressen",
+            tracker_document=tracker_document,
+            records=[
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin="B0FIRST123",
+                    rank_position=1,
+                    captured_at=datetime(2026, 4, 13, 19, 34, tzinfo=UTC),
+                    brand="Brand A",
+                    title="First product",
+                    product_url="https://www.amazon.de/dp/B0FIRST123",
+                    main_image_url="https://images.example.com/B0FIRST123.jpg",
+                    title_hash="title_hash_1",
+                    main_image_hash="image_hash_1",
+                    bsr_position=1,
+                    price_current=79.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller A",
+                    rating_value=4.7,
+                    review_count=120,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=0,
+                ),
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin="B0FIRST123",
+                    rank_position=2,
+                    captured_at=datetime(2026, 4, 13, 19, 34, tzinfo=UTC),
+                    brand="Brand A",
+                    title="First product duplicate",
+                    product_url="https://www.amazon.de/dp/B0FIRST123",
+                    main_image_url="https://images.example.com/B0FIRST123.jpg",
+                    title_hash="title_hash_1_dup",
+                    main_image_hash="image_hash_1",
+                    bsr_position=2,
+                    price_current=79.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller A",
+                    rating_value=4.7,
+                    review_count=120,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=1,
+                ),
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin="B0SECOND12",
+                    rank_position=3,
+                    captured_at=datetime(2026, 4, 13, 19, 34, tzinfo=UTC),
+                    brand="Brand B",
+                    title="Second product",
+                    product_url="https://www.amazon.de/dp/B0SECOND12",
+                    main_image_url="https://images.example.com/B0SECOND12.jpg",
+                    title_hash="title_hash_2",
+                    main_image_hash="image_hash_2",
+                    bsr_position=3,
+                    price_current=69.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller B",
+                    rating_value=4.6,
+                    review_count=80,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=2,
+                ),
+                NormalizedProductRecord(
+                    marketplace="amazon_de",
+                    asin="B0THIRD1234",
+                    rank_position=4,
+                    captured_at=datetime(2026, 4, 13, 19, 34, tzinfo=UTC),
+                    brand="Brand C",
+                    title="Third product",
+                    product_url="https://www.amazon.de/dp/B0THIRD1234",
+                    main_image_url="https://images.example.com/B0THIRD1234.jpg",
+                    title_hash="title_hash_3",
+                    main_image_hash="image_hash_3",
+                    bsr_position=4,
+                    price_current=59.99,
+                    price_original=None,
+                    currency="EUR",
+                    coupon_text=None,
+                    availability_status=AvailabilityStatus.IN_STOCK,
+                    buy_box_status=BuyBoxStatus.HAS_BUY_BOX,
+                    buy_box_seller_name="Seller C",
+                    rating_value=4.5,
+                    review_count=60,
+                    variation_count=1,
+                    source_batch_no=1,
+                    source_item_index=3,
+                ),
+            ],
+            apify_run_id="apify_run_test_013",
+            dataset_id="dataset_test_013",
+        )
+    )
+
+    assert result is True
+    assert [product.asin for product in inserted_snapshots[0].products] == [
+        "B0FIRST123",
+        "B0SECOND12",
+        "B0THIRD1234",
+    ]
+    assert [product.rank_position for product in inserted_snapshots[0].products] == [
+        1,
+        2,
+        3,
+    ]
+    assert tracker_document.latest_snapshot_summary is not None
+    assert tracker_document.latest_snapshot_summary.top10_asins == [
+        "B0FIRST123",
+        "B0SECOND12",
+        "B0THIRD1234",
+    ]
+
+
+def test_snapshot_doc_to_model_dedupes_existing_duplicate_snapshot_products():
+    snapshot = snapshot_doc_to_model(
+        FakeDocument(
+            tracker_code="ct_elektrische_zitruspressen",
+            marketplace="amazon_de",
+            browse_node_id="3169451",
+            snapshot_date=date(2026, 4, 13),
+            captured_at=datetime(2026, 4, 13, 19, 34, tzinfo=UTC),
+            top_n=50,
+            products=[
+                {
+                    "asin": "B0FIRST123",
+                    "rank_position": 1,
+                    "title": "First product",
+                    "brand": "Brand A",
+                    "product_url": "https://www.amazon.de/dp/B0FIRST123",
+                    "price_current": 79.99,
+                    "price_original": None,
+                    "currency": "EUR",
+                    "rating_value": 4.7,
+                    "review_count": 120,
+                    "image_url": "https://images.example.com/B0FIRST123.jpg",
+                    "availability_status": AvailabilityStatus.IN_STOCK,
+                    "buy_box_status": BuyBoxStatus.HAS_BUY_BOX,
+                    "coupon_text": None,
+                },
+                {
+                    "asin": "B0FIRST123",
+                    "rank_position": 2,
+                    "title": "First product duplicate",
+                    "brand": "Brand A",
+                    "product_url": "https://www.amazon.de/dp/B0FIRST123",
+                    "price_current": 79.99,
+                    "price_original": None,
+                    "currency": "EUR",
+                    "rating_value": 4.7,
+                    "review_count": 120,
+                    "image_url": "https://images.example.com/B0FIRST123.jpg",
+                    "availability_status": AvailabilityStatus.IN_STOCK,
+                    "buy_box_status": BuyBoxStatus.HAS_BUY_BOX,
+                    "coupon_text": None,
+                },
+                {
+                    "asin": "B0SECOND12",
+                    "rank_position": 3,
+                    "title": "Second product",
+                    "brand": "Brand B",
+                    "product_url": "https://www.amazon.de/dp/B0SECOND12",
+                    "price_current": 69.99,
+                    "price_original": None,
+                    "currency": "EUR",
+                    "rating_value": 4.6,
+                    "review_count": 80,
+                    "image_url": "https://images.example.com/B0SECOND12.jpg",
+                    "availability_status": AvailabilityStatus.IN_STOCK,
+                    "buy_box_status": BuyBoxStatus.HAS_BUY_BOX,
+                    "coupon_text": None,
+                },
+            ],
+            summary={
+                "asin_count": 3,
+                "new_entrant_count": 0,
+                "returning_count": 0,
+                "exit_count": 0,
+                "enter_top10_count": 0,
+                "exit_top10_count": 0,
+            },
+            source_refs={"provider": "APIFY"},
+        )
+    )
+
+    assert [product.asin for product in snapshot.products] == [
+        "B0FIRST123",
+        "B0SECOND12",
+    ]
+    assert [product.rank_position for product in snapshot.products] == [1, 2]
+    assert snapshot.summary.asin_count == 2
 
 
 def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_context(

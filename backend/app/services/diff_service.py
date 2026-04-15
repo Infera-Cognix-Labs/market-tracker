@@ -77,15 +77,20 @@ class DiffService:
             if history_snapshots
             else None
         )
+        current_products = _dedupe_category_snapshot_products(
+            current_snapshot.products
+        )
+        previous_products = (
+            _dedupe_category_snapshot_products(previous_snapshot.products)
+            if previous_snapshot is not None
+            else []
+        )
 
         current_rank_map = {
-            product.asin: product.rank_position for product in current_snapshot.products
+            product.asin: product.rank_position for product in current_products
         }
         previous_rank_map = (
-            {
-                product.asin: product.rank_position
-                for product in previous_snapshot.products
-            }
+            {product.asin: product.rank_position for product in previous_products}
             if previous_snapshot is not None
             else {}
         )
@@ -93,7 +98,7 @@ class DiffService:
         # Keep the most recent observed date for each ASIN in historical snapshots.
         historical_last_seen: dict[str, date] = {}
         for snapshot in history_snapshots:
-            for product in snapshot.products:
+            for product in _dedupe_category_snapshot_products(snapshot.products):
                 last_seen = historical_last_seen.get(product.asin)
                 if last_seen is None or snapshot.snapshot_date > last_seen:
                     historical_last_seen[product.asin] = snapshot.snapshot_date
@@ -400,3 +405,16 @@ class DiffService:
                 )
 
         return candidates
+
+
+def _dedupe_category_snapshot_products(products):
+    deduped_products = []
+    seen_asins: set[str] = set()
+
+    for product in sorted(products, key=lambda item: item.rank_position):
+        if product.asin in seen_asins:
+            continue
+        seen_asins.add(product.asin)
+        deduped_products.append(product)
+
+    return deduped_products
