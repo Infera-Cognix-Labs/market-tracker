@@ -114,6 +114,71 @@ def test_diff_service_generates_category_and_product_candidates(run_async, monke
     assert EventType.BUY_BOX_CHANGED in event_types
 
 
+def test_diff_service_dedupes_duplicate_products_in_category_snapshots(
+    run_async, monkeypatch
+):
+    snapshot_date = date(2026, 4, 8)
+
+    current_category_snapshot = SimpleNamespace(
+        marketplace="amazon_us",
+        captured_at=datetime(2026, 4, 8, 3, 0, tzinfo=UTC),
+        products=[
+            SimpleNamespace(asin="B0AAA11111", rank_position=9),
+            SimpleNamespace(asin="B0AAA11111", rank_position=12),
+            SimpleNamespace(asin="B0BBB22222", rank_position=18),
+        ],
+    )
+    previous_category_snapshot = SimpleNamespace(
+        snapshot_date=date(2026, 4, 7),
+        products=[
+            SimpleNamespace(asin="B0AAA11111", rank_position=14),
+            SimpleNamespace(asin="B0AAA11111", rank_position=21),
+            SimpleNamespace(asin="B0CCC33333", rank_position=47),
+        ],
+    )
+
+    async def fake_category_find_one(*args, **kwargs):
+        return current_category_snapshot
+
+    def fake_category_find(*args, **kwargs):
+        return FakeCursor([previous_category_snapshot])
+
+    def fake_product_find(query):
+        return FakeCursor([])
+
+    monkeypatch.setattr(
+        "app.services.diff_service.CategorySnapshotDocument",
+        SimpleNamespace(
+            find_one=fake_category_find_one,
+            find=fake_category_find,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.services.diff_service.ProductSnapshotDocument",
+        SimpleNamespace(find=fake_product_find),
+    )
+
+    candidates = run_async(
+        DiffService().build_candidates(
+            workspace_id="ws_demo_us",
+            tracker_type=TrackerType.CATEGORY,
+            tracker_code="ct_demo",
+            snapshot_date=snapshot_date,
+        )
+    )
+
+    enter_top10_candidates = [
+        item
+        for item in candidates
+        if item.event_type == EventType.ENTER_TOP10 and item.asin == "B0AAA11111"
+    ]
+    assert len(enter_top10_candidates) == 1
+    assert enter_top10_candidates[0].metadata == {
+        "previous_rank": 14,
+        "current_rank": 9,
+    }
+
+
 def test_event_engine_deduplicates_and_inserts_new_events(run_async, monkeypatch):
     snapshot_date = date(2026, 4, 8)
     now = datetime(2026, 4, 8, 4, 0, tzinfo=UTC)

@@ -254,6 +254,10 @@ class SnapshotService:
             ),
         )
         top_n = tracker_document.tracking_config.top_n
+        unique_top_records = _dedupe_category_records(
+            sorted_records,
+            limit=top_n,
+        )
         products = [
             CategorySnapshotProduct(
                 asin=record.asin,
@@ -271,7 +275,7 @@ class SnapshotService:
                 buy_box_status=record.buy_box_status,
                 coupon_text=record.coupon_text,
             )
-            for index, record in enumerate(sorted_records[:top_n], start=1)
+            for index, record in enumerate(unique_top_records, start=1)
         ]
 
         payload = {
@@ -327,3 +331,22 @@ def _merge_tracker_refs(existing_refs, new_ref: TrackerRef) -> list[TrackerRef]:
     merged = {(ref.tracker_type, ref.tracker_code): ref for ref in existing_refs}
     merged[(new_ref.tracker_type, new_ref.tracker_code)] = new_ref
     return list(merged.values())
+
+
+def _dedupe_category_records(
+    records: list[NormalizedProductRecord],
+    *,
+    limit: int,
+) -> list[NormalizedProductRecord]:
+    unique_records: list[NormalizedProductRecord] = []
+    seen_asins: set[str] = set()
+
+    for record in records:
+        if record.asin in seen_asins:
+            continue
+        seen_asins.add(record.asin)
+        unique_records.append(record)
+        if len(unique_records) >= limit:
+            break
+
+    return unique_records
