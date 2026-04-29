@@ -107,16 +107,16 @@ jobs:
             docker compose -f docker-compose.staging.yml --env-file .env.staging pull backend
             docker compose -f docker-compose.staging.yml --env-file .env.staging up backend -d --force-recreate
 
-            # Đợi container healthy (tối đa 90s)
+            # Đợi container healthy (tối đa 600s)
             echo "Waiting for backend health check..."
-            for i in $(seq 1 18); do
+            for i in $(seq 1 60); do
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose -f docker-compose.staging.yml --env-file .env.staging ps -q backend) 2>/dev/null || echo "starting")
-              echo "  Attempt $i/18: $STATUS"
+              echo "  Attempt $i/60: $STATUS"
               if [ "$STATUS" = "healthy" ]; then
                 echo "Backend is healthy!"
                 exit 0
               fi
-              sleep 5
+              sleep 10
             done
 
             echo "Backend failed health check — rolling back"
