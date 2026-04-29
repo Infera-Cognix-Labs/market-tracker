@@ -239,8 +239,7 @@ services:
         mkdir -v -p /opt/airflow/{logs,dags,plugins,config}
         /entrypoint airflow version
         /entrypoint airflow config list >/dev/null
-        chown -R "${AIRFLOW_UID}:0" /opt/airflow/
-        chown -v -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,dags,plugins,config}
+        chown -v -R "${AIRFLOW_UID}:0" /opt/airflow/{logs,plugins,config}
     environment:
       <<: *airflow-common-env
       _AIRFLOW_DB_MIGRATE: 'true'

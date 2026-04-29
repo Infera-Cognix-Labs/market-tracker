@@ -98,6 +98,13 @@ jobs:
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
 
+            # Airflow bind-mounts backend/dags from the host. Older airflow-init
+            # runs may have chowned those files to AIRFLOW_UID, which blocks git.
+            HOST_UID="$(id -u)"
+            HOST_GID="$(id -g)"
+            docker compose -f docker-compose.staging.yml --env-file .env.staging run --rm --no-deps --user 0 airflow-cli \
+              bash -lc "chown -R ${HOST_UID}:${HOST_GID} /opt/airflow/dags /opt/market-tracker/backend/app /opt/market-tracker/backend/app-config.yaml 2>/dev/null || true" || true
+
             TARGET_SHA="${{ github.event.pull_request.head.sha }}"
             git fetch origin
             git reset --hard ${TARGET_SHA}
@@ -155,6 +162,13 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
+
+            # Airflow bind-mounts backend/dags from the host. Older airflow-init
+            # runs may have chowned those files to AIRFLOW_UID, which blocks git.
+            HOST_UID="$(id -u)"
+            HOST_GID="$(id -g)"
+            docker compose -f docker-compose.staging.yml --env-file .env.staging run --rm --no-deps --user 0 airflow-cli \
+              bash -lc "chown -R ${HOST_UID}:${HOST_GID} /opt/airflow/dags /opt/market-tracker/backend/app /opt/market-tracker/backend/app-config.yaml 2>/dev/null || true" || true
 
             OLD_SHA=$(git rev-parse HEAD)
             TARGET_SHA="${{ github.event.pull_request.head.sha }}"
