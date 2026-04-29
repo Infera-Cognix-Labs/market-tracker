@@ -132,10 +132,6 @@ jobs:
               sleep 5
             done
 
-            echo "Backend failed health check — dumping diagnostics"
-            docker compose -f docker-compose.staging.yml --env-file .env.staging ps backend || true
-            docker compose -f docker-compose.staging.yml --env-file .env.staging logs --no-color backend || true
-
             echo "Backend failed health check — rolling back"
             docker compose -f docker-compose.staging.yml --env-file .env.staging down backend
             exit 1

@@ -45,8 +45,6 @@ Airflow worker/scheduler cần có cùng runtime context với backend:
 - `app-config.yaml`
 - secrets/env cho MongoDB, Apify, storage
 
-Neu deploy dung external MongoDB, hay truyen cung mot `MONGO_URI` cho backend va Airflow. Neu khong dung `MONGO_URI`, can dam bao `MONGO_HOST`/`MONGO_PORT` cua Airflow trung voi backend thay vi hardcode hostname noi bo nhu `mongodb`.
-
 Không cần thêm `apache-airflow` vào dependency runtime của API service. Airflow dependency chỉ cần có trong image hoặc environment của Airflow.
 
 ## Cutover đề xuất
