@@ -39,6 +39,8 @@ x-airflow-common:
       condition: service_healthy
     postgres:
       condition: service_healthy
+    mongodb:
+      condition: service_healthy
 
 services:
   # ── Frontend ──────────────────────────────────────────────────────────────────
@@ -76,7 +78,7 @@ services:
       start_period: 15s
     depends_on:
       mongodb:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -100,6 +102,7 @@ services:
       timeout: 10s
       retries: 12
       start_period: 20s
+    restart: always
     networks:
       - market-tracker-network-staging
 

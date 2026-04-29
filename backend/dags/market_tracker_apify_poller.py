@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 
 from app.airflow_config import get_airflow_dag_settings
 from app.airflow_runtime import run_apify_poller_batch_task
