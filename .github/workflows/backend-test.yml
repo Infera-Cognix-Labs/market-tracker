@@ -147,16 +147,16 @@ jobs:
             TARGET_SHA="${{ github.event.pull_request.head.sha }}"
             echo "=== ${OLD_SHA:0:7} → ${TARGET_SHA:0:7} ==="
 
+            # Stop Airflow TRƯỚC khi reset để giải phóng lock trên các file DAG
+            docker compose -f docker-compose.staging.yml --env-file .env.staging stop airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver
+
+            # Trả lại quyền sở hữu các file có thể bị Airflow container ghi đè
+            sudo chown -R $(whoami) backend/dags backend/app || true
+
             git fetch origin
             git reset --hard ${TARGET_SHA}
 
-            # Stop + start lại toàn bộ Airflow containers để clear module cache
-            docker compose -f docker-compose.staging.yml --env-file .env.staging stop airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver
+            # Start lại Airflow containers để nhận code mới + clear module cache
             docker compose -f docker-compose.staging.yml --env-file .env.staging up airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver -d
 
             echo "=== Sync complete. Airflow reloads DAGs automatically. ==="
-            # Stop rồi start lại worker + dag-processor để clear Python module cache
-            docker compose -f docker-compose.staging.yml --env-file .env.staging stop airflow-worker airflow-dag-processor
-            docker compose -f docker-compose.staging.yml --env-file .env.staging up airflow-worker airflow-dag-processor -d
-
-            echo "=== Sync complete. Airflow reloads DAGs automatically. ==="    
