@@ -69,6 +69,22 @@ mongodb:
     assert config.mongodb_config.dsn == "mongodb://env-user:env-pass@env-host:27018"
 
 
+def test_mongodb_auth_source_is_appended_when_configured(monkeypatch):
+    monkeypatch.delenv("MONGO_URI", raising=False)
+    monkeypatch.setenv("MONGO_HOST", "env-host")
+    monkeypatch.setenv("MONGO_PORT", "27018")
+    monkeypatch.setenv("MONGO_USERNAME", "env-user")
+    monkeypatch.setenv("MONGO_PASSWORD", "env-pass")
+    monkeypatch.setenv("MONGO_AUTH_SOURCE", "admin")
+
+    config = Config(seed_demo_data=False)
+
+    assert (
+        config.mongodb_config.dsn
+        == "mongodb://env-user:env-pass@env-host:27018/?authSource=admin"
+    )
+
+
 def test_importer_replays_batches_from_object_storage(run_async, tmp_path):
     storage_root = tmp_path / "object-store"
     object_storage = LocalObjectStorageService(str(storage_root))

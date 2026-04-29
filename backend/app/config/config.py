@@ -220,6 +220,9 @@ class MongoDBConfig(BaseModel):
     port: int = Field(default_factory=lambda: _env_int("MONGO_PORT", 27017) or 27017)
     username: str | None = Field(default_factory=lambda: os.getenv("MONGO_USERNAME"))
     password: str | None = Field(default_factory=lambda: os.getenv("MONGO_PASSWORD"))
+    auth_source: str | None = Field(
+        default_factory=lambda: os.getenv("MONGO_AUTH_SOURCE") or None
+    )
     database: str = Field(
         default_factory=lambda: os.getenv("MONGO_DATABASE") or "market_tracker"
     )
@@ -232,7 +235,8 @@ class MongoDBConfig(BaseModel):
         if self.username:
             password = f":{self.password}" if self.password else ""
             credentials = f"{self.username}{password}@"
-        return f"mongodb://{credentials}{self.host}:{self.port}"
+        auth_query = f"/?authSource={self.auth_source}" if self.auth_source else ""
+        return f"mongodb://{credentials}{self.host}:{self.port}{auth_query}"
 
 
 class ApifyConfig(BaseModel):
