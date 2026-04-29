@@ -126,6 +126,7 @@ jobs:
   # backend/dags, backend/app, backend/app-config.yaml được mount trực tiếp
   # từ host vào Airflow containers → chỉ cần git pull là Airflow nhận code mới,
   # không cần rebuild image.
+
   sync-airflow-files:
     name: Sync Airflow bind-mount files
     runs-on: ubuntu-latest
@@ -150,8 +151,14 @@ jobs:
             # Stop Airflow TRƯỚC khi reset để giải phóng lock trên các file DAG
             docker compose -f docker-compose.staging.yml --env-file .env.staging stop airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver
 
-            # Trả lại quyền sở hữu các file có thể bị Airflow container ghi đè
-            sudo chown -R $(whoami) backend/dags backend/app || true
+            # Trả lại quyền sở hữu các file bị Airflow container ghi đè
+            # (dùng Docker thay vì sudo — deploy user không có passwordless sudo)
+            DEPLOY_UID=$(id -u)
+            DEPLOY_GID=$(id -g)
+            docker run --rm \
+              -v "$(pwd)/backend/dags:/target/dags" \
+              -v "$(pwd)/backend/app:/target/app" \
+              alpine chown -R ${DEPLOY_UID}:${DEPLOY_GID} /target/dags /target/app
 
             git fetch origin
             git reset --hard ${TARGET_SHA}
