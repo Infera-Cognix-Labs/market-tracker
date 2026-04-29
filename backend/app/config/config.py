@@ -217,7 +217,7 @@ def _binding_int(
 class MongoDBConfig(BaseModel):
     uri: str | None = Field(default_factory=lambda: os.getenv("MONGO_URI"))
     host: str = Field(default_factory=lambda: os.getenv("MONGO_HOST") or "localhost")
-    port: int = Field(default_factory=lambda: _env_int("MONGO_PORT", 27017) or 27017)
+    port: int = Field(default_factory=lambda: _env_int("MONGO_PORT", 27019) or 27019)
     username: str | None = Field(default_factory=lambda: os.getenv("MONGO_USERNAME"))
     password: str | None = Field(default_factory=lambda: os.getenv("MONGO_PASSWORD"))
     database: str = Field(

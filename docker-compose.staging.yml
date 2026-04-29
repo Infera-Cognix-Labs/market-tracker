@@ -21,7 +21,7 @@ x-airflow-common:
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
     PYTHONPATH: /opt/market-tracker/backend
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
-    MONGO_URI: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/?authSource=admin
+    MONGO_URI: ${MONGO_URI:-mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27017}/?authSource=admin}
     #_PIP_ADDITIONAL_REQUIREMENTS: beanie motor pymongo
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/backend/dags:/opt/airflow/dags
@@ -66,7 +66,7 @@ services:
     env_file:
       - .env.staging
     environment:
-      - MONGO_URI=mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:27017/?authSource=admin
+      - MONGO_URI=${MONGO_URI:-mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27017}/?authSource=admin}
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
