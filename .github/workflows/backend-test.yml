@@ -95,11 +95,24 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            set -e
             cd ${{ secrets.DEPLOY_PATH }}
+
+            TARGET_SHA="${{ github.event.pull_request.head.sha }}"
+            git fetch origin
+            git reset --hard ${TARGET_SHA}
 
             # Cập nhật image tag trong .env.staging
             IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/backend:${{ needs.publish.outputs.image_tag }}"
             sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=${IMAGE_TAG}|" .env.staging
+
+            echo "Mongo runtime config from .env.staging"
+            grep -E '^(MONGO_HOST|MONGO_PORT|MONGO_DATABASE)=' .env.staging || true
+            if grep -q '^MONGO_URI=' .env.staging; then
+              echo "MONGO_URI is set in .env.staging"
+            else
+              echo "MONGO_URI is not set in .env.staging"
+            fi
 
             # Login registry, pull image mới
             echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ secrets.REGISTRY }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin

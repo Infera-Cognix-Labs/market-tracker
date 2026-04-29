@@ -21,7 +21,7 @@ x-airflow-common:
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
     PYTHONPATH: /opt/market-tracker/backend
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
-    MONGO_URI: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongodb:${MONGO_PORT:-27019}/?authSource=admin
+    MONGO_URI: ${MONGO_URI:-mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27017}/?authSource=admin}
     #_PIP_ADDITIONAL_REQUIREMENTS: beanie motor pymongo
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/backend/dags:/opt/airflow/dags
@@ -35,6 +35,8 @@ x-airflow-common:
     - market-tracker-network-staging
   depends_on:
     &airflow-common-depends-on
+    mongodb:
+      condition: service_healthy
     redis:
       condition: service_healthy
     postgres:
@@ -66,7 +68,7 @@ services:
     env_file:
       - .env.staging
     environment:
-      - MONGO_URI=${MONGO_URI:-mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27019}/?authSource=admin}
+      - MONGO_URI=${MONGO_URI:-mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:-mongodb}:${MONGO_PORT:-27017}/?authSource=admin}
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
@@ -76,7 +78,7 @@ services:
       start_period: 15s
     depends_on:
       mongodb:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -94,6 +96,12 @@ services:
       - mongo_data_staging:/data/db
     ports:
       - "27019:27017"
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet mongodb://127.0.0.1:27017/admin --username \"$MONGO_INITDB_ROOT_USERNAME\" --password \"$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.runCommand({ ping: 1 })\" || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
     networks:
       - market-tracker-network-staging
 
