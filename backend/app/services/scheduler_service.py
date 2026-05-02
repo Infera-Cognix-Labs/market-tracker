@@ -191,4 +191,4 @@ class SchedulerService:
     def _is_due(self, *, schedule, now: datetime) -> bool:
         if schedule.frequency != Frequency.DAILY:
             return False
-        return schedule.hour_utc == now.hour
+        return True
