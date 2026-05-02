@@ -153,10 +153,7 @@ class ResultImporterService:
         await job_document.save()
 
         run_finished_at = coerce_datetime(run_document.finished_at)
-        if (
-            run_finished_at is not None
-            and run_document.finished_at != run_finished_at
-        ):
+        if run_finished_at is not None and run_document.finished_at != run_finished_at:
             run_document.finished_at = run_finished_at
             await run_document.save()
 
@@ -221,10 +218,7 @@ class ResultImporterService:
         event_generation_latency_ms = 0.0
         category_unique_asin_count: int | None = None
 
-        if (
-            tracker_context.tracker_type == TrackerType.CATEGORY
-            and normalized.records
-        ):
+        if tracker_context.tracker_type == TrackerType.CATEGORY and normalized.records:
             category_unique_asin_count = _count_unique_asins(normalized.records)
             target_unique_count = tracker_context.category_top_n or 50
             next_max_pages = _next_category_search_max_pages(
@@ -745,7 +739,10 @@ def _current_category_search_max_pages(
     estimated_items_per_page = 16
     return max(
         1,
-        min(MAX_CATEGORY_SEARCH_PAGES, math.ceil(fallback_top_n / estimated_items_per_page)),
+        min(
+            MAX_CATEGORY_SEARCH_PAGES,
+            math.ceil(fallback_top_n / estimated_items_per_page),
+        ),
     )
 
 

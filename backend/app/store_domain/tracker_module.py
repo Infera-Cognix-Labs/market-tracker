@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 
 from app.models.api import (
     CategorySnapshot,
@@ -56,7 +55,9 @@ class TrackerModule:
     async def list_competitor_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CompetitorTrackerListResponse:
-        return await self._service.list_competitor_trackers(workspace_id, page, page_size)
+        return await self._service.list_competitor_trackers(
+            workspace_id, page, page_size
+        )
 
     async def create_competitor_tracker(
         self, workspace_id: str, payload: CompetitorTrackerCreateRequest

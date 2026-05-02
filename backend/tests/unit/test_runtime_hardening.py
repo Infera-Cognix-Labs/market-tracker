@@ -39,9 +39,7 @@ apify:
     assert config_module._read_secret(env_name="APIFY_TOKEN") == "token-from-env"
 
 
-def test_mongodb_settings_are_loaded_from_env_not_app_config(
-    monkeypatch, tmp_path
-):
+def test_mongodb_settings_are_loaded_from_env_not_app_config(monkeypatch, tmp_path):
     app_config_file = tmp_path / "app-config.yaml"
     app_config_file.write_text(
         """

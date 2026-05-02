@@ -124,9 +124,7 @@ def digest_doc_to_model(document: WeeklyDigestDocument) -> WeeklyDigest:
 
 def product_snapshot_doc_to_model(document: ProductSnapshotDocument) -> ProductSnapshot:
     return ProductSnapshot.model_validate(
-        document.model_dump(
-            exclude={"id", "workspace_id", "created_at"}, mode="python"
-        )
+        document.model_dump(exclude={"id", "workspace_id", "created_at"}, mode="python")
     )
 
 

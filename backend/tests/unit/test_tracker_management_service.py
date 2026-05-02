@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
 from types import SimpleNamespace
 
 from app.services.tracker_management_service import TrackerManagementService
@@ -62,8 +61,7 @@ def test_get_competitor_tracker_hydrates_tracked_products_from_products(
             **event.model_dump(mode="python"),
         )
         for event in seed_data.events
-        if event.marketplace == tracker.marketplace
-        and event.asin in tracked_asins
+        if event.marketplace == tracker.marketplace and event.asin in tracked_asins
     ]
     product_asins = {doc.asin for doc in all_product_docs}
 

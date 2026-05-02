@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta, datetime
+from datetime import timedelta
 
 from beanie.operators import In
 from pymongo import ASCENDING
@@ -61,11 +61,15 @@ class TrackerManagementService:
 
         reference_date = utc_now().date()
         recent_from_date = reference_date - timedelta(days=6)
-        event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id,
-            EventDocument.marketplace == tracker.marketplace,
-            In(EventDocument.asin, tracked_asins),
-        ).sort((EventDocument.snapshot_date, ASCENDING)).to_list()
+        event_docs = (
+            await EventDocument.find(
+                EventDocument.workspace_id == workspace_id,
+                EventDocument.marketplace == tracker.marketplace,
+                In(EventDocument.asin, tracked_asins),
+            )
+            .sort((EventDocument.snapshot_date, ASCENDING))
+            .to_list()
+        )
 
         refreshed_tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,

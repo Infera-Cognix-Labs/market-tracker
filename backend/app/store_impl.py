@@ -301,9 +301,7 @@ class MongoStore(BaseStore):
         self.apify_gateway = ApifyGateway(settings.apify_config)
         self.run_orchestrator = RunOrchestrator(self.apify_gateway)
 
-        self._trackers = tracker_module or TrackerModule(
-            TrackerManagementService()
-        )
+        self._trackers = tracker_module or TrackerModule(TrackerManagementService())
         self._query = query_module or QueryModule(DashboardQueryService())
 
         self._init_worker_dependencies(worker_module)
@@ -377,7 +375,9 @@ class MongoStore(BaseStore):
     async def list_category_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CategoryTrackerListResponse:
-        return await self._trackers.list_category_trackers(workspace_id, page, page_size)
+        return await self._trackers.list_category_trackers(
+            workspace_id, page, page_size
+        )
 
     async def create_category_tracker(
         self, workspace_id: str, payload: CategoryTrackerCreateRequest
@@ -409,7 +409,9 @@ class MongoStore(BaseStore):
     async def list_competitor_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CompetitorTrackerListResponse:
-        return await self._trackers.list_competitor_trackers(workspace_id, page, page_size)
+        return await self._trackers.list_competitor_trackers(
+            workspace_id, page, page_size
+        )
 
     async def create_competitor_tracker(
         self, workspace_id: str, payload: CompetitorTrackerCreateRequest

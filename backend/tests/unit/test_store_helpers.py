@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
 from app.models.api import (
     Event,
     EventPayload,
@@ -168,8 +169,6 @@ def test_dashboard_helper_ignores_inactive_trackers(seed_data):
     assert overview.category_highlights == []
     assert overview.competitor_highlights == []
 
-
-import pytest
 
 @pytest.mark.skip(reason="Requires real MongoDB connection - infrastructure test")
 def test_build_store_initializes_mongo_store(run_async, monkeypatch):

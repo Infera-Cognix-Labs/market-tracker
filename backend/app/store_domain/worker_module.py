@@ -14,8 +14,6 @@ from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.digest_service import DigestService
 from app.services.result_importer_service import ResultImporterService
 from app.services.scheduler_service import SchedulerService
-from app.services.job_service import JobService
-from app.services.run_orchestrator import RunOrchestrator
 
 
 class WorkerModule:

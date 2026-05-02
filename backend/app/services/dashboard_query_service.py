@@ -99,7 +99,9 @@ class DashboardQueryService:
             snapshot_documents = [
                 document
                 for document in snapshot_documents
-                if any(ref.tracker_code == tracker_code for ref in document.tracker_refs)
+                if any(
+                    ref.tracker_code == tracker_code for ref in document.tracker_refs
+                )
             ]
             event_documents = [
                 document

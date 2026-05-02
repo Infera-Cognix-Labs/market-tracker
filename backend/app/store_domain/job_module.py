@@ -11,7 +11,6 @@ from app.models.api import (
 )
 from app.services.job_service import JobService
 from app.services.run_orchestrator import RunOrchestrator
-from app.integrations.apify_gateway import ApifyGateway
 
 
 class JobModule:

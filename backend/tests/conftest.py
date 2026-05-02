@@ -4,8 +4,6 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-from beanie import init_beanie
-from pymongo import AsyncMongoClient
 
 from app.config.config import Config
 from app.seed import SeedData, load_demo_seed
@@ -42,6 +40,7 @@ def mock_config() -> Config:
 @pytest.fixture
 def mock_tracker_service():
     from app.services.tracker_management_service import TrackerManagementService
+
     service = MagicMock(spec=TrackerManagementService)
     return service
 
@@ -49,6 +48,7 @@ def mock_tracker_service():
 @pytest.fixture
 def mock_dashboard_query_service():
     from app.services.dashboard_query_service import DashboardQueryService
+
     service = MagicMock(spec=DashboardQueryService)
     return service
 
@@ -56,6 +56,7 @@ def mock_dashboard_query_service():
 @pytest.fixture
 def mock_job_service():
     from app.services.job_service import JobService
+
     service = MagicMock(spec=JobService)
     return service
 
@@ -63,5 +64,6 @@ def mock_job_service():
 @pytest.fixture
 def mock_diff_service():
     from app.services.diff_service import DiffService
+
     service = MagicMock(spec=DiffService)
     return service

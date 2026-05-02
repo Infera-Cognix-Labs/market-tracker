@@ -77,9 +77,7 @@ class DiffService:
             if history_snapshots
             else None
         )
-        current_products = _dedupe_category_snapshot_products(
-            current_snapshot.products
-        )
+        current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
             if previous_snapshot is not None
