@@ -278,6 +278,26 @@ class SnapshotService:
             for index, record in enumerate(unique_top_records, start=1)
         ]
 
+        current_asins = {p.asin for p in products}
+        current_top10_asins = {p.asin for p in products[:10]}
+
+        previous_snapshot = await CategorySnapshotDocument.find_one(
+            CategorySnapshotDocument.workspace_id == workspace_id,
+            CategorySnapshotDocument.tracker_code == tracker_code,
+            CategorySnapshotDocument.snapshot_date < snapshot_date,
+        )
+        previous_asins = set()
+        previous_top10_asins = set()
+        if previous_snapshot:
+            previous_asins = {p.asin for p in previous_snapshot.products}
+            previous_top10_asins = {p.asin for p in previous_snapshot.products[:10]}
+
+        new_entrants = current_asins - previous_asins
+        exits = previous_asins - current_asins
+
+        enter_top10 = current_top10_asins - previous_top10_asins
+        exit_top10 = previous_top10_asins - current_top10_asins
+
         payload = {
             "tracker_code": tracker_code,
             "marketplace": tracker_document.marketplace,
@@ -292,11 +312,11 @@ class SnapshotService:
             "products": products,
             "summary": CategorySnapshotSummary(
                 asin_count=len(products),
-                new_entrant_count=0,
+                new_entrant_count=len(new_entrants),
                 returning_count=0,
-                exit_count=0,
-                enter_top10_count=0,
-                exit_top10_count=0,
+                exit_count=len(exits),
+                enter_top10_count=len(enter_top10),
+                exit_top10_count=len(exit_top10),
             ),
             "source_refs": {
                 "provider": "APIFY",
@@ -340,13 +360,11 @@ def _dedupe_category_records(
 ) -> list[NormalizedProductRecord]:
     unique_records: list[NormalizedProductRecord] = []
     seen_asins: set[str] = set()
-
+    
     for record in records:
         if record.asin in seen_asins:
             continue
         seen_asins.add(record.asin)
         unique_records.append(record)
-        if len(unique_records) >= limit:
-            break
 
-    return unique_records
+    return unique_records[:limit]
