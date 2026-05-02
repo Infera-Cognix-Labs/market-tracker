@@ -50,6 +50,8 @@ from app.services.object_storage_service import LocalObjectStorageService
 from app.services.result_importer_service import ResultImporterService
 from app.services.run_orchestrator import RunOrchestrator
 from app.services.snapshot_service import SnapshotService
+from app.services.tracker_management_service import TrackerManagementService
+from app.services.dashboard_query_service import DashboardQueryService
 from app.services.shared import (
     aggregate_timeline_points,
     build_dashboard_overview,
@@ -283,7 +285,14 @@ class BaseStore:
 
 class MongoStore(BaseStore):
     def __init__(
-        self, client: AsyncMongoClient, database_name: str, settings: Config
+        self,
+        client: AsyncMongoClient,
+        database_name: str,
+        settings: Config,
+        tracker_module: TrackerModule | None = None,
+        query_module: QueryModule | None = None,
+        job_module: JobModule | None = None,
+        worker_module: WorkerModule | None = None,
     ) -> None:
         self.client = client
         self.database_name = database_name
@@ -292,13 +301,20 @@ class MongoStore(BaseStore):
         self.apify_gateway = ApifyGateway(settings.apify_config)
         self.run_orchestrator = RunOrchestrator(self.apify_gateway)
 
-        self._trackers = TrackerModule()
-        self._jobs = JobModule(self.run_orchestrator)
-        self._query = QueryModule()
+        self._trackers = tracker_module or TrackerModule(
+            TrackerManagementService()
+        )
+        self._query = query_module or QueryModule(DashboardQueryService())
 
-        self._init_worker_dependencies()
+        self._init_worker_dependencies(worker_module)
 
-    def _init_worker_dependencies(self) -> None:
+        self._jobs = job_module or JobModule(
+            job_service=JobService(self.run_orchestrator),
+            run_orchestrator=self.run_orchestrator,
+            apify_lifecycle=self.apify_lifecycle,
+        )
+
+    def _init_worker_dependencies(self, worker_module: WorkerModule | None) -> None:
         self.diff_service = DiffService()
         self.normalization_service = NormalizationService()
         self.snapshot_service = SnapshotService()
@@ -311,8 +327,10 @@ class MongoStore(BaseStore):
             ApifyRunLifecycleService,
         )
         from app.services.digest_service import DigestService
+        from app.services.scheduler_service import SchedulerService
 
         self.job_service = JobService(self.run_orchestrator)
+        self.scheduler_service = SchedulerService(self.job_service)
 
         self.result_importer = ResultImporterService(
             self.apify_gateway,
@@ -331,12 +349,15 @@ class MongoStore(BaseStore):
 
         self.digest_service = DigestService()
 
-        self._workers = WorkerModule(
-            job_service=self.job_service,
-            result_importer=self.result_importer,
-            apify_lifecycle=self.apify_lifecycle,
-            digest_service=self.digest_service,
-        )
+        if worker_module:
+            self._workers = worker_module
+        else:
+            self._workers = WorkerModule(
+                scheduler_service=self.scheduler_service,
+                result_importer=self.result_importer,
+                apify_lifecycle=self.apify_lifecycle,
+                digest_service=self.digest_service,
+            )
 
         self._seed = SeedModule()
 

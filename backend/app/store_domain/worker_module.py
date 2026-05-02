@@ -21,12 +21,12 @@ from app.services.run_orchestrator import RunOrchestrator
 class WorkerModule:
     def __init__(
         self,
-        job_service: JobService,
+        scheduler_service: SchedulerService,
         result_importer: ResultImporterService,
         apify_lifecycle: ApifyRunLifecycleService,
         digest_service: DigestService,
     ) -> None:
-        self._scheduler_service = SchedulerService(job_service)
+        self._scheduler_service = scheduler_service
         self._result_importer = result_importer
         self._apify_lifecycle = apify_lifecycle
         self._digest_service = digest_service

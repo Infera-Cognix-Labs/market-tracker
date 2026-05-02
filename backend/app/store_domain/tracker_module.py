@@ -18,8 +18,8 @@ from app.services.tracker_management_service import TrackerManagementService
 
 
 class TrackerModule:
-    def __init__(self) -> None:
-        self._service = TrackerManagementService()
+    def __init__(self, tracker_management: TrackerManagementService) -> None:
+        self._service = tracker_management
 
     async def list_category_trackers(
         self, workspace_id: str, page: int, page_size: int

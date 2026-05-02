@@ -15,8 +15,15 @@ from app.integrations.apify_gateway import ApifyGateway
 
 
 class JobModule:
-    def __init__(self, run_orchestrator: RunOrchestrator) -> None:
-        self._service = JobService(run_orchestrator)
+    def __init__(
+        self,
+        job_service: JobService,
+        run_orchestrator: RunOrchestrator,
+        apify_lifecycle,
+    ) -> None:
+        self._service = job_service
+        self._run_orchestrator = run_orchestrator
+        self._apify_lifecycle = apify_lifecycle
 
     async def list_jobs(
         self,

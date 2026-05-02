@@ -18,8 +18,8 @@ from app.services.dashboard_query_service import DashboardQueryService
 
 
 class QueryModule:
-    def __init__(self) -> None:
-        self._service = DashboardQueryService()
+    def __init__(self, dashboard_query: DashboardQueryService) -> None:
+        self._service = dashboard_query
 
     async def get_dashboard_overview(
         self, workspace_id: str, timeframe: Timeframe
