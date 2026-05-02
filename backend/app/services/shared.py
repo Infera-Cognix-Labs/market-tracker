@@ -427,18 +427,18 @@ def build_competitor_summaries(
     products: list[ProductDetail],
     events: list[Event],
     existing: list[TrackedProductSummary] | None = None,
+    reference_date: date | None = None,
+    recent_from_date: date | None = None,
 ) -> list[TrackedProductSummary]:
-    product_map = {
-        product.asin: product
-        for product in products
-        if product.marketplace == marketplace
-    }
+    product_map = {product.asin: product for product in products}
     existing_map = {item.asin: item for item in existing or []}
 
-    reference_date = max(
-        (event.snapshot_date for event in events), default=utc_now().date()
-    )
-    recent_from_date = reference_date - timedelta(days=6)
+    if reference_date is None:
+        reference_date = max(
+            (event.snapshot_date for event in events), default=utc_now().date()
+        )
+    if recent_from_date is None:
+        recent_from_date = reference_date - timedelta(days=6)
 
     summaries: list[TrackedProductSummary] = []
     for tracked_asin in tracked_asins:
