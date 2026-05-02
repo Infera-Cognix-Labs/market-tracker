@@ -90,15 +90,19 @@ def test_scheduler_service_creates_and_dispatches_due_jobs(run_async, monkeypatc
     )
 
     assert result.scanned_trackers == 3
-    assert result.due_trackers == 2
-    assert result.created_jobs == 1
-    assert result.dispatched_jobs == 1
+    assert result.due_trackers == 3
+    assert result.created_jobs == 2
+    assert result.dispatched_jobs == 2
     assert result.skipped_existing == 1
     assert result.failed_jobs == 0
     assert created_jobs == [
-        ("ws_demo_us", "ct_due", date(2026, 4, 8), TriggerMode.SCHEDULED)
+        ("ws_demo_us", "ct_due", date(2026, 4, 8), TriggerMode.SCHEDULED),
+        ("ws_demo_us", "ct_not_due", date(2026, 4, 8), TriggerMode.SCHEDULED),
     ]
-    assert dispatched_jobs == [("ws_demo_us", "job_ct_due")]
+    assert dispatched_jobs == [
+        ("ws_demo_us", "job_ct_due"),
+        ("ws_demo_us", "job_ct_not_due"),
+    ]
 
 
 def test_digest_service_generates_weekly_digest(run_async, monkeypatch, seed_data):
