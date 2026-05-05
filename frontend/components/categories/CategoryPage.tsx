@@ -276,7 +276,7 @@ export const CategoryPage = () => {
       .then(snap => { if (!cancelled) { setSnapshot(snap); setLoading(false) } })
       .catch(() => { if (!cancelled) { setSnapshot(null); setLoading(false) } })
     return () => { cancelled = true }
-  }, [selectedCode, rankTimeframe, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedCode, rankTimeframe, refreshKey])
 
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
