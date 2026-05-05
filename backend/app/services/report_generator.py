@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from collections import Counter
 from copy import copy
+from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
 
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from openpyxl import Workbook
+from openpyxl.chart import BarChart, PieChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -22,6 +25,8 @@ SURFACE = "F8FAFC"
 BORDER = "D9E2EC"
 HEADER_FILL = "EAF1F8"
 WARN_FILL = "FFF7ED"
+GREEN = "059669"
+AMBER = "D97706"
 
 
 def _value(value: Any) -> str:
@@ -46,9 +51,55 @@ def _pdf_rgb(hex_color: str) -> tuple[int, int, int]:
     )
 
 
+@dataclass(frozen=True)
+class ReportAnalytics:
+    event_type_counts: list[tuple[str, int]]
+    marketplace_counts: list[tuple[str, int]]
+    tracker_threat_counts: list[tuple[str, int]]
+    total_event_signals: int
+    average_signals_per_threat: float
+    active_marketplaces: int
+    top_event_type: str
+    top_tracker: str
+
+
+def _sorted_counts(counter: Counter[str]) -> list[tuple[str, int]]:
+    return sorted(counter.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _build_analytics(digest: WeeklyDigest) -> ReportAnalytics:
+    event_type_counter: Counter[str] = Counter()
+    marketplace_counter: Counter[str] = Counter()
+    tracker_counter: Counter[str] = Counter()
+
+    for threat in digest.threats:
+        marketplace_counter[_value(threat.marketplace)] += 1
+        event_type_counter.update(_value(event_type) for event_type in threat.event_types or [])
+        tracker_counter.update(ref.tracker_name for ref in threat.tracker_refs)
+
+    event_type_counts = _sorted_counts(event_type_counter)
+    tracker_threat_counts = _sorted_counts(tracker_counter)
+    total_event_signals = sum(event_type_counter.values())
+    threat_count = len(digest.threats)
+
+    return ReportAnalytics(
+        event_type_counts=event_type_counts,
+        marketplace_counts=_sorted_counts(marketplace_counter),
+        tracker_threat_counts=tracker_threat_counts,
+        total_event_signals=total_event_signals,
+        average_signals_per_threat=(
+            round(total_event_signals / threat_count, 1) if threat_count else 0.0
+        ),
+        active_marketplaces=len(marketplace_counter),
+        top_event_type=event_type_counts[0][0] if event_type_counts else "N/A",
+        top_tracker=tracker_threat_counts[0][0] if tracker_threat_counts else "N/A",
+    )
+
+
 class ReportPDFGenerator:
     def __init__(self, digest: "WeeklyDigest") -> None:
         self.digest = digest
+        self.analytics = _build_analytics(digest)
 
     def generate(self) -> bytes:
         pdf = FPDF(orientation="P", unit="mm", format="A4")
@@ -58,6 +109,7 @@ class ReportPDFGenerator:
 
         self._draw_header(pdf)
         self._draw_summary(pdf)
+        self._draw_signal_analytics(pdf)
         self._draw_trackers(pdf)
         self._draw_threats(pdf)
 
@@ -142,17 +194,25 @@ class ReportPDFGenerator:
             ("Top 10 Entry", self.digest.summary.top10_enter_count),
             ("Price Changes", self.digest.summary.price_change_count),
             ("Listing Changes", self.digest.summary.listing_change_count),
+            ("Threats", len(self.digest.threats)),
+            ("Event Signals", self.analytics.total_event_signals),
+            ("Marketplaces", self.analytics.active_marketplaces),
         ]
         page_width = pdf.w - pdf.l_margin - pdf.r_margin
         gap = 3
-        card_width = (page_width - gap * (len(metrics) - 1)) / len(metrics)
+        columns = 4
+        card_width = (page_width - gap * (columns - 1)) / columns
+        card_height = 20
         y = pdf.get_y()
         for index, (label, value) in enumerate(metrics):
-            x = pdf.l_margin + index * (card_width + gap)
+            row = index // columns
+            column = index % columns
+            x = pdf.l_margin + column * (card_width + gap)
+            card_y = y + row * (card_height + gap)
             self._set_fill_color(pdf, SURFACE)
             pdf.set_draw_color(*_pdf_rgb(BORDER))
-            pdf.rect(x, y, card_width, 22, "DF")
-            pdf.set_xy(x + 3, y + 4)
+            pdf.rect(x, card_y, card_width, card_height, "DF")
+            pdf.set_xy(x + 3, card_y + 3.5)
             self._set_text_color(pdf, BRAND_BLUE)
             pdf.set_font("Helvetica", "B", 14)
             pdf.cell(
@@ -167,7 +227,110 @@ class ReportPDFGenerator:
             self._set_text_color(pdf, MUTED)
             pdf.set_font("Helvetica", "B", 6.8)
             pdf.multi_cell(card_width - 6, 4, label.upper(), align="C")
-        pdf.set_y(y + 25)
+        pdf.set_y(y + (card_height + gap) * 2)
+
+    def _draw_signal_analytics(self, pdf: FPDF) -> None:
+        self._section_title(pdf, "Signal Analytics")
+        page_width = pdf.w - pdf.l_margin - pdf.r_margin
+        gap = 5
+        chart_width = (page_width - gap) / 2
+        chart_height = 52
+        y = pdf.get_y()
+
+        self._draw_horizontal_bar_chart(
+            pdf,
+            title="Top Event Types",
+            data=self.analytics.event_type_counts[:6],
+            x=pdf.l_margin,
+            y=y,
+            width=chart_width,
+            height=chart_height,
+            color=BRAND_BLUE,
+        )
+        self._draw_horizontal_bar_chart(
+            pdf,
+            title="Threats by Marketplace",
+            data=self.analytics.marketplace_counts[:6],
+            x=pdf.l_margin + chart_width + gap,
+            y=y,
+            width=chart_width,
+            height=chart_height,
+            color=GREEN,
+        )
+        pdf.set_y(y + chart_height + 4)
+        self._draw_insight_strip(pdf)
+
+    def _draw_horizontal_bar_chart(
+        self,
+        pdf: FPDF,
+        *,
+        title: str,
+        data: list[tuple[str, int]],
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        color: str,
+    ) -> None:
+        self._set_fill_color(pdf, "FFFFFF")
+        pdf.set_draw_color(*_pdf_rgb(BORDER))
+        pdf.rect(x, y, width, height, "DF")
+        pdf.set_xy(x + 3, y + 3)
+        self._set_text_color(pdf, BRAND_NAVY)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(width - 6, 4, title)
+
+        if not data:
+            pdf.set_xy(x + 3, y + 22)
+            self._set_text_color(pdf, MUTED)
+            pdf.set_font("Helvetica", "", 8)
+            pdf.cell(width - 6, 4, "No signal data available")
+            return
+
+        max_value = max(value for _, value in data)
+        label_width = width * 0.45
+        bar_width = width - label_width - 12
+        row_height = min(6.8, (height - 14) / max(len(data), 1))
+        start_y = y + 12
+        for index, (label, value) in enumerate(data):
+            row_y = start_y + index * row_height
+            pdf.set_xy(x + 3, row_y)
+            self._set_text_color(pdf, INK)
+            pdf.set_font("Helvetica", "", 6.7)
+            pdf.cell(label_width, 3.8, _safe_pdf_text(label[:28]))
+            self._set_fill_color(pdf, SURFACE)
+            pdf.rect(x + 3 + label_width, row_y + 0.6, bar_width, 3.2, "F")
+            self._set_fill_color(pdf, color)
+            filled = bar_width * (value / max_value if max_value else 0)
+            pdf.rect(x + 3 + label_width, row_y + 0.6, filled, 3.2, "F")
+            pdf.set_xy(x + width - 8, row_y)
+            self._set_text_color(pdf, MUTED)
+            pdf.set_font("Helvetica", "B", 6.5)
+            pdf.cell(5, 3.8, str(value), align="R")
+
+    def _draw_insight_strip(self, pdf: FPDF) -> None:
+        page_width = pdf.w - pdf.l_margin - pdf.r_margin
+        insights = [
+            ("Top Signal", self.analytics.top_event_type),
+            ("Avg Signals / Threat", f"{self.analytics.average_signals_per_threat:.1f}"),
+            ("Top Tracker", self.analytics.top_tracker),
+        ]
+        width = page_width / len(insights)
+        y = pdf.get_y()
+        self._set_fill_color(pdf, SURFACE)
+        pdf.set_draw_color(*_pdf_rgb(BORDER))
+        pdf.rect(pdf.l_margin, y, page_width, 18, "DF")
+        for index, (label, value) in enumerate(insights):
+            x = pdf.l_margin + index * width + 4
+            pdf.set_xy(x, y + 4)
+            self._set_text_color(pdf, MUTED)
+            pdf.set_font("Helvetica", "B", 6.7)
+            pdf.cell(width - 8, 3.5, label.upper())
+            pdf.set_xy(x, y + 9)
+            self._set_text_color(pdf, INK)
+            pdf.set_font("Helvetica", "B", 8)
+            pdf.cell(width - 8, 4, _safe_pdf_text(value[:34]))
+        pdf.set_y(y + 20)
 
     def _draw_trackers(self, pdf: FPDF) -> None:
         self._section_title(pdf, "Trackers Included")
@@ -263,6 +426,7 @@ class ReportPDFGenerator:
 class ReportExcelGenerator:
     def __init__(self, digest: "WeeklyDigest") -> None:
         self.digest = digest
+        self.analytics = _build_analytics(digest)
 
     def generate(self) -> bytes:
         wb = Workbook()
@@ -298,11 +462,17 @@ class ReportExcelGenerator:
             ("Top 10 Entry", self.digest.summary.top10_enter_count),
             ("Price Changes", self.digest.summary.price_change_count),
             ("Listing Changes", self.digest.summary.listing_change_count),
+            ("Threats", len(self.digest.threats)),
+            ("Event Signals", self.analytics.total_event_signals),
+            ("Active Marketplaces", self.analytics.active_marketplaces),
+            ("Avg Signals / Threat", self.analytics.average_signals_per_threat),
         ]
         for i, (label, value) in enumerate(metrics, start=8):
             ws_summary[f"A{i}"] = label
             ws_summary[f"B{i}"] = value
         self._style_summary_sheet(ws_summary)
+
+        self._create_analytics_sheet(wb)
 
         ws_trackers = wb.create_sheet("Trackers")
         ws_trackers.sheet_properties.tabColor = BRAND_BLUE
@@ -339,6 +509,176 @@ class ReportExcelGenerator:
         buffer.seek(0)
         return buffer.getvalue()
 
+    def _create_analytics_sheet(self, wb: Workbook) -> None:
+        ws = wb.create_sheet("Analytics")
+        ws.sheet_properties.tabColor = AMBER
+        ws["A1"] = "Signal Analytics"
+        ws["A1"].font = Font(bold=True, size=16, color="FFFFFF")
+        ws["A1"].fill = PatternFill("solid", fgColor=BRAND_NAVY)
+        ws.merge_cells("A1:H1")
+        ws.row_dimensions[1].height = 26
+
+        self._write_count_table(
+            ws,
+            title="Event Type Distribution",
+            start_row=3,
+            start_col=1,
+            headers=("Event Type", "Count"),
+            rows=self.analytics.event_type_counts,
+        )
+        self._write_count_table(
+            ws,
+            title="Marketplace Mix",
+            start_row=3,
+            start_col=4,
+            headers=("Marketplace", "Threats"),
+            rows=self.analytics.marketplace_counts,
+        )
+        self._write_count_table(
+            ws,
+            title="Tracker Coverage",
+            start_row=3,
+            start_col=7,
+            headers=("Tracker", "Threats"),
+            rows=self.analytics.tracker_threat_counts,
+        )
+
+        self._add_bar_chart(
+            ws,
+            title="Top Event Types",
+            data_start_row=5,
+            data_end_row=max(5, 4 + len(self.analytics.event_type_counts)),
+            label_col=1,
+            value_col=2,
+            anchor="A16",
+        )
+        self._add_pie_chart(
+            ws,
+            title="Threats by Marketplace",
+            data_start_row=5,
+            data_end_row=max(5, 4 + len(self.analytics.marketplace_counts)),
+            label_col=4,
+            value_col=5,
+            anchor="D16",
+        )
+        self._add_bar_chart(
+            ws,
+            title="Tracker Threat Coverage",
+            data_start_row=5,
+            data_end_row=max(5, 4 + len(self.analytics.tracker_threat_counts)),
+            label_col=7,
+            value_col=8,
+            anchor="G16",
+        )
+
+        widths = {1: 30, 2: 12, 4: 20, 5: 12, 7: 34, 8: 12}
+        for index, width in widths.items():
+            ws.column_dimensions[get_column_letter(index)].width = width
+        ws.freeze_panes = "A5"
+
+    def _write_count_table(
+        self,
+        ws: Worksheet,
+        *,
+        title: str,
+        start_row: int,
+        start_col: int,
+        headers: tuple[str, str],
+        rows: list[tuple[str, int]],
+    ) -> None:
+        ws.cell(row=start_row, column=start_col, value=title)
+        ws.cell(row=start_row, column=start_col).font = Font(bold=True, color=BRAND_NAVY)
+        ws.merge_cells(
+            start_row=start_row,
+            start_column=start_col,
+            end_row=start_row,
+            end_column=start_col + 1,
+        )
+
+        header_row = start_row + 1
+        ws.cell(row=header_row, column=start_col, value=headers[0])
+        ws.cell(row=header_row, column=start_col + 1, value=headers[1])
+        self._style_header_row(ws, header_row, start_col, start_col + 1)
+
+        data_rows = rows or [("No data", 0)]
+        for offset, (label, value) in enumerate(data_rows, start=1):
+            row = header_row + offset
+            ws.cell(row=row, column=start_col, value=label)
+            ws.cell(row=row, column=start_col + 1, value=value)
+        self._apply_grid(
+            ws,
+            min_row=header_row,
+            max_row=header_row + len(data_rows),
+            min_col=start_col,
+            max_col=start_col + 1,
+        )
+
+    def _add_bar_chart(
+        self,
+        ws: Worksheet,
+        *,
+        title: str,
+        data_start_row: int,
+        data_end_row: int,
+        label_col: int,
+        value_col: int,
+        anchor: str,
+    ) -> None:
+        chart = BarChart()
+        chart.type = "bar"
+        chart.style = 10
+        chart.title = title
+        chart.x_axis.title = "Count"
+        chart.height = 8
+        chart.width = 11
+        data = Reference(
+            ws,
+            min_col=value_col,
+            min_row=data_start_row,
+            max_row=data_end_row,
+        )
+        labels = Reference(
+            ws,
+            min_col=label_col,
+            min_row=data_start_row,
+            max_row=data_end_row,
+        )
+        chart.add_data(data, titles_from_data=False)
+        chart.set_categories(labels)
+        chart.legend = None
+        ws.add_chart(chart, anchor)
+
+    def _add_pie_chart(
+        self,
+        ws: Worksheet,
+        *,
+        title: str,
+        data_start_row: int,
+        data_end_row: int,
+        label_col: int,
+        value_col: int,
+        anchor: str,
+    ) -> None:
+        chart = PieChart()
+        chart.title = title
+        chart.height = 8
+        chart.width = 10
+        data = Reference(
+            ws,
+            min_col=value_col,
+            min_row=data_start_row,
+            max_row=data_end_row,
+        )
+        labels = Reference(
+            ws,
+            min_col=label_col,
+            min_row=data_start_row,
+            max_row=data_end_row,
+        )
+        chart.add_data(data, titles_from_data=False)
+        chart.set_categories(labels)
+        ws.add_chart(chart, anchor)
+
     def _style_summary_sheet(self, ws: Worksheet) -> None:
         widths = {1: 22, 2: 30, 3: 16, 4: 16, 5: 16}
         for index, width in widths.items():
@@ -346,12 +686,12 @@ class ReportExcelGenerator:
         for row in range(3, 6):
             ws[f"A{row}"].font = Font(bold=True, color=MUTED)
             ws[f"B{row}"].font = Font(color=INK)
-        for row in range(8, 13):
+        for row in range(8, 17):
             ws[f"A{row}"].fill = PatternFill("solid", fgColor=SURFACE)
             ws[f"B{row}"].fill = PatternFill("solid", fgColor=SURFACE)
             ws[f"B{row}"].font = Font(bold=True, color=BRAND_BLUE)
             ws[f"B{row}"].alignment = Alignment(horizontal="right")
-        self._apply_grid(ws, min_row=3, max_row=12, min_col=1, max_col=2)
+        self._apply_grid(ws, min_row=3, max_row=16, min_col=1, max_col=2)
         ws.freeze_panes = "A7"
 
     def _style_table_sheet(

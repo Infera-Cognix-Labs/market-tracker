@@ -26,7 +26,7 @@ def test_report_generators_create_valid_files() -> None:
 
     assert pdf.startswith(b"%PDF-")
     workbook = load_workbook(BytesIO(xlsx))
-    assert workbook.sheetnames == ["Summary", "Trackers", "Threats"]
+    assert workbook.sheetnames == ["Summary", "Analytics", "Trackers", "Threats"]
 
 
 def test_excel_report_uses_readable_enterprise_formatting() -> None:
@@ -34,11 +34,15 @@ def test_excel_report_uses_readable_enterprise_formatting() -> None:
 
     workbook = load_workbook(BytesIO(ReportExcelGenerator(digest).generate()))
     summary = workbook["Summary"]
+    analytics = workbook["Analytics"]
     trackers = workbook["Trackers"]
     threats = workbook["Threats"]
 
     assert summary["A1"].value == "Weekly Digest Report"
+    assert summary["A14"].value == "Event Signals"
     assert summary.column_dimensions["A"].width >= 20
+    assert analytics["A3"].value == "Event Type Distribution"
+    assert len(analytics._charts) == 3
     assert trackers["B2"].value == "CATEGORY"
     assert "TrackerType." not in trackers["B2"].value
     assert threats["E1"].value == "Trackers"
