@@ -20,6 +20,7 @@ from app.models.api import (
     CompetitorTrackerListResponse,
     CompetitorTrackerStats,
     CompetitorTrackerUpdateRequest,
+    Timeframe,
     TrackedAsin,
     TrackedAsinReplacementRequest,
     TrackerSchedule,
@@ -34,6 +35,7 @@ from app.models.documents import (
 )
 from app.services.shared import (
     build_competitor_summaries,
+    build_category_snapshot_with_rank_comparison,
     category_doc_to_model,
     competitor_detail_to_list_model,
     competitor_doc_to_model,
@@ -41,6 +43,7 @@ from app.services.shared import (
     generate_tracker_code,
     product_doc_to_model,
     snapshot_doc_to_model,
+    timeframe_bounds,
 )
 
 
@@ -203,7 +206,10 @@ class TrackerManagementService:
         return tracker
 
     async def get_latest_category_snapshot(
-        self, workspace_id: str, tracker_code: str
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        timeframe: Timeframe = Timeframe.WEEKLY,
     ) -> CategorySnapshot:
         documents = await CategorySnapshotDocument.find(
             CategorySnapshotDocument.workspace_id == workspace_id,
@@ -212,7 +218,21 @@ class TrackerManagementService:
         if not documents:
             raise NotFoundError("Category snapshot not found.")
         document = max(documents, key=lambda item: item.captured_at)
-        return snapshot_doc_to_model(document)
+        latest = snapshot_doc_to_model(document)
+        from_date, _ = timeframe_bounds(timeframe, latest.snapshot_date)
+        comparison_documents = [
+            item
+            for item in documents
+            if from_date <= item.snapshot_date < latest.snapshot_date
+        ]
+        if not comparison_documents:
+            return latest
+
+        comparison_document = min(
+            comparison_documents, key=lambda item: (item.snapshot_date, item.captured_at)
+        )
+        comparison = snapshot_doc_to_model(comparison_document)
+        return build_category_snapshot_with_rank_comparison(latest, comparison)
 
     async def list_competitor_trackers(
         self, workspace_id: str, page: int, page_size: int

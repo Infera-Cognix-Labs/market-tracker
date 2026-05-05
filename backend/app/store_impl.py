@@ -156,7 +156,10 @@ class BaseStore:
         raise NotImplementedError
 
     async def get_latest_category_snapshot(
-        self, workspace_id: str, tracker_code: str
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        timeframe: Timeframe = Timeframe.WEEKLY,
     ) -> CategorySnapshot:
         raise NotImplementedError
 
@@ -400,10 +403,13 @@ class MongoStore(BaseStore):
         )
 
     async def get_latest_category_snapshot(
-        self, workspace_id: str, tracker_code: str
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        timeframe: Timeframe = Timeframe.WEEKLY,
     ) -> CategorySnapshot:
         return await self._trackers.get_latest_category_snapshot(
-            workspace_id, tracker_code
+            workspace_id, tracker_code, timeframe
         )
 
     async def list_competitor_trackers(

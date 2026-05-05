@@ -14,6 +14,7 @@ from app.models.api import (
     CategoryTrackerCreateRequest,
     CategoryTrackerListResponse,
     CategoryTrackerUpdateRequest,
+    Timeframe,
     TrackerType,
 )
 from app.store import BaseStore
@@ -75,5 +76,6 @@ async def get_latest_category_snapshot(
     workspace_id: str,
     tracker_code: str,
     store: Annotated[BaseStore, Depends(get_store)],
+    timeframe: Timeframe = Query(default=Timeframe.WEEKLY),
 ) -> CategorySnapshot:
-    return await store.get_latest_category_snapshot(workspace_id, tracker_code)
+    return await store.get_latest_category_snapshot(workspace_id, tracker_code, timeframe)

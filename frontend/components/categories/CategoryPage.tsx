@@ -6,7 +6,7 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker } from "../shared/api"
-import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, TrackerStatus } from "../shared/types"
+import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus } from "../shared/types"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function parseNodeId(input: string): string | null {
@@ -32,6 +32,14 @@ const MARKETPLACES = [
 
 const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg3, color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none", boxSizing: "border-box" as const }
 const labelStyle: React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: T.text2, marginBottom: 6, letterSpacing: ".04em", textTransform: "uppercase" as const }
+
+const rankTrendMeta = (product: CategorySnapshotProduct) => {
+  if (product.rank_trend === "NEW") return { color: T.green, label: "New" }
+  if (product.rank_trend === "UP") return { color: T.green, label: `+${product.rank_delta}` }
+  if (product.rank_trend === "DOWN") return { color: T.red, label: `${product.rank_delta}` }
+  if (product.rank_trend === "STABLE") return { color: T.text3, label: "0" }
+  return { color: T.text3, label: "—" }
+}
 
 // ── Create Category Tracker Modal ─────────────────────────────────────────────
 interface CreateModalProps { onClose: () => void; onCreate: (t: CategoryTracker) => void }
@@ -249,6 +257,7 @@ export const CategoryPage = () => {
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
+  const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
 
   // Load trackers
   useEffect(() => {
@@ -263,11 +272,11 @@ export const CategoryPage = () => {
   useEffect(() => {
     if (!selectedCode) return
     let cancelled = false
-    apiGetLatestCategorySnapshot(selectedCode)
+    apiGetLatestCategorySnapshot(selectedCode, rankTimeframe)
       .then(snap => { if (!cancelled) { setSnapshot(snap); setLoading(false) } })
       .catch(() => { if (!cancelled) { setSnapshot(null); setLoading(false) } })
     return () => { cancelled = true }
-  }, [selectedCode, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedCode, rankTimeframe, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
@@ -408,6 +417,7 @@ export const CategoryPage = () => {
         <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap" }}>
           <span>Snapshot: {snapshot.snapshot_date}</span>
           <span>Captured: {new Date(snapshot.captured_at).toLocaleString()}</span>
+          <span>Compare: {rankTimeframe.toLowerCase()}</span>
           {snapshot.source_refs?.provider && <span>Provider: {snapshot.source_refs.provider}</span>}
           {snapshot.source_refs?.apify_run_id && <span>Run: {snapshot.source_refs.apify_run_id}</span>}
         </div>
@@ -420,6 +430,14 @@ export const CategoryPage = () => {
             <Search size={13} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: T.text3 }} />
             <input className="input" placeholder="Search ASIN, title, or brand..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 30 }} />
           </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["WEEKLY", "MONTHLY"] as Timeframe[]).map(t => (
+              <button key={t} onClick={() => { if (t !== rankTimeframe) { setSnapshot(null); setLoading(true); setRankTimeframe(t) } }}
+                style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${t === rankTimeframe ? T.amber : T.border}`, background: t === rankTimeframe ? T.bg4 : "transparent", color: t === rankTimeframe ? T.amber : T.text3, fontSize: 11, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>
+                {t === "WEEKLY" ? "7 days" : "30 days"}
+              </button>
+            ))}
+          </div>
           <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>
             {filtered.length} of {snapshot?.products.length || 0} products
           </span>
@@ -431,7 +449,7 @@ export const CategoryPage = () => {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                {["#", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
+                {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
                   <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -441,6 +459,19 @@ export const CategoryPage = () => {
                 <tr key={p.rank_position} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: p.rank_position <= 10 ? 700 : 400, color: p.rank_position <= 10 ? T.amber : T.text1 }}>
                     {String(p.rank_position).padStart(2, "0")}
+                  </td>
+                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>
+                    {(() => {
+                      const meta = rankTrendMeta(p)
+                      return (
+                        <span title={p.comparison_snapshot_date ? `Previous: ${p.previous_rank_position ?? "not ranked"} on ${p.comparison_snapshot_date}` : "No comparison snapshot"}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4, color: meta.color, fontWeight: p.rank_trend && p.rank_trend !== "STABLE" ? 700 : 500 }}>
+                          {p.rank_trend === "UP" && <TrendingUp size={12} />}
+                          {p.rank_trend === "DOWN" && <TrendingDown size={12} />}
+                          {meta.label}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td style={{ padding: "6px 10px" }}>
                     <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>

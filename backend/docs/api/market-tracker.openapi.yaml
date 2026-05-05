@@ -138,6 +138,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/WorkspaceIdPath'
         - $ref: '#/components/parameters/TrackerCodePath'
+        - $ref: '#/components/parameters/TimeframeQuery'
       responses:
         '200':
           description: Category tracker detail.
@@ -1131,6 +1132,24 @@ components:
           type: integer
           minimum: 1
           maximum: 50
+        previous_rank_position:
+          type: integer
+          minimum: 1
+          maximum: 50
+          nullable: true
+          description: Rank position from the comparison snapshot for the selected timeframe.
+        rank_delta:
+          type: integer
+          nullable: true
+          description: Positive means the product moved up; negative means it moved down.
+        rank_trend:
+          type: string
+          enum: [UP, DOWN, STABLE, NEW]
+          nullable: true
+        comparison_snapshot_date:
+          type: string
+          format: date
+          nullable: true
         title:
           type: string
         brand:

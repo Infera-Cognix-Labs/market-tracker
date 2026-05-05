@@ -82,6 +82,52 @@ def snapshot_doc_to_model(document: CategorySnapshotDocument) -> CategorySnapsho
     )
 
 
+def build_category_snapshot_with_rank_comparison(
+    current: CategorySnapshot, comparison: CategorySnapshot | None
+) -> CategorySnapshot:
+    if comparison is None:
+        return current
+
+    comparison_rank_map = {
+        product.asin: product.rank_position for product in comparison.products
+    }
+    products: list[CategorySnapshotProduct] = []
+    for product in current.products:
+        previous_rank = comparison_rank_map.get(product.asin)
+        if previous_rank is None:
+            products.append(
+                product.model_copy(
+                    update={
+                        "previous_rank_position": None,
+                        "rank_delta": None,
+                        "rank_trend": "NEW",
+                        "comparison_snapshot_date": comparison.snapshot_date,
+                    }
+                )
+            )
+            continue
+
+        rank_delta = previous_rank - product.rank_position
+        trend = "STABLE"
+        if rank_delta > 0:
+            trend = "UP"
+        elif rank_delta < 0:
+            trend = "DOWN"
+
+        products.append(
+            product.model_copy(
+                update={
+                    "previous_rank_position": previous_rank,
+                    "rank_delta": rank_delta,
+                    "rank_trend": trend,
+                    "comparison_snapshot_date": comparison.snapshot_date,
+                }
+            )
+        )
+
+    return current.model_copy(update={"products": products})
+
+
 def competitor_doc_to_model(
     document: CompetitorTrackerDocument,
 ) -> CompetitorTrackerDetail:

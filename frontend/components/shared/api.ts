@@ -51,8 +51,11 @@ export const apiGetCategoryTracker = async (trackerCode: string): Promise<Catego
   return apiFetch<CategoryTracker>(`/category-trackers/${trackerCode}`)
 }
 
-export const apiGetLatestCategorySnapshot = async (trackerCode: string): Promise<CategorySnapshot | null> => {
-  return apiFetch<CategorySnapshot>(`/category-trackers/${trackerCode}/snapshots/latest`)
+export const apiGetLatestCategorySnapshot = async (
+  trackerCode: string,
+  timeframe: Timeframe = "WEEKLY"
+): Promise<CategorySnapshot | null> => {
+  return apiFetch<CategorySnapshot>(`/category-trackers/${trackerCode}/snapshots/latest${qs({ timeframe })}`)
 }
 
 export const apiCreateCategoryTracker = async (payload: CategoryTrackerCreateRequest): Promise<CategoryTracker> => {
