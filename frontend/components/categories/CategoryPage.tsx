@@ -446,17 +446,18 @@ export const CategoryPage = () => {
         {loading ? (
           <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading snapshot...</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
-                  <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p: CategorySnapshotProduct) => (
-                <tr key={p.rank_position} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 1120, borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${T.border}` }}>
+                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
+                    <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p: CategorySnapshotProduct) => (
+                  <tr key={p.rank_position} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: p.rank_position <= 10 ? 700 : 400, color: p.rank_position <= 10 ? T.amber : T.text1 }}>
                     {String(p.rank_position).padStart(2, "0")}
                   </td>
@@ -487,7 +488,9 @@ export const CategoryPage = () => {
                   <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
                   </td>
-                  <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2 }}>{p.brand}</td>
+                  <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.brand}</div>
+                  </td>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
                     {p.price_current > 0 ? (
                       <>
@@ -515,10 +518,11 @@ export const CategoryPage = () => {
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.amber }}>
                     {p.coupon_text || "—"}
                   </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {!loading && filtered.length === 0 && (
