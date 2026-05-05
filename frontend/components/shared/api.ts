@@ -222,3 +222,19 @@ export const apiListWeeklyDigests = async (params?: {
 export const apiGetWeeklyDigest = async (digestCode: string): Promise<WeeklyDigest | null> => {
   return apiFetch<WeeklyDigest>(`/reports/weekly-digests/${digestCode}`)
 }
+
+export const apiDownloadWeeklyDigest = async (
+  digestCode: string,
+  format: "pdf" | "excel" = "pdf"
+): Promise<void> => {
+  const url = `${API_PREFIX}/reports/weekly-digests/${digestCode}/download?format=${format}`
+  const response = await fetch(url, { credentials: "include" })
+  if (!response.ok) throw new Error("Download failed")
+  const blob = await response.blob()
+  const ext = format === "pdf" ? "pdf" : "xlsx"
+  const link = document.createElement("a")
+  link.href = URL.createObjectURL(blob)
+  link.download = `weekly_digest_${digestCode}.${ext}`
+  link.click()
+  URL.revokeObjectURL(link.href)
+}

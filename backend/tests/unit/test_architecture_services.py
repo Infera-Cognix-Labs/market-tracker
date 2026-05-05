@@ -1612,6 +1612,18 @@ def test_snapshot_service_uses_top_list_position_for_category_snapshot_rank(
         async def find_one(*args, **kwargs):
             return None
 
+        @staticmethod
+        def find(*args, **kwargs):
+            class FakeQuery:
+                @staticmethod
+                def sort(*args, **kwargs):
+                    class FakeSorted:
+                        @staticmethod
+                        async def first():
+                            return None
+                    return FakeSorted()
+            return FakeQuery()
+
         def __new__(cls, **kwargs):
             return FakeCategorySnapshotDocument(**kwargs)
 
@@ -1623,6 +1635,11 @@ def test_snapshot_service_uses_top_list_position_for_category_snapshot_rank(
         "app.services.snapshot_service.CategoryTrackerDocument",
         FakeCategoryTrackerDocument,
     )
+
+    from app.services import snapshot_service
+    import importlib
+    importlib.reload(snapshot_service)
+    from app.services.snapshot_service import SnapshotService
 
     service = SnapshotService()
     result = run_async(
@@ -1706,6 +1723,18 @@ def test_snapshot_service_dedupes_duplicate_asins_in_category_snapshot(
         @staticmethod
         async def find_one(*args, **kwargs):
             return None
+
+        @staticmethod
+        def find(*args, **kwargs):
+            class FakeQuery:
+                @staticmethod
+                def sort(*args, **kwargs):
+                    class FakeSorted:
+                        @staticmethod
+                        async def first():
+                            return None
+                    return FakeSorted()
+            return FakeQuery()
 
         def __new__(cls, **kwargs):
             return FakeCategorySnapshotDocument(**kwargs)

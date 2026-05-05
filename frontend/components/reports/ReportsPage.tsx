@@ -6,7 +6,7 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListWeeklyDigests, apiGetWeeklyDigest } from "../shared/api"
+import { apiListWeeklyDigests, apiGetWeeklyDigest, apiDownloadWeeklyDigest } from "../shared/api"
 import type { WeeklyDigest } from "../shared/types"
 
 export const ReportsPage = () => {
@@ -97,6 +97,20 @@ export const ReportsPage = () => {
                     </span>
                   ))}
                 </div>
+              </div>
+
+              {/* Download Buttons */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <button
+                  onClick={() => apiDownloadWeeklyDigest(selected.digest_code, "pdf")}
+                  style={{ padding: "8px 16px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11, color: T.text1, cursor: "pointer" }}>
+                  Download PDF
+                </button>
+                <button
+                  onClick={() => apiDownloadWeeklyDigest(selected.digest_code, "excel")}
+                  style={{ padding: "8px 16px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11, color: T.text1, cursor: "pointer" }}>
+                  Download Excel
+                </button>
               </div>
             </div>
 
