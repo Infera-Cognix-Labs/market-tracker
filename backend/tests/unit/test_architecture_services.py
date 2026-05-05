@@ -37,7 +37,6 @@ from app.services.normalization_service import (
     NormalizedProductRecord,
 )
 from app.services.result_importer_service import ResultImporterService, TrackerContext
-from app.services.snapshot_service import SnapshotService
 from app.services.run_orchestrator import RunOrchestrator
 from app.services.shared import product_snapshot_doc_to_model, snapshot_doc_to_model
 from app.store import MongoStore
