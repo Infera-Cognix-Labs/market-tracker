@@ -281,11 +281,11 @@ class SnapshotService:
         current_asins = {p.asin for p in products}
         current_top10_asins = {p.asin for p in products[:10]}
 
-        previous_snapshot = await CategorySnapshotDocument.find_one(
+        previous_snapshot = await CategorySnapshotDocument.find(
             CategorySnapshotDocument.workspace_id == workspace_id,
             CategorySnapshotDocument.tracker_code == tracker_code,
             CategorySnapshotDocument.snapshot_date < snapshot_date,
-        )
+        ).sort("snapshot_date", -1).first()
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:
