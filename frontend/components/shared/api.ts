@@ -10,9 +10,8 @@ import type {
   CategoryTrackerUpdateRequest,
 } from "./types"
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/market-tracker/api"
 const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID || "ws_demo_us"
-const API_PREFIX = `${BASE_URL}/v1/workspaces/${WORKSPACE_ID}`
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_PREFIX}${path}`, {
