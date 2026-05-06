@@ -6,17 +6,6 @@ const nextConfig: NextConfig = {
   basePath: "/market-tracker",
   assetPrefix: "/market-tracker/",
 
-  async redirects() {
-    return [
-      {
-        source: "/",
-        destination: "/market-tracker",
-        permanent: false,
-        basePath: false,
-      },
-    ];
-  },
-
   async rewrites() {
     return [
       {
