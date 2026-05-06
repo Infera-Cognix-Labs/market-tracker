@@ -63,14 +63,18 @@ async def _run_batch(
         await store.close()
 
 
-async def run_schedule_batch(*, reference_time: datetime | None = None) -> dict[str, Any]:
+async def run_schedule_batch(
+    *, reference_time: datetime | None = None
+) -> dict[str, Any]:
     return await _run_batch(
         batch_name="market_tracker_schedule_reconcile",
         runner=lambda store: store.schedule_jobs(reference_time=reference_time),
     )
 
 
-def run_schedule_batch_task(*, reference_time: datetime | None = None) -> dict[str, Any]:
+def run_schedule_batch_task(
+    *, reference_time: datetime | None = None
+) -> dict[str, Any]:
     return asyncio.run(run_schedule_batch(reference_time=reference_time))
 
 

@@ -69,14 +69,10 @@ def _read_sample_rows(path: str) -> list[dict[str, object]]:
 
         if 2 <= row_no <= 5:
             competitor_asins = [
-                values[col]
-                for col in ("D", "E", "F", "G", "H", "I")
-                if values.get(col)
+                values[col] for col in ("D", "E", "F", "G", "H", "I") if values.get(col)
             ]
             keywords = [
-                values[col]
-                for col in ("J", "K", "L", "M", "N", "O")
-                if values.get(col)
+                values[col] for col in ("J", "K", "L", "M", "N", "O") if values.get(col)
             ]
             structured_rows.append(
                 {
@@ -102,7 +98,10 @@ def _read_sample_rows(path: str) -> list[dict[str, object]]:
         "category_name": "TOP10_ASIN_SAMPLE",
         "browse_node_id": f"{structured_rows[0]['browse_node_id']}_top10",
         "our_asin": top10_asins[0],
-        "competitor_asins": [top10_asins[0], *structured_rows[0]["competitor_asins"][:5]],
+        "competitor_asins": [
+            top10_asins[0],
+            *structured_rows[0]["competitor_asins"][:5],
+        ],
         "keywords": [],
     }
     return [*structured_rows, derived_row]

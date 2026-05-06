@@ -12,6 +12,9 @@ class FakeCursor:
     async def to_list(self):
         return self.items
 
+    def sort(self, *args, **kwargs):
+        return self
+
 
 class FakeDocument:
     def __init__(self, **kwargs):
@@ -41,8 +44,9 @@ def test_get_competitor_tracker_hydrates_tracked_products_from_products(
         workspace_id=seed_data.workspace_id,
         **tracker.model_dump(mode="python"),
     )
-    tracked_asins = {item.asin for item in tracker.tracked_asins}
-    product_docs = [
+    tracked_asins = [item.asin for item in tracker.tracked_asins]
+
+    all_product_docs = [
         FakeDocument(
             workspace_id=seed_data.workspace_id,
             **product.model_dump(mode="python"),
@@ -50,7 +54,8 @@ def test_get_competitor_tracker_hydrates_tracked_products_from_products(
         for product in seed_data.products
         if product.marketplace == tracker.marketplace and product.asin in tracked_asins
     ]
-    event_docs = [
+
+    all_event_docs = [
         FakeDocument(
             workspace_id=seed_data.workspace_id,
             **event.model_dump(mode="python"),
@@ -58,10 +63,16 @@ def test_get_competitor_tracker_hydrates_tracked_products_from_products(
         for event in seed_data.events
         if event.marketplace == tracker.marketplace and event.asin in tracked_asins
     ]
-    product_asins = {doc.asin for doc in product_docs}
+    product_asins = {doc.asin for doc in all_product_docs}
 
     async def fake_find_one(*args, **kwargs):
         return tracker_doc
+
+    def make_product_find(*args, **kwargs):
+        return FakeCursor(all_product_docs)
+
+    def make_event_find(*args, **kwargs):
+        return FakeCursor(all_event_docs)
 
     monkeypatch.setattr(
         "app.services.tracker_management_service.CompetitorTrackerDocument",
@@ -74,15 +85,20 @@ def test_get_competitor_tracker_hydrates_tracked_products_from_products(
     monkeypatch.setattr(
         "app.services.tracker_management_service.ProductDocument",
         SimpleNamespace(
-            find=lambda *args, **kwargs: FakeCursor(product_docs),
+            find=make_product_find,
             workspace_id="workspace_id",
+            marketplace="marketplace",
+            asin="asin",
         ),
     )
     monkeypatch.setattr(
         "app.services.tracker_management_service.EventDocument",
         SimpleNamespace(
-            find=lambda *args, **kwargs: FakeCursor(event_docs),
+            find=make_event_find,
             workspace_id="workspace_id",
+            marketplace="marketplace",
+            asin="asin",
+            snapshot_date="snapshot_date",
         ),
     )
 

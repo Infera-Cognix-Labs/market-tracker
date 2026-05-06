@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
+from beanie.operators import In
+from pymongo import ASCENDING
+
 from app.core.errors import ConflictError, NotFoundError
 from app.core.utils import paginate, utc_now
 from app.models.api import (
@@ -44,18 +49,36 @@ class TrackerManagementService:
         self, workspace_id: str, document: CompetitorTrackerDocument
     ) -> CompetitorTrackerDetail:
         tracker = competitor_doc_to_model(document).model_copy(deep=True)
+        tracked_asins = [ta.asin for ta in tracker.tracked_asins]
+        if not tracked_asins:
+            return tracker
+
         product_docs = await ProductDocument.find(
-            ProductDocument.workspace_id == workspace_id
+            ProductDocument.workspace_id == workspace_id,
+            ProductDocument.marketplace == tracker.marketplace,
+            In(ProductDocument.asin, tracked_asins),
         ).to_list()
-        event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id
-        ).to_list()
+
+        reference_date = utc_now().date()
+        recent_from_date = reference_date - timedelta(days=6)
+        event_docs = (
+            await EventDocument.find(
+                EventDocument.workspace_id == workspace_id,
+                EventDocument.marketplace == tracker.marketplace,
+                In(EventDocument.asin, tracked_asins),
+            )
+            .sort((EventDocument.snapshot_date, ASCENDING))
+            .to_list()
+        )
+
         refreshed_tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
             products=[product_doc_to_model(doc) for doc in product_docs],
             events=[event_doc_to_model(doc) for doc in event_docs],
             existing=tracker.tracked_products,
+            reference_date=reference_date,
+            recent_from_date=recent_from_date,
         )
         if refreshed_tracked_products != tracker.tracked_products:
             tracker.tracked_products = refreshed_tracked_products

@@ -120,6 +120,14 @@ class EventDocument(WorkspaceDocument):
             IndexModel([("workspace_id", 1), ("snapshot_date", -1)]),
             IndexModel([("workspace_id", 1), ("tracker_code", 1)]),
             IndexModel(
+                [
+                    ("workspace_id", 1),
+                    ("marketplace", 1),
+                    ("asin", 1),
+                    ("snapshot_date", -1),
+                ]
+            ),
+            IndexModel(
                 [("workspace_id", 1), ("dedupe_key", 1)],
                 unique=True,
                 partialFilterExpression={"dedupe_key": {"$type": "string"}},
