@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from types import SimpleNamespace
 
+from app.models.api import Timeframe
 from app.services.tracker_management_service import TrackerManagementService
 
 
@@ -112,3 +114,53 @@ def test_get_competitor_tracker_hydrates_tracked_products_from_products(
     assert result.tracked_products
     assert {item.asin for item in result.tracked_products} == product_asins
     assert tracker_doc._saved is True
+
+
+def test_get_latest_category_snapshot_adds_weekly_rank_comparison(
+    run_async, monkeypatch, seed_data
+):
+    latest = seed_data.category_snapshots[0]
+    moved_asin = "B0ABC12345"
+    comparison = latest.model_copy(
+        update={
+            "snapshot_date": latest.snapshot_date - timedelta(days=3),
+            "captured_at": latest.captured_at - timedelta(days=3),
+            "products": [
+                product.model_copy(update={"rank_position": 14})
+                if product.asin == moved_asin
+                else product
+                for product in latest.products
+            ],
+        },
+        deep=True,
+    )
+    documents = [
+        FakeDocument(workspace_id=seed_data.workspace_id, **comparison.model_dump(mode="python")),
+        FakeDocument(workspace_id=seed_data.workspace_id, **latest.model_dump(mode="python")),
+    ]
+
+    def make_snapshot_find(*args, **kwargs):
+        return FakeCursor(documents)
+
+    monkeypatch.setattr(
+        "app.services.tracker_management_service.CategorySnapshotDocument",
+        SimpleNamespace(
+            find=make_snapshot_find,
+            workspace_id="workspace_id",
+            tracker_code="tracker_code",
+        ),
+    )
+
+    result = run_async(
+        TrackerManagementService().get_latest_category_snapshot(
+            seed_data.workspace_id,
+            latest.tracker_code,
+            Timeframe.WEEKLY,
+        )
+    )
+
+    moved_product = next(product for product in result.products if product.asin == moved_asin)
+    assert moved_product.previous_rank_position == 14
+    assert moved_product.rank_delta == 5
+    assert moved_product.rank_trend == "UP"
+    assert moved_product.comparison_snapshot_date == comparison.snapshot_date

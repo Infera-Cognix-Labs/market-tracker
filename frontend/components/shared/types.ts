@@ -147,6 +147,10 @@ export interface CategorySnapshot {
 export interface CategorySnapshotProduct {
   asin: string
   rank_position: number
+  previous_rank_position?: number | null
+  rank_delta?: number | null
+  rank_trend?: "UP" | "DOWN" | "STABLE" | "NEW" | null
+  comparison_snapshot_date?: string | null
   title: string
   brand: string
   product_url: string

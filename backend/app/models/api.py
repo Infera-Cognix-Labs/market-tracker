@@ -202,6 +202,10 @@ class CategorySnapshotSummary(ApiModel):
 class CategorySnapshotProduct(ApiModel):
     asin: AsinCode
     rank_position: int = Field(ge=1, le=50)
+    previous_rank_position: int | None = Field(default=None, ge=1, le=50)
+    rank_delta: int | None = None
+    rank_trend: Literal["UP", "DOWN", "STABLE", "NEW"] | None = None
+    comparison_snapshot_date: date | None = None
     title: str
     brand: str
     product_url: str
