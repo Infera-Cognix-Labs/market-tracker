@@ -50,7 +50,7 @@ services:
       - NODE_ENV=production
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000 || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/market-tracker || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
