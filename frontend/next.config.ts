@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+
+  basePath: "/market-tracker",
+  assetPrefix: "/market-tracker/",
+
   async rewrites() {
     return [
       {
