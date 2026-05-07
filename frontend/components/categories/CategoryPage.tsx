@@ -489,7 +489,7 @@ export const CategoryPage = () => {
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
-                    <a href={p.product_url} target="_blank" rel="noopener noreferrer"
+                    <a href={p.brand} target="_blank" rel="noopener noreferrer"
                       style={{ color: T.blue, textDecoration: "none", display: "inline-block", width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {p.brand}
                     </a>
