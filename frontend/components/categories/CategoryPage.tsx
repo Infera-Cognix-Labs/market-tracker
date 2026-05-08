@@ -19,6 +19,15 @@ function parseNodeId(input: string): string | null {
   return null
 }
 
+const extractBrandName = (url: string): string => {
+  try {
+    const match = url.match(/\/stores\/([^/]+)\//);
+    return match ? match[1] : url; 
+  } catch {
+    return url;
+  }
+};
+
 const MARKETPLACES = [
   { value: "amazon_us", label: "🇺🇸 amazon_us" },
   { value: "amazon_de", label: "🇩🇪 amazon_de" },
@@ -491,7 +500,7 @@ export const CategoryPage = () => {
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
                     <a href={p.brand} target="_blank" rel="noopener noreferrer"
                       style={{ color: T.blue, textDecoration: "none", display: "inline-block", width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {p.brand}
+                      {extractBrandName(p.brand)}
                     </a>
                   </td>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
