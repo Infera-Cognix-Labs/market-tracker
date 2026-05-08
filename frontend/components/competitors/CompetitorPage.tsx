@@ -503,9 +503,6 @@ export const CompetitorPage = () => {
   useEffect(() => {
     if (!selectedProduct || !tracker) return
     let cancelled = false
-    setTablePage(0)
-    setEventsPage(0)
-    setOpenCouponRowKey(null)
     const load = async () => {
       const detail = await apiGetProductDetail(tracker.marketplace, selectedProduct.asin).catch(() => null)
       if (!cancelled) setProductDetail(detail)
@@ -642,6 +639,9 @@ export const CompetitorPage = () => {
                 setLoadingDetail(true)
                 setSelectedCode(t.tracker_code)
                 setRefreshKey(k => k + 1)
+                setTablePage(0)
+                setEventsPage(0)
+                setOpenCouponRowKey(null)
               }}
               style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? sc : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? sc : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
               {isSelected && <span className="dot-live" style={{ background: sc, boxShadow: `0 0 0 3px ${sc}30` }} />}
@@ -687,7 +687,7 @@ export const CompetitorPage = () => {
             {loadingDetail ? "Loading…" : `${products.length} ASINs tracked`}
           </div>
           {products.map((p: TrackedProductSummary, i: number) => (
-            <div key={i} className="row-hover" onClick={() => setSelectedAsinIdx(i)}
+            <div key={i} className="row-hover" onClick={() => { setSelectedAsinIdx(i); setTablePage(0); setEventsPage(0); setOpenCouponRowKey(null) }}
               style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === selectedAsinIdx ? T.bg4 : T.bg2, border: `1px solid ${i === selectedAsinIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
               <div style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3 }}>{p.asin}</div>
               <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
