@@ -100,15 +100,48 @@ export const ReportsPage = () => {
               </div>
 
               {/* Download Buttons */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
                 <button
-                  onClick={() => apiDownloadWeeklyDigest(selected.digest_code, "pdf")}
-                  style={{ padding: "8px 16px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11, color: T.text1, cursor: "pointer" }}>
+                  onClick={() =>
+                    apiDownloadWeeklyDigest(selected.digest_code, "pdf")
+                  }
+                  style={{
+                    padding: "8px 16px",
+                    background: T.amber,
+                    border: `1px solid ${T.amberD}`,
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#000",
+                    cursor: "pointer",
+                    boxShadow: "0 0 0 2px rgba(245,166,35,0.15)",
+                  }}
+                >
                   Download PDF
                 </button>
+
                 <button
-                  onClick={() => apiDownloadWeeklyDigest(selected.digest_code, "excel")}
-                  style={{ padding: "8px 16px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 11, color: T.text1, cursor: "pointer" }}>
+                  onClick={() =>
+                    apiDownloadWeeklyDigest(selected.digest_code, "excel")
+                  }
+                  style={{
+                    padding: "8px 16px",
+                    background: "#0F2A1A",
+                    border: `1px solid ${T.greenD}`,
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: T.green,
+                    cursor: "pointer",
+                    boxShadow: "0 0 0 2px rgba(34,212,122,0.12)",
+                  }}
+                >
                   Download Excel
                 </button>
               </div>
