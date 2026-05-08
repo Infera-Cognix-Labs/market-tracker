@@ -27,6 +27,14 @@ const TRACK_FIELD_LABELS: Record<keyof CompetitorTrackFields, string> = {
   variation_change: "Variation Change", content_change: "Content Change",
 }
 
+const parseCouponItems = (couponText?: string | null): string[] => {
+  if (!couponText) return []
+  return couponText
+    .split(/[\n|;]/)
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+
 // ── Manage ASINs Modal ────────────────────────────────────────────────────────
 const ManageAsinsModal = ({
   tracker,
@@ -458,6 +466,9 @@ export const CompetitorPage = () => {
   const [chartTimeframe, setChartTimeframe] = useState<Timeframe>("DAILY")
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
+  const [openCouponRowKey, setOpenCouponRowKey] = useState<string | null>(null)
+  const [tablePage, setTablePage] = useState(0)
+  const [eventsPage, setEventsPage] = useState(0)
 
   // Load tracker list only
   useEffect(() => {
@@ -628,6 +639,9 @@ export const CompetitorPage = () => {
                 setLoadingDetail(true)
                 setSelectedCode(t.tracker_code)
                 setRefreshKey(k => k + 1)
+                setTablePage(0)
+                setEventsPage(0)
+                setOpenCouponRowKey(null)
               }}
               style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? sc : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? sc : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
               {isSelected && <span className="dot-live" style={{ background: sc, boxShadow: `0 0 0 3px ${sc}30` }} />}
@@ -673,7 +687,7 @@ export const CompetitorPage = () => {
             {loadingDetail ? "Loading…" : `${products.length} ASINs tracked`}
           </div>
           {products.map((p: TrackedProductSummary, i: number) => (
-            <div key={i} className="row-hover" onClick={() => setSelectedAsinIdx(i)}
+            <div key={i} className="row-hover" onClick={() => { setSelectedAsinIdx(i); setTablePage(0); setEventsPage(0); setOpenCouponRowKey(null) }}
               style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === selectedAsinIdx ? T.bg4 : T.bg2, border: `1px solid ${i === selectedAsinIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
               <div style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3 }}>{p.asin}</div>
               <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
@@ -850,13 +864,13 @@ export const CompetitorPage = () => {
                   <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
                     <thead>
                       <tr>
-                        {["Date", "Availability", "Buy Box", "Coupon", "Variants"].map(h => (
+                        {["Date", "Availability", "Buy Box", "Deals", "Variants"].map(h => (
                           <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, borderBottom: `1px solid ${T.border}` }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {ratingData.map(r => (
+                      {ratingData.slice(tablePage * 7, (tablePage + 1) * 7).map(r => (
                         <tr key={r.date} style={{ borderBottom: `1px solid ${T.border}` }}>
                           <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.date}</td>
                           <td style={{ padding: "6px 10px" }}>
@@ -865,12 +879,76 @@ export const CompetitorPage = () => {
                           <td style={{ padding: "6px 10px" }}>
                             <Badge type={r.buyBox === "HAS_BUY_BOX" ? "listing" : r.buyBox === "NO_BUY_BOX" ? "stock" : "info"} text={r.buyBox === "HAS_BUY_BOX" ? "Has BB" : r.buyBox === "NO_BUY_BOX" ? "No BB" : "—"} />
                           </td>
-                          <td style={{ padding: "6px 10px", fontSize: 11, color: r.coupon ? T.amber : T.text3 }}>{r.coupon ?? "—"}</td>
+                          <td style={{ padding: "6px 10px" }}>
+                            {(() => {
+                              const items = parseCouponItems(r.coupon)
+                              if (items.length === 0) return <span style={{ color: T.text3 }}>—</span>
+                              const isOpen = openCouponRowKey === r.date
+                              return (
+                                <div style={{ minWidth: 180 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenCouponRowKey(prev => prev === r.date ? null : r.date)}
+                                    style={{
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      border: `1px solid ${T.amberD}`,
+                                      background: `${T.amber}14`,
+                                      color: T.amber,
+                                      fontSize: 9,
+                                      fontFamily: T.mono,
+                                      fontWeight: 600,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {isOpen ? "Hide" : "View"} {items.length} deal{items.length > 1 ? "s" : ""}
+                                  </button>
+                                  {isOpen && (
+                                    <div
+                                      style={{
+                                        marginTop: 4,
+                                        padding: "4px 6px",
+                                        background: T.bg3,
+                                        border: `1px solid ${T.border}`,
+                                        borderRadius: 4,
+                                        color: T.text1,
+                                        fontSize: 10,
+                                        lineHeight: 1.4,
+                                      }}
+                                    >
+                                      {items.map((coupon, idx) => (
+                                        <div key={`${coupon}-${idx}`} style={{ marginBottom: idx < items.length - 1 ? 3 : 0 }}>
+                                          • {coupon}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </td>
                           <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.variations != null ? r.variations : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {ratingData.length > 7 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "4px 0" }}>
+                      <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                        {tablePage * 7 + 1}–{Math.min((tablePage + 1) * 7, ratingData.length)} of {ratingData.length}
+                      </span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}
+                          style={{ padding: "3px 10px", borderRadius: 5, border: `1px solid ${T.border}`, background: "none", color: tablePage === 0 ? T.text3 : T.text1, cursor: tablePage === 0 ? "default" : "pointer", fontSize: 11, fontFamily: T.mono }}>
+                          ‹ Prev
+                        </button>
+                        <button onClick={() => setTablePage(p => Math.min(Math.ceil(ratingData.length / 7) - 1, p + 1))} disabled={(tablePage + 1) * 7 >= ratingData.length}
+                          style={{ padding: "3px 10px", borderRadius: 5, border: `1px solid ${T.border}`, background: "none", color: (tablePage + 1) * 7 >= ratingData.length ? T.text3 : T.text1, cursor: (tablePage + 1) * 7 >= ratingData.length ? "default" : "pointer", fontSize: 11, fontFamily: T.mono }}>
+                          Next ›
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -887,7 +965,7 @@ export const CompetitorPage = () => {
             {events.length === 0 && (
               <div style={{ textAlign: "center", padding: "30px 0", color: T.text3, fontSize: 12 }}>No events recorded for this product</div>
             )}
-            {events.map((ev) => {
+            {events.slice(eventsPage * 10, (eventsPage + 1) * 10).map((ev) => {
               const meta = AlertTypeMeta(ev.event_type)
               return (
                 <div key={ev.event_code} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
@@ -906,6 +984,23 @@ export const CompetitorPage = () => {
                 </div>
               )
             })}
+            {events.length > 10 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "4px 0" }}>
+                <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  {eventsPage * 10 + 1}–{Math.min((eventsPage + 1) * 10, events.length)} of {events.length}
+                </span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setEventsPage(p => Math.max(0, p - 1))} disabled={eventsPage === 0}
+                    style={{ padding: "3px 10px", borderRadius: 5, border: `1px solid ${T.border}`, background: "none", color: eventsPage === 0 ? T.text3 : T.text1, cursor: eventsPage === 0 ? "default" : "pointer", fontSize: 11, fontFamily: T.mono }}>
+                    ‹ Prev
+                  </button>
+                  <button onClick={() => setEventsPage(p => Math.min(Math.ceil(events.length / 10) - 1, p + 1))} disabled={(eventsPage + 1) * 10 >= events.length}
+                    style={{ padding: "3px 10px", borderRadius: 5, border: `1px solid ${T.border}`, background: "none", color: (eventsPage + 1) * 10 >= events.length ? T.text3 : T.text1, cursor: (eventsPage + 1) * 10 >= events.length ? "default" : "pointer", fontSize: 11, fontFamily: T.mono }}>
+                    Next ›
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Link to Amazon */}
             {selectedProduct && (
               <a href={`https://www.amazon.com/dp/${selectedProduct.asin}`} target="_blank" rel="noopener noreferrer"

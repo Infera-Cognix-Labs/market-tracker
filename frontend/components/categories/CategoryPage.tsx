@@ -28,6 +28,14 @@ const extractBrandName = (url: string): string => {
   }
 };
 
+const parseCouponItems = (couponText?: string | null): string[] => {
+  if (!couponText) return []
+  return couponText
+    .split(/\r?\n|\s*\|\s*|\s*;\s*/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
 const MARKETPLACES = [
   { value: "amazon_us", label: "🇺🇸 amazon_us" },
   { value: "amazon_de", label: "🇩🇪 amazon_de" },
@@ -267,6 +275,7 @@ export const CategoryPage = () => {
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
   const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
+  const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
 
   // Load trackers
   useEffect(() => {
@@ -459,7 +468,7 @@ export const CategoryPage = () => {
             <table style={{ width: "100%", minWidth: 1120, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Coupon"].map(h => (
+                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Deals"].map(h => (
                     <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -528,7 +537,54 @@ export const CategoryPage = () => {
                     <Badge type={p.buy_box_status === "HAS_BUY_BOX" ? "listing" : p.buy_box_status === "NO_BUY_BOX" ? "stock" : "info"} text={p.buy_box_status === "HAS_BUY_BOX" ? "Has BB" : p.buy_box_status === "NO_BUY_BOX" ? "No BB" : "—"} />
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.amber }}>
-                    {p.coupon_text || "—"}
+                    {(() => {
+                      const couponItems = parseCouponItems(p.coupon_text)
+                      if (couponItems.length === 0) return "—"
+
+                      const couponKey = `${p.asin}-${p.rank_position}`
+                      const isOpen = openCouponKey === couponKey
+
+                      return (
+                        <div style={{ minWidth: 180 }}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenCouponKey(prev => prev === couponKey ? null : couponKey)}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: `1px solid ${T.amberD}`,
+                              background: `${T.amber}14`,
+                              color: T.amber,
+                              fontSize: 10,
+                              fontFamily: T.mono,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isOpen ? "Hide" : "View"} {couponItems.length} deal{couponItems.length > 1 ? "s" : ""}
+                          </button>
+                          {isOpen && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                padding: "6px 8px",
+                                background: T.bg3,
+                                border: `1px solid ${T.border}`,
+                                borderRadius: 6,
+                                color: T.text1,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {couponItems.map((coupon, idx) => (
+                                <div key={`${coupon}-${idx}`} style={{ marginBottom: idx < couponItems.length - 1 ? 4 : 0 }}>
+                                  • {coupon}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </td>
                   </tr>
                 ))}
