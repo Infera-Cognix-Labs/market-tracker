@@ -163,6 +163,7 @@ class SnapshotService:
             "rating_value": record.rating_value,
             "review_count": record.review_count,
             "variation_count": record.variation_count,
+            "deal_info": record.deal_info,
             "source_refs": source_refs,
             "created_at": existing.created_at if existing is not None else utc_now(),
         }
@@ -203,6 +204,7 @@ class SnapshotService:
             buy_box_status=record.buy_box_status,
             buy_box_seller_name=record.buy_box_seller_name,
             coupon_text=record.coupon_text,
+            deal_info=record.deal_info,
             last_snapshot_date=snapshot_date,
         )
 

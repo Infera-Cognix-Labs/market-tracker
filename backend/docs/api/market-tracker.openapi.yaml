@@ -1614,9 +1614,57 @@ components:
         coupon_text:
           type: string
           nullable: true
+        deal_info:
+          $ref: '#/components/schemas/DealInfo'
         last_snapshot_date:
           type: string
           format: date
+
+    DealInfo:
+      type: object
+      properties:
+        deal_id:
+          type: string
+          nullable: true
+        deal_type:
+          type: string
+          nullable: true
+        deal_state:
+          type: string
+          nullable: true
+        deal_price:
+          type: number
+          format: float
+          nullable: true
+        list_price:
+          type: number
+          format: float
+          nullable: true
+        savings_percentage:
+          type: integer
+          nullable: true
+        savings_amount:
+          type: number
+          format: float
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        deal_starts_at:
+          type: string
+          format: date-time
+          nullable: true
+        deal_ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        deal_badge:
+          type: string
+          nullable: true
+        captured_at:
+          type: string
+          format: date-time
+          nullable: true
 
     TrackerRef:
       type: object

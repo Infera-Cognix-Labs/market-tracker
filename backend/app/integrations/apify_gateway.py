@@ -98,6 +98,15 @@ class ApifyGateway:
                 build=self.config.competitor_build,
                 memory_mbytes=self.config.competitor_memory_mbytes,
             )
+        if binding_code == "bind_deals_v1":
+            return ApifyBindingTarget(
+                binding_code=binding_code,
+                actor_name=self.config.deals_actor_name,
+                actor_id=self.config.deals_actor_id,
+                task_id=self.config.deals_task_id,
+                build=self.config.deals_build,
+                memory_mbytes=self.config.deals_memory_mbytes,
+            )
         raise ApifyBindingResolutionError(
             f"Unsupported Apify binding_code `{binding_code}`."
         )
