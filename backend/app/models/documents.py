@@ -15,6 +15,7 @@ from app.models.api import (
     CategoryTrackingConfig,
     CompetitorTrackerStats,
     CompetitorTrackFields,
+    DealInfo,
     EventPayload,
     ExternalRunSummary,
     JobError,
@@ -181,6 +182,7 @@ class ProductSnapshotDocument(WorkspaceDocument):
     rating_value: float | None = None
     review_count: int | None = None
     variation_count: int | None = None
+    deal_info: DealInfo | None = None
     source_refs: dict[str, object] | None = None
     created_at: datetime
 

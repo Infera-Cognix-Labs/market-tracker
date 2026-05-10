@@ -24,6 +24,12 @@ apify:
       task_id: ""
       build: "latest"
       memory_mbytes: 4096
+    deals:
+      name: "Deals Scraper"
+      actor_id: "hJNp8X1wuz14Wc5wU"
+      task_id: ""
+      build: "latest"
+      memory_mbytes: 4096
 
 storage:
   raw_batch_offload_enabled: false

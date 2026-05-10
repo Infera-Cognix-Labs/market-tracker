@@ -298,6 +298,18 @@ class ApifyConfig(BaseModel):
     competitor_memory_mbytes: int | None = _binding_int(
         "competitor", "memory_mbytes", "APIFY_COMPETITOR_MEMORY_MBYTES"
     )
+    deals_actor_name: str | None = _binding_str("deals", "name")
+    deals_actor_id: str | None = _binding_str("deals", "actor_id", "APIFY_DEALS_ACTOR_ID")
+    deals_task_id: str | None = _binding_str("deals", "task_id", "APIFY_DEALS_TASK_ID")
+    deals_build: str | None = _binding_str("deals", "build", "APIFY_DEALS_BUILD")
+    deals_memory_mbytes: int | None = _binding_int(
+        "deals", "memory_mbytes", "APIFY_DEALS_MEMORY_MBYTES"
+    )
+    deals_max_results: int = _config_int(
+        ("apify", "deals_max_results"),
+        100,
+        "APIFY_DEALS_MAX_RESULTS",
+    )
 
 
 class StorageConfig(BaseModel):

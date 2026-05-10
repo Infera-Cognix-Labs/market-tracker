@@ -1340,6 +1340,7 @@ def test_result_importer_redispatches_category_run_when_unique_coverage_is_low(
                     rating_value=4.5,
                     review_count=42,
                     variation_count=1,
+                    deal_info=None,
                     source_batch_no=1,
                     source_item_index=i,
                 )
@@ -1518,6 +1519,7 @@ def test_result_importer_marks_partial_success_when_category_unique_coverage_sta
                     rating_value=4.5,
                     review_count=42,
                     variation_count=1,
+                    deal_info=None,
                     source_batch_no=1,
                     source_item_index=i,
                 )
@@ -1728,3 +1730,74 @@ def test_run_orchestrator_dispatch_job_failure_sets_failed_status_and_logs_conte
         getattr(record, "context", {}).get("job_code") == job_document.job_code
         for record in caplog.records
     )
+
+
+def test_deals_binding_resolution(run_async, monkeypatch):
+    from app.config.config import Config
+
+    config = Config()
+    gateway = ApifyGateway(config.apify_config)
+
+    target = gateway.resolve_binding("bind_deals_v1")
+    assert target.binding_code == "bind_deals_v1"
+    assert target.actor_id == "hJNp8X1wuz14Wc5wU"
+
+
+def test_extract_deal_info_from_deals_api_payload(run_async):
+    from app.services.normalization_service import _extract_deal_info
+    from datetime import UTC
+
+    captured_at = datetime(2026, 5, 10, 4, 30, tzinfo=UTC)
+
+    payload = {
+        "deal_id": "abc123",
+        "deal_type": "BEST_DEAL",
+        "deal_state": "AVAILABLE",
+        "deal_price": {"amount": 15.2, "currency": "USD"},
+        "list_price": {"amount": 19.0, "currency": "USD"},
+        "savings_percentage": 20,
+        "savings_amount": {"amount": 3.8, "currency": "USD"},
+        "deal_starts_at": "2026-05-10T00:00:00Z",
+        "deal_ends_at": "2026-05-17T23:59:59Z",
+        "deal_badge": "20% off",
+    }
+
+    deal_info = _extract_deal_info(payload, captured_at)
+
+    assert deal_info is not None
+    assert deal_info.deal_id == "abc123"
+    assert deal_info.deal_type == "BEST_DEAL"
+    assert deal_info.deal_state == "AVAILABLE"
+    assert deal_info.deal_price == 15.2
+    assert deal_info.list_price == 19.0
+    assert deal_info.savings_percentage == 20
+    assert deal_info.savings_amount == 3.8
+    assert deal_info.currency == "USD"
+    assert deal_info.deal_badge == "20% off"
+
+
+def test_extract_deal_info_returns_none_for_non_deal_payload(run_async):
+    from app.services.normalization_service import _extract_deal_info
+    from datetime import UTC
+
+    captured_at = datetime(2026, 5, 10, 4, 30, tzinfo=UTC)
+
+    payload = {
+        "asin": "B0TEST12345",
+        "title": "Test Product",
+        "price_current": 29.99,
+    }
+
+    deal_info = _extract_deal_info(payload, captured_at)
+    assert deal_info is None
+
+
+def test_deals_binding_resolution_error_for_unknown_binding(run_async):
+    from app.integrations.apify_gateway import ApifyBindingResolutionError
+    from app.config.config import Config
+
+    config = Config()
+    gateway = ApifyGateway(config.apify_config)
+
+    with pytest.raises(ApifyBindingResolutionError):
+        gateway.resolve_binding("bind_unknown_v1")

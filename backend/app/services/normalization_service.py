@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.core.utils import utc_now
-from app.models.api import AvailabilityStatus, BuyBoxStatus, TrackerType
+from app.models.api import (
+    AvailabilityStatus,
+    BuyBoxStatus,
+    DealInfo,
+    TrackerType,
+)
 from app.services.run_orchestrator import coerce_datetime
 
 _ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10,12}$")
@@ -43,6 +48,7 @@ class NormalizedProductRecord:
     rating_value: float | None
     review_count: int | None
     variation_count: int | None
+    deal_info: DealInfo | None
     source_batch_no: int
     source_item_index: int
 
@@ -134,11 +140,21 @@ class NormalizationService:
                 "price_buybox",
                 "price_new_fba",
                 "price_new",
+                "deal_price",
             )
         )
+        if price_current is None:
+            nested_deal_price = _pick(payload, "deal_price")
+            if isinstance(nested_deal_price, dict):
+                price_current = _coerce_float(nested_deal_price.get("amount"))
+
         price_original = _coerce_float(
-            _pick(payload, "price_original", "originalPrice", "list_price")
+            _pick(payload, "price_original", "originalPrice", "list_price", "list_price")
         )
+        if price_original is None:
+            nested_list_price = _pick(payload, "list_price")
+            if isinstance(nested_list_price, dict):
+                price_original = _coerce_float(nested_list_price.get("amount"))
 
         currency = _coerce_currency(
             _pick(payload, "currency", "currencyCode", "currency_code")
@@ -184,6 +200,8 @@ class NormalizationService:
             or utc_now()
         )
 
+        deal_info = _extract_deal_info(payload, captured_at)
+
         return NormalizedProductRecord(
             marketplace=marketplace,
             asin=asin,
@@ -206,6 +224,7 @@ class NormalizationService:
             rating_value=rating_value,
             review_count=review_count,
             variation_count=variation_count,
+            deal_info=deal_info,
             source_batch_no=batch_no,
             source_item_index=item_index,
         )
@@ -352,6 +371,54 @@ def _extract_variation_count(payload: dict[str, object]) -> int | None:
     if not variant_asins:
         return None
     return len([value for value in variant_asins.split(",") if value.strip()])
+
+
+def _extract_deal_info(payload: dict[str, object], captured_at: datetime) -> DealInfo | None:
+    deal_id = _coerce_string(_pick(payload, "deal_id"))
+    deal_type = _coerce_string(_pick(payload, "deal_type"))
+    deal_state = _coerce_string(_pick(payload, "deal_state"))
+    deal_badge = _coerce_string(_pick(payload, "deal_badge"))
+
+    deal_price_obj = _pick(payload, "deal_price")
+    deal_price: float | None = None
+    currency: str | None = None
+    if isinstance(deal_price_obj, dict):
+        deal_price = _coerce_float(deal_price_obj.get("amount"))
+        currency = _coerce_string(deal_price_obj.get("currency"))
+
+    list_price_obj = _pick(payload, "list_price")
+    list_price: float | None = None
+    if isinstance(list_price_obj, dict):
+        list_price = _coerce_float(list_price_obj.get("amount"))
+        if currency is None:
+            currency = _coerce_string(list_price_obj.get("currency"))
+
+    savings_amount: float | None = None
+    savings_amount_obj = _pick(payload, "savings_amount")
+    if isinstance(savings_amount_obj, dict):
+        savings_amount = _coerce_float(savings_amount_obj.get("amount"))
+
+    savings_percentage = _coerce_int(_pick(payload, "savings_percentage"))
+
+    deal_starts_at = _coerce_datetime(_pick(payload, "deal_starts_at"))
+    deal_ends_at = _coerce_datetime(_pick(payload, "deal_ends_at"))
+
+    if deal_id or deal_type or deal_state or deal_price:
+        return DealInfo(
+            deal_id=deal_id,
+            deal_type=deal_type,
+            deal_state=deal_state,
+            deal_price=deal_price,
+            list_price=list_price,
+            savings_percentage=savings_percentage,
+            savings_amount=savings_amount,
+            currency=currency,
+            deal_starts_at=deal_starts_at,
+            deal_ends_at=deal_ends_at,
+            deal_badge=deal_badge,
+            captured_at=captured_at,
+        )
+    return None
 
 
 def _coerce_datetime(value: object | None) -> datetime | None:

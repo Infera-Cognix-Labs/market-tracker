@@ -49,6 +49,8 @@ class JobStatus(str, Enum):
     RUNNING_EXTERNAL = "RUNNING_EXTERNAL"
     IMPORTING = "IMPORTING"
     PROCESSING = "PROCESSING"
+    DEALS_IMPORTING = "DEALS_IMPORTING"
+    DEALS_PROCESSING = "DEALS_PROCESSING"
     SUCCESS = "SUCCESS"
     PARTIAL_SUCCESS = "PARTIAL_SUCCESS"
     FAILED = "FAILED"
@@ -93,6 +95,33 @@ class BuyBoxStatus(str, Enum):
     HAS_BUY_BOX = "HAS_BUY_BOX"
     NO_BUY_BOX = "NO_BUY_BOX"
     UNKNOWN = "UNKNOWN"
+
+
+class DealState(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    EXPIRED = "EXPIRED"
+    UNKNOWN = "UNKNOWN"
+
+
+class DealType(str, Enum):
+    BEST_DEAL = "BEST_DEAL"
+    LIGHTNING_DEAL = "LIGHTNING_DEAL"
+    DEAL_OF_THE_DAY = "DEAL_OF_THE_DAY"
+
+
+class DealInfo(ApiModel):
+    deal_id: str | None = None
+    deal_type: str | None = None
+    deal_state: str | None = None
+    deal_price: float | None = None
+    list_price: float | None = None
+    savings_percentage: int | None = None
+    savings_amount: float | None = None
+    currency: str | None = None
+    deal_starts_at: datetime | None = None
+    deal_ends_at: datetime | None = None
+    deal_badge: str | None = None
+    captured_at: datetime | None = None
 
 
 class Provider(str, Enum):
@@ -365,6 +394,7 @@ class ProductCurrentState(ApiModel):
     buy_box_status: BuyBoxStatus
     buy_box_seller_name: str | None = None
     coupon_text: str | None = None
+    deal_info: DealInfo | None = None
     last_snapshot_date: date
 
 

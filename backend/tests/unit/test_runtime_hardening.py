@@ -174,6 +174,7 @@ def test_snapshot_service_append_only_does_not_overwrite_existing_payload(
                 rating_value=4.7,
                 review_count=128,
                 variation_count=3,
+                deal_info=None,
             ),
             source_refs={"provider": "APIFY"},
         )
