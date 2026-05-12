@@ -287,7 +287,7 @@ class SnapshotService:
             CategorySnapshotDocument.workspace_id == workspace_id,
             CategorySnapshotDocument.tracker_code == tracker_code,
             CategorySnapshotDocument.snapshot_date < snapshot_date,
-        ).sort("snapshot_date", -1).first()
+        ).sort(-CategorySnapshotDocument.snapshot_date).first_or_none()
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:

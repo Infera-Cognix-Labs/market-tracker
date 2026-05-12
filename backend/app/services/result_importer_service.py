@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 
+from pymongo.errors import DuplicateKeyError
+
 from app.config.config import ApifyConfig, StorageConfig
 from app.core.logging import correlation_context, get_logger
 from app.core.metrics import get_metrics
@@ -145,16 +147,20 @@ class ResultImporterService:
             processed_jobs += 1
             try:
                 final_status = await self._process_job(job_document, run_document)
-            except (
-                Exception
-            ) as exc:  # pragma: no cover - covered through behavior tests
+            except Exception as exc:
                 logger.exception(
                     "Import processing failed unexpectedly.",
                     extra={
                         "context": correlation_context(
                             job_code=job_document.job_code,
                             tracker_code=job_document.tracker_code,
-                            apify_run_id=run_document.apify_run_id,
+                            apify_run_id=(
+                                run_document.apify_run_id
+                                if run_document is not None
+                                else None
+                            ),
+                            error_type=type(exc).__name__,
+                            error_message=str(exc),
                         )
                     },
                 )
@@ -835,29 +841,30 @@ async def _trigger_deals_job_after_category(
     if category_job.status not in {JobStatus.SUCCESS.value, JobStatus.PARTIAL_SUCCESS.value}:
         return None
 
-    existing_deals_job = await JobDocument.find_one(
-        JobDocument.workspace_id == category_job.workspace_id,
-        JobDocument.tracker_type == TrackerType.CATEGORY.value,
-        JobDocument.tracker_code == category_job.tracker_code,
-        JobDocument.job_code.startswith("deals_"),
-    )
-    if existing_deals_job:
-        logger.info(
-            "Deals job already exists for category tracker, skipping creation.",
-            extra={
-                "context": correlation_context(
-                    tracker_code=category_job.tracker_code,
-                    existing_job_code=existing_deals_job.job_code,
-                )
-            },
-        )
-        return existing_deals_job
-
     tracker_document = await CategoryTrackerDocument.find_one(
         CategoryTrackerDocument.workspace_id == category_job.workspace_id,
         CategoryTrackerDocument.tracker_code == category_job.tracker_code,
     )
     if tracker_document is None:
+        return None
+
+    existing = await JobDocument.find_one(
+        JobDocument.workspace_id == category_job.workspace_id,
+        JobDocument.tracker_code == category_job.tracker_code,
+        JobDocument.snapshot_date == category_job.snapshot_date,
+    )
+    if existing is not None:
+        logger.info(
+            "Skipping deals trigger — job already exists for this tracker+snapshot_date.",
+            extra={
+                "context": correlation_context(
+                    tracker_code=category_job.tracker_code,
+                    snapshot_date=str(category_job.snapshot_date),
+                    existing_job_code=existing.job_code,
+                    existing_status=existing.status,
+                )
+            },
+        )
         return None
 
     now = utc_now()
@@ -875,12 +882,24 @@ async def _trigger_deals_job_after_category(
         tracker_code=category_job.tracker_code,
         snapshot_date=category_job.snapshot_date,
         trigger_mode="DEALS_FOLLOWUP",
-        status=JobStatus.QUEUED.value,
+        status=JobStatus.DEALS_IMPORTING.value,
         run_strategy=run_strategy,
         summary={"expected_items": 0, "imported_items": 0, "events_emitted": 0},
         created_at=now,
     )
-    await deals_job.insert()
+    try:
+        await deals_job.insert()
+    except DuplicateKeyError:
+        logger.info(
+            "Deals job already exists for this tracker+snapshot_date.",
+            extra={
+                "context": correlation_context(
+                    tracker_code=category_job.tracker_code,
+                    snapshot_date=str(category_job.snapshot_date),
+                )
+            },
+        )
+        return None
 
     logger.info(
         "Created deals followup job after category scrape.",
@@ -914,8 +933,21 @@ async def _process_deals_import(
     workspace_id = job_document.workspace_id
     tracker_code = job_document.tracker_code
 
+    tracker_document = await CategoryTrackerDocument.find_one(
+        CategoryTrackerDocument.workspace_id == workspace_id,
+        CategoryTrackerDocument.tracker_code == tracker_code,
+    )
+    if tracker_document is None:
+        job_document.status = JobStatus.SUCCESS.value
+        job_document.finished_at = utc_now()
+        await job_document.save()
+        return JobStatus.SUCCESS
+
+    marketplace = tracker_document.marketplace
+
     products = await ProductDocument.find(
         ProductDocument.workspace_id == workspace_id,
+        ProductDocument.marketplace == marketplace,
     ).to_list()
 
     target_asins = {p.asin for p in products}
@@ -960,7 +992,7 @@ async def _process_deals_import(
     normalization_service = NormalizationService()
     normalized = normalization_service.normalize_items(
         tracker_type=TrackerType.CATEGORY,
-        marketplace="amazon_us",
+        marketplace=marketplace,
         raw_items=raw_items,
     )
 
