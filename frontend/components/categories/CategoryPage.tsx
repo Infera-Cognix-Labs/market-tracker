@@ -6,7 +6,7 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker } from "../shared/api"
-import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus } from "../shared/types"
+import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo } from "../shared/types"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function parseNodeId(input: string): string | null {
@@ -34,6 +34,35 @@ const parseCouponItems = (couponText?: string | null): string[] => {
     .split(/\r?\n|\s*\|\s*|\s*;\s*/)
     .map(item => item.trim())
     .filter(Boolean)
+}
+
+const formatMoney = (value: number, currency?: string | null): string => {
+  const symbol = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$"
+  return `${symbol}${value.toFixed(2)}`
+}
+
+const parseDealItems = (dealInfo?: DealInfo | null): string[] => {
+  if (!dealInfo) return []
+  const items: string[] = []
+
+  if (dealInfo.deal_badge) items.push(dealInfo.deal_badge)
+
+  const typeAndState = [dealInfo.deal_type, dealInfo.deal_state].filter(Boolean).join(" • ")
+  if (typeAndState) items.push(typeAndState)
+
+  if (dealInfo.deal_price != null) {
+    items.push(`Deal: ${formatMoney(dealInfo.deal_price, dealInfo.currency)}`)
+  }
+  if (dealInfo.list_price != null) {
+    items.push(`List: ${formatMoney(dealInfo.list_price, dealInfo.currency)}`)
+  }
+  if (dealInfo.savings_percentage != null || dealInfo.savings_amount != null) {
+    const pct = dealInfo.savings_percentage != null ? `${dealInfo.savings_percentage}%` : null
+    const amt = dealInfo.savings_amount != null ? formatMoney(dealInfo.savings_amount, dealInfo.currency) : null
+    items.push(`Savings: ${[pct, amt].filter(Boolean).join(" • ")}`)
+  }
+
+  return items.length > 0 ? items : ["Deal available"]
 }
 
 const MARKETPLACES = [
@@ -276,6 +305,7 @@ export const CategoryPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
   const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
+  const [openDealKey, setOpenDealKey] = useState<string | null>(null)
 
   // Load trackers
   useEffect(() => {
@@ -465,10 +495,10 @@ export const CategoryPage = () => {
           <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading snapshot...</div>
         ) : (
           <div style={{ width: "100%", overflowX: "auto" }}>
-            <table style={{ width: "100%", minWidth: 1120, borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", minWidth: 1260, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Deals"].map(h => (
+                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Deal", "Coupon"].map(h => (
                     <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -536,6 +566,56 @@ export const CategoryPage = () => {
                   <td style={{ padding: "9px 10px" }}>
                     <Badge type={p.buy_box_status === "HAS_BUY_BOX" ? "listing" : p.buy_box_status === "NO_BUY_BOX" ? "stock" : "info"} text={p.buy_box_status === "HAS_BUY_BOX" ? "Has BB" : p.buy_box_status === "NO_BUY_BOX" ? "No BB" : "—"} />
                   </td>
+                  <td style={{ padding: "9px 10px", fontSize: 11, color: T.blue }}>
+                    {(() => {
+                      const dealItems = parseDealItems(p.deal_info)
+                      if (dealItems.length === 0) return "—"
+
+                      const dealKey = `${p.asin}-${p.rank_position}`
+                      const isOpen = openDealKey === dealKey
+
+                      return (
+                        <div style={{ minWidth: 180 }}>
+                          <button
+                            type="button"
+                            onClick={() => setOpenDealKey(prev => prev === dealKey ? null : dealKey)}
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              border: `1px solid ${T.blue}`,
+                              background: `${T.blue}16`,
+                              color: T.blue,
+                              fontSize: 10,
+                              fontFamily: T.mono,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isOpen ? "Hide" : "View"} Deal
+                          </button>
+                          {isOpen && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                padding: "6px 8px",
+                                background: T.bg3,
+                                border: `1px solid ${T.border}`,
+                                borderRadius: 6,
+                                color: T.text1,
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {dealItems.map((deal, idx) => (
+                                <div key={`${deal}-${idx}`} style={{ marginBottom: idx < dealItems.length - 1 ? 4 : 0 }}>
+                                  • {deal}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
+                  </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.amber }}>
                     {(() => {
                       const couponItems = parseCouponItems(p.coupon_text)
@@ -561,7 +641,7 @@ export const CategoryPage = () => {
                               cursor: "pointer",
                             }}
                           >
-                            {isOpen ? "Hide" : "View"} {couponItems.length} deal{couponItems.length > 1 ? "s" : ""}
+                            {isOpen ? "Hide" : "View"} {couponItems.length} Coupon{couponItems.length > 1 ? "s" : ""}
                           </button>
                           {isOpen && (
                             <div
