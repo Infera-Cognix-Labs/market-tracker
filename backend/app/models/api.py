@@ -247,6 +247,7 @@ class CategorySnapshotProduct(ApiModel):
     availability_status: AvailabilityStatus
     buy_box_status: BuyBoxStatus
     coupon_text: str | None = None
+    deal_info: DealInfo | None = None
 
 
 class CategorySnapshot(ApiModel):
@@ -469,6 +470,7 @@ class ProductSnapshot(ApiModel):
     price_original: float | None = None
     currency: str | None = None
     coupon_text: str | None = None
+    deal_info: DealInfo | None = None
     availability_status: AvailabilityStatus
     buy_box_status: BuyBoxStatus
     buy_box_seller_name: str | None = None
