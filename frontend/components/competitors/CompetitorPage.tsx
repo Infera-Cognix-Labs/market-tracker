@@ -8,7 +8,7 @@ import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
 import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents } from "../shared/api"
-import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus } from "../shared/types"
+import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus, DealInfo } from "../shared/types"
 
 const MARKETPLACES = [
   "amazon_us", "amazon_de", "amazon_uk", "amazon_fr",
@@ -33,6 +33,35 @@ const parseCouponItems = (couponText?: string | null): string[] => {
     .split(/[\n|;]/)
     .map(s => s.trim())
     .filter(Boolean)
+}
+
+const formatMoney = (value: number, currency?: string | null): string => {
+  const symbol = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$"
+  return `${symbol}${value.toFixed(2)}`
+}
+
+const parseDealItems = (dealInfo?: DealInfo | null): string[] => {
+  if (!dealInfo) return []
+  const items: string[] = []
+
+  if (dealInfo.deal_badge) items.push(dealInfo.deal_badge)
+
+  const typeAndState = [dealInfo.deal_type, dealInfo.deal_state].filter(Boolean).join(" • ")
+  if (typeAndState) items.push(typeAndState)
+
+  if (dealInfo.deal_price != null) {
+    items.push(`Deal: ${formatMoney(dealInfo.deal_price, dealInfo.currency)}`)
+  }
+  if (dealInfo.list_price != null) {
+    items.push(`List: ${formatMoney(dealInfo.list_price, dealInfo.currency)}`)
+  }
+  if (dealInfo.savings_percentage != null || dealInfo.savings_amount != null) {
+    const pct = dealInfo.savings_percentage != null ? `${dealInfo.savings_percentage}%` : null
+    const amt = dealInfo.savings_amount != null ? formatMoney(dealInfo.savings_amount, dealInfo.currency) : null
+    items.push(`Savings: ${[pct, amt].filter(Boolean).join(" • ")}`)
+  }
+
+  return items.length > 0 ? items : ["Deal available"]
 }
 
 // ── Manage ASINs Modal ────────────────────────────────────────────────────────
@@ -467,6 +496,7 @@ export const CompetitorPage = () => {
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
   const [openCouponRowKey, setOpenCouponRowKey] = useState<string | null>(null)
+  const [openDealRowKey, setOpenDealRowKey] = useState<string | null>(null)
   const [tablePage, setTablePage] = useState(0)
   const [eventsPage, setEventsPage] = useState(0)
 
@@ -558,6 +588,7 @@ export const CompetitorPage = () => {
     availability: pt.availability_status,
     buyBox: pt.buy_box_status,
     coupon: pt.coupon_text,
+    deal: pt.deal_info,
     variations: pt.variation_count,
   })) || []
 
@@ -642,6 +673,7 @@ export const CompetitorPage = () => {
                 setTablePage(0)
                 setEventsPage(0)
                 setOpenCouponRowKey(null)
+                setOpenDealRowKey(null)
               }}
               style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? sc : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? sc : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
               {isSelected && <span className="dot-live" style={{ background: sc, boxShadow: `0 0 0 3px ${sc}30` }} />}
@@ -687,7 +719,7 @@ export const CompetitorPage = () => {
             {loadingDetail ? "Loading…" : `${products.length} ASINs tracked`}
           </div>
           {products.map((p: TrackedProductSummary, i: number) => (
-            <div key={i} className="row-hover" onClick={() => { setSelectedAsinIdx(i); setTablePage(0); setEventsPage(0); setOpenCouponRowKey(null) }}
+            <div key={i} className="row-hover" onClick={() => { setSelectedAsinIdx(i); setTablePage(0); setEventsPage(0); setOpenCouponRowKey(null); setOpenDealRowKey(null) }}
               style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === selectedAsinIdx ? T.bg4 : T.bg2, border: `1px solid ${i === selectedAsinIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
               <div style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3 }}>{p.asin}</div>
               <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
@@ -734,11 +766,16 @@ export const CompetitorPage = () => {
                 {productDetail?.current_state && (
                   <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text1, flexWrap: "wrap" }}>
                     <span><strong>Buy Box:</strong> {productDetail.current_state.buy_box_status === "HAS_BUY_BOX" ? `✅ ${productDetail.current_state.buy_box_seller_name || ""}` : "❌"}</span>
-                    {productDetail.current_state.coupon_text && (
-                      <span style={{ padding: "2px 8px", background: T.bg4, borderRadius: 4, color: T.amber }}>
-                        🏷️ {productDetail.current_state.coupon_text}
-                      </span>
-                    )}
+                        {productDetail.current_state.coupon_text && (
+                          <span style={{ padding: "2px 8px", background: T.bg4, borderRadius: 4, color: T.amber }}>
+                            🏷️ {productDetail.current_state.coupon_text}
+                          </span>
+                        )}
+                        {productDetail.current_state.deal_info && (
+                          <span style={{ padding: "2px 8px", background: `${T.blue}18`, borderRadius: 4, color: T.blue }}>
+                            🎯 Deal Active
+                          </span>
+                        )}
                   </div>
                 )}
                 {/* Tracker refs */}
@@ -864,7 +901,7 @@ export const CompetitorPage = () => {
                   <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
                     <thead>
                       <tr>
-                        {["Date", "Availability", "Buy Box", "Deals", "Variants"].map(h => (
+                        {["Date", "Availability", "Buy Box", "Deal", "Coupon", "Variants"].map(h => (
                           <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, borderBottom: `1px solid ${T.border}` }}>{h}</th>
                         ))}
                       </tr>
@@ -878,6 +915,54 @@ export const CompetitorPage = () => {
                           </td>
                           <td style={{ padding: "6px 10px" }}>
                             <Badge type={r.buyBox === "HAS_BUY_BOX" ? "listing" : r.buyBox === "NO_BUY_BOX" ? "stock" : "info"} text={r.buyBox === "HAS_BUY_BOX" ? "Has BB" : r.buyBox === "NO_BUY_BOX" ? "No BB" : "—"} />
+                          </td>
+                          <td style={{ padding: "6px 10px" }}>
+                            {(() => {
+                              const items = parseDealItems(r.deal)
+                              if (items.length === 0) return <span style={{ color: T.text3 }}>—</span>
+                              const isOpen = openDealRowKey === r.date
+                              return (
+                                <div style={{ minWidth: 180 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setOpenDealRowKey(prev => prev === r.date ? null : r.date)}
+                                    style={{
+                                      padding: "2px 6px",
+                                      borderRadius: 4,
+                                      border: `1px solid ${T.blue}`,
+                                      background: `${T.blue}16`,
+                                      color: T.blue,
+                                      fontSize: 9,
+                                      fontFamily: T.mono,
+                                      fontWeight: 600,
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {isOpen ? "Hide" : "View"} Deal
+                                  </button>
+                                  {isOpen && (
+                                    <div
+                                      style={{
+                                        marginTop: 4,
+                                        padding: "4px 6px",
+                                        background: T.bg3,
+                                        border: `1px solid ${T.border}`,
+                                        borderRadius: 4,
+                                        color: T.text1,
+                                        fontSize: 10,
+                                        lineHeight: 1.4,
+                                      }}
+                                    >
+                                      {items.map((deal, idx) => (
+                                        <div key={`${deal}-${idx}`} style={{ marginBottom: idx < items.length - 1 ? 3 : 0 }}>
+                                          • {deal}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </td>
                           <td style={{ padding: "6px 10px" }}>
                             {(() => {
@@ -901,7 +986,7 @@ export const CompetitorPage = () => {
                                       cursor: "pointer",
                                     }}
                                   >
-                                    {isOpen ? "Hide" : "View"} {items.length} deal{items.length > 1 ? "s" : ""}
+                                    {isOpen ? "Hide" : "View"} {items.length} Coupon{items.length > 1 ? "s" : ""}
                                   </button>
                                   {isOpen && (
                                     <div

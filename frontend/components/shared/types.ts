@@ -11,6 +11,21 @@ export type Timeframe = "DAILY" | "WEEKLY" | "MONTHLY"
 export type TriggerMode = "SCHEDULED" | "MANUAL" | "RETRY"
 export type TrackerType = "CATEGORY" | "COMPETITOR"
 
+export interface DealInfo {
+  deal_id?: string | null
+  deal_type?: string | null
+  deal_state?: string | null
+  deal_price?: number | null
+  list_price?: number | null
+  savings_percentage?: number | null
+  savings_amount?: number | null
+  currency?: string | null
+  deal_starts_at?: string | null
+  deal_ends_at?: string | null
+  deal_badge?: string | null
+  captured_at?: string | null
+}
+
 export type EventType =
   | "NEW_ENTRANT_TOP50"
   | "RETURNING_TOP50"
@@ -163,6 +178,7 @@ export interface CategorySnapshotProduct {
   availability_status: AvailabilityStatus
   buy_box_status: BuyBoxStatus
   coupon_text?: string | null
+  deal_info?: DealInfo | null
 }
 
 export interface CategorySnapshotSummary {
@@ -254,6 +270,7 @@ export interface ProductCurrentState {
   buy_box_status: BuyBoxStatus
   buy_box_seller_name?: string | null
   coupon_text?: string | null
+  deal_info?: DealInfo | null
   last_snapshot_date: string
 }
 
@@ -282,6 +299,7 @@ export interface ProductTimelinePoint {
   price_current?: number | null
   price_original?: number | null
   coupon_text?: string | null
+  deal_info?: DealInfo | null
   availability_status: AvailabilityStatus
   buy_box_status: BuyBoxStatus
   rating_value?: number | null
