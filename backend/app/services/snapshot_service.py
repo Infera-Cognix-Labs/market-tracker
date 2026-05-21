@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pymongo import DESCENDING
+
 from app.core.errors import NotFoundError
 from app.core.utils import utc_now
 from app.models.api import (
@@ -287,7 +289,7 @@ class SnapshotService:
             CategorySnapshotDocument.workspace_id == workspace_id,
             CategorySnapshotDocument.tracker_code == tracker_code,
             CategorySnapshotDocument.snapshot_date < snapshot_date,
-        ).sort(-CategorySnapshotDocument.snapshot_date).first_or_none()
+        ).sort((CategorySnapshotDocument.snapshot_date, DESCENDING)).first_or_none()
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:
