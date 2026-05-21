@@ -5,8 +5,22 @@ import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, P
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker } from "../shared/api"
-import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo } from "../shared/types"
+import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents } from "../shared/api"
+import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
+
+type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
+
+type CategoryTableRow =
+  | { kind: "product"; key: string; product: CategorySnapshotProduct }
+  | { kind: "event"; key: string; event: Event }
+
+const CATEGORY_FILTER_TO_EVENT: Record<Exclude<CategoryKpiFilter, "ALL">, EventType> = {
+  NEW_ENTRANTS: "NEW_ENTRANT_TOP50",
+  RETURNING: "RETURNING_TOP50",
+  EXITS: "EXIT_TOP50",
+  ENTER_TOP10: "ENTER_TOP10",
+  EXIT_TOP10: "EXIT_TOP10",
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function parseNodeId(input: string): string | null {
@@ -94,6 +108,30 @@ const rankTrendMeta = (product: CategorySnapshotProduct) => {
   if (product.rank_trend === "DOWN") return { color: T.red, label: `${product.rank_delta}` }
   if (product.rank_trend === "STABLE") return { color: T.text3, label: "0" }
   return { color: T.text3, label: "—" }
+}
+
+const getEventImageUrl = (event: Event): string | null => {
+  return event.payload.current?.main_image_url || event.payload.previous?.main_image_url || null
+}
+
+const matchesCategorySearch = (search: string, product: CategorySnapshotProduct): boolean => {
+  if (!search) return true
+  const normalized = search.toLowerCase()
+  return (
+    product.title.toLowerCase().includes(normalized) ||
+    product.asin.toLowerCase().includes(normalized) ||
+    product.brand.toLowerCase().includes(normalized)
+  )
+}
+
+const matchesCategoryEventSearch = (search: string, event: Event): boolean => {
+  if (!search) return true
+  const normalized = search.toLowerCase()
+  return (
+    event.title.toLowerCase().includes(normalized) ||
+    event.asin.toLowerCase().includes(normalized) ||
+    event.summary.toLowerCase().includes(normalized)
+  )
 }
 
 // ── Create Category Tracker Modal ─────────────────────────────────────────────
@@ -316,13 +354,18 @@ export const CategoryPage = () => {
   const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
+  const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>("ALL")
+  const [movementEvents, setMovementEvents] = useState<Event[]>([])
 
   // Load trackers
   useEffect(() => {
     apiListCategoryTrackers()
       .then(res => {
         setTrackers(res.items)
-        if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
+        if (res.items.length > 0) {
+          const firstActive = res.items.find(t => t.status === "ACTIVE") ?? res.items[0]
+          setSelectedCode(firstActive.tracker_code)
+        }
       })
       .catch(() => {
         setTrackers([])
@@ -341,16 +384,100 @@ export const CategoryPage = () => {
     return () => { cancelled = true }
   }, [selectedCode, rankTimeframe, refreshKey])
 
+  useEffect(() => {
+    if (!selectedCode || !snapshot?.snapshot_date) return
+    let cancelled = false
+    apiListEvents({
+      tracker_type: "CATEGORY",
+      tracker_code: selectedCode,
+      from_date: snapshot.snapshot_date,
+      to_date: snapshot.snapshot_date,
+      page_size: 200,
+    })
+      .then(res => {
+        if (cancelled) return
+        setMovementEvents(
+          res.items.filter(event => Object.values(CATEGORY_FILTER_TO_EVENT).includes(event.event_type))
+        )
+      })
+      .catch(() => {
+        if (cancelled) return
+        setMovementEvents([])
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCode, snapshot?.snapshot_date])
+
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
   const selectedTracker = trackers.find(t => t.tracker_code === selectedCode)
 
-  const filtered = useMemo(() => {
+  const filteredProducts = useMemo(() => {
     if (!snapshot) return []
-    if (!search) return snapshot.products
-    const s = search.toLowerCase()
-    return snapshot.products.filter(p => p.title.toLowerCase().includes(s) || p.asin.toLowerCase().includes(s) || p.brand.toLowerCase().includes(s))
+    return snapshot.products.filter(product => matchesCategorySearch(search, product))
   }, [snapshot, search])
+
+  const allVisibleRows = useMemo<CategoryTableRow[]>(() => {
+    if (!snapshot) return []
+    if (activeKpiFilter === "ALL") {
+      return filteredProducts.map(product => ({
+        kind: "product",
+        key: `${product.asin}-${product.rank_position}`,
+        product,
+      }))
+    }
+
+    const eventType = CATEGORY_FILTER_TO_EVENT[activeKpiFilter]
+    const relevantEvents = movementEvents.filter(event => event.event_type === eventType)
+
+    if (activeKpiFilter === "EXITS") {
+      return relevantEvents
+        .filter(event => matchesCategoryEventSearch(search, event))
+        .map(event => ({ kind: "event", key: event.event_code, event }))
+    }
+
+    if (activeKpiFilter === "EXIT_TOP10") {
+      const productsByAsin = new Map(snapshot.products.map(p => [p.asin, p]))
+      return relevantEvents
+        .filter(event => matchesCategoryEventSearch(search, event))
+        .map(event => {
+          const product = productsByAsin.get(event.asin)
+          if (product) return { kind: "product" as const, key: `${product.asin}-${product.rank_position}`, product }
+          return { kind: "event" as const, key: event.event_code, event }
+        })
+    }
+
+    const eventAsins = new Set(relevantEvents.map(event => event.asin))
+    return filteredProducts
+      .filter(product => eventAsins.has(product.asin))
+      .map(product => ({ kind: "product", key: `${product.asin}-${product.rank_position}`, product }))
+  }, [snapshot, activeKpiFilter, filteredProducts, movementEvents, search])
+
+  const totalFilteredCount = useMemo(() => {
+    if (!snapshot) return 0
+    if (activeKpiFilter === "ALL") return snapshot.products.length
+    const eventType = CATEGORY_FILTER_TO_EVENT[activeKpiFilter]
+    if (activeKpiFilter === "EXITS") {
+      return movementEvents.filter(event => event.event_type === eventType).length
+    }
+    const eventAsins = new Set(
+      movementEvents.filter(event => event.event_type === eventType).map(event => event.asin)
+    )
+    return snapshot.products.filter(product => eventAsins.has(product.asin)).length
+  }, [snapshot, activeKpiFilter, movementEvents])
+
+  const kpiCounts = useMemo(() => {
+    const count = (type: EventType) => movementEvents.filter(e => e.event_type === type).length
+    return {
+      new_entrants: count("NEW_ENTRANT_TOP50"),
+      returning: count("RETURNING_TOP50"),
+      exits: count("EXIT_TOP50"),
+      enter_top10: count("ENTER_TOP10"),
+      exit_top10: count("EXIT_TOP10"),
+    }
+  }, [movementEvents])
 
   if (loading && trackers.length === 0) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading trackers...</div>
   if (!loading && trackers.length === 0 && error) return <div style={{ textAlign: "center", padding: 60, color: T.red }}>{error}</div>
@@ -458,20 +585,20 @@ export const CategoryPage = () => {
       {snapshot && (
         <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
           {[
-            { label: "Total ASINs", v: snapshot.summary.asin_count, color: T.text0, icon: <TrendingUp size={14} /> },
-            { label: "New Entrants", v: snapshot.summary.new_entrant_count, color: T.green, icon: <Zap size={14} /> },
-            { label: "Returning", v: snapshot.summary.returning_count, color: "#90EE90", icon: <RefreshCw size={14} /> },
-            { label: "Exits", v: snapshot.summary.exit_count, color: T.red, icon: <TrendingDown size={14} /> },
-            { label: "Enter Top 10", v: snapshot.summary.enter_top10_count, color: T.amber, icon: <Star size={14} /> },
-            { label: "Exit Top 10", v: snapshot.summary.exit_top10_count, color: T.red, icon: <TrendingDown size={14} /> },
+            { key: "ALL" as const, label: "Total ASINs", v: snapshot.summary.asin_count, color: T.text0, icon: <TrendingUp size={14} /> },
+            { key: "NEW_ENTRANTS" as const, label: "New Entrants", v: kpiCounts.new_entrants, color: T.green, icon: <Zap size={14} /> },
+            { key: "RETURNING" as const, label: "Returning", v: kpiCounts.returning, color: "#90EE90", icon: <RefreshCw size={14} /> },
+            { key: "EXITS" as const, label: "Exits", v: kpiCounts.exits, color: T.red, icon: <TrendingDown size={14} /> },
+            { key: "ENTER_TOP10" as const, label: "Enter Top 10", v: kpiCounts.enter_top10, color: T.amber, icon: <Star size={14} /> },
+            { key: "EXIT_TOP10" as const, label: "Exit Top 10", v: kpiCounts.exit_top10, color: T.red, icon: <TrendingDown size={14} /> },
           ].map(s => (
-            <div key={s.label} className="card" style={{ flex: 1, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+            <button key={s.label} type="button" className="card" onClick={() => setActiveKpiFilter(s.key)} style={{ flex: 1, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left", border: `1px solid ${activeKpiFilter === s.key ? s.color : T.border}`, background: activeKpiFilter === s.key ? `${s.color}10` : undefined }}>
               <div style={{ width: 30, height: 30, borderRadius: 7, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>{s.icon}</div>
               <div>
                 <span style={{ fontSize: 22, fontWeight: 700, fontFamily: T.mono, color: s.color }}>{s.v}</span>
                 <div style={{ fontSize: 10, color: T.text2 }}>{s.label}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -503,7 +630,7 @@ export const CategoryPage = () => {
             ))}
           </div>
           <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>
-            {filtered.length} of {snapshot?.products.length || 0} products
+            {allVisibleRows.length} of {totalFilteredCount} {activeKpiFilter === "ALL" ? "products" : "matched rows"}
           </span>
         </div>
 
@@ -520,8 +647,48 @@ export const CategoryPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p: CategorySnapshotProduct) => (
-                  <tr key={p.rank_position} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
+                {allVisibleRows.map(row => {
+                  if (row.kind === "event") {
+                    const event = row.event
+                    const imageUrl = getEventImageUrl(event)
+                    const rankLabel = event.payload.current_rank ?? event.payload.previous_rank ?? event.payload.rank_today ?? null
+                    return (
+                      <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: `${T.bg3}30` }}>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, color: T.text1 }}>
+                          {rankLabel != null ? String(rankLabel).padStart(2, "0") : "--"}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>
+                          {event.event_type.replaceAll("_", " ")}
+                        </td>
+                        <td style={{ padding: "6px 10px" }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={imageUrl} alt={event.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                            ) : (
+                              <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>N/A</span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>{event.asin}</td>
+                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</div>
+                        </td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text3 }}>—</td>
+                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.text3 }}>—</td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text3 }}>—</td>
+                        <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
+                        <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
+                      </tr>
+                    )
+                  }
+
+                  const p = row.product
+                  return (
+                  <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: p.rank_position <= 10 ? 700 : 400, color: p.rank_position <= 10 ? T.amber : T.text1 }}>
                     {String(p.rank_position).padStart(2, "0")}
                   </td>
@@ -683,13 +850,13 @@ export const CategoryPage = () => {
                     })()}
                   </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>
         )}
 
-        {!loading && filtered.length === 0 && (
+        {!loading && allVisibleRows.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
         )}
       </div>

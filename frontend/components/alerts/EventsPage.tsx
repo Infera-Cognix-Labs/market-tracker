@@ -6,7 +6,7 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListEvents } from "../shared/api"
+import { apiListEvents, apiGetProductDetail } from "../shared/api"
 import type { Event, EventType, Severity } from "../shared/types"
 
 const EVENT_TYPES: EventType[] = [
@@ -26,6 +26,7 @@ export const EventsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<EventType | "">("")
   const [filterSeverity, setFilterSeverity] = useState<Severity | "">("")
+  const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
 
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
@@ -40,6 +41,19 @@ export const EventsPage = () => {
       setEvents(res.items)
       setTotal(res.total)
       setPageNum(p)
+
+      // Batch-fetch product images for unique ASINs on this page
+      const pairs = [...new Map(res.items.map(e => [`${e.marketplace}:${e.asin}`, e])).values()]
+      const results = await Promise.allSettled(
+        pairs.map(e => apiGetProductDetail(e.marketplace, e.asin))
+      )
+      const imgMap = new Map<string, string>()
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value?.main_image_url_latest) {
+          imgMap.set(`${pairs[i].marketplace}:${pairs[i].asin}`, r.value.main_image_url_latest)
+        }
+      })
+      setProductImages(imgMap)
     } catch {
       setEvents([])
       setTotal(0)
@@ -105,12 +119,19 @@ export const EventsPage = () => {
         )}
         {!loading && events.map(ev => {
           const meta = AlertTypeMeta(ev.event_type)
+          const imageUrl = ev.payload.current?.main_image_url || ev.payload.previous?.main_image_url
+            || productImages.get(`${ev.marketplace}:${ev.asin}`)
           return (
             <div key={ev.event_code}
               style={{ background: T.bg2, border: `1px solid ${T.border}`, borderLeft: `3px solid ${meta.color}`, borderRadius: 8, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, transition: "all .15s" }}
               className="row-hover">
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: `${meta.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: meta.color, flexShrink: 0 }}>
-                {meta.icon}
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", color: meta.color, flexShrink: 0 }}>
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt={ev.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                ) : (
+                  meta.icon
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
