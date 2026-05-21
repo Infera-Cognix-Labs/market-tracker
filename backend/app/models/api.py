@@ -678,3 +678,105 @@ class WeeklyDigestListResponse(ApiModel):
     page: int
     page_size: int
     total: int
+
+
+class CategoryEntrantItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    current_rank: int
+    previous_rank: int | None = None
+    entered_at: date
+    is_first_time_entrant: bool
+    tracker_code: str
+    tracker_name: str
+
+
+class ReturningEntrantItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    current_rank: int
+    previous_rank: int | None = None
+    entered_at: date
+    days_absent: int
+    tracker_code: str
+    tracker_name: str
+
+
+class CategoryInsights(ApiModel):
+    timeframe: Timeframe
+    generated_at: datetime
+    new_top10_entrants: list[CategoryEntrantItem]
+    first_time_entrants: list[CategoryEntrantItem]
+    returning_entrants: list[ReturningEntrantItem]
+
+
+class PriceChangeItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    previous_price: float | None = None
+    current_price: float | None = None
+    currency: str | None = None
+    delta_abs: float | None = None
+    delta_pct: float | None = None
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class PromotionItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    coupon_text: str | None = None
+    deal_info: DealInfo | None = None
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class AvailabilityChangeItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    previous_status: AvailabilityStatus
+    current_status: AvailabilityStatus
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class VariationChangeItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    previous_variation_count: int | None = None
+    current_variation_count: int | None = None
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class CompetitorInsights(ApiModel):
+    timeframe: Timeframe
+    generated_at: datetime
+    price_changes: list[PriceChangeItem]
+    promotions: list[PromotionItem]
+    availability_changes: list[AvailabilityChangeItem]
+    variation_changes: list[VariationChangeItem]
+
+
+class CompetitorAlertCounts(ApiModel):
+    oos_count: int
+    price_drop_count: int
+    price_increase_count: int
+    new_promotion_count: int
+    new_variation_count: int
