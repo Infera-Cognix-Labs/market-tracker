@@ -308,6 +308,7 @@ export const CategoryPage = () => {
   const [snapshot, setSnapshot] = useState<CategorySnapshot | null>(null)
   const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -318,11 +319,18 @@ export const CategoryPage = () => {
 
   // Load trackers
   useEffect(() => {
-    apiListCategoryTrackers().then(res => {
-      setTrackers(res.items)
-      if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
-      setLoading(false)
-    })
+    setLoading(true)
+    setError(null)
+    apiListCategoryTrackers()
+      .then(res => {
+        setTrackers(res.items)
+        if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
+      })
+      .catch(() => {
+        setTrackers([])
+        setError("Failed to load category trackers")
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   // Load snapshot when tracker changes
@@ -347,6 +355,7 @@ export const CategoryPage = () => {
   }, [snapshot, search])
 
   if (loading && trackers.length === 0) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading trackers...</div>
+  if (!loading && trackers.length === 0 && error) return <div style={{ textAlign: "center", padding: 60, color: T.red }}>{error}</div>
 
   return (
     <>

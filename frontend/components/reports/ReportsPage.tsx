@@ -13,17 +13,40 @@ export const ReportsPage = () => {
   const [digests, setDigests] = useState<WeeklyDigest[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<WeeklyDigest | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    apiListWeeklyDigests().then(res => {
-      setDigests(res.items)
-      setLoading(false)
-    })
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    apiListWeeklyDigests()
+      .then(res => {
+        if (cancelled) return
+        setDigests(res.items)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setDigests([])
+        setError("Failed to load reports")
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handleSelect = async (code: string) => {
-    const d = await apiGetWeeklyDigest(code)
-    setSelected(d)
+    setError(null)
+    try {
+      const d = await apiGetWeeklyDigest(code)
+      setSelected(d)
+    } catch {
+      setSelected(null)
+      setError("Failed to load digest detail")
+    }
   }
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading reports...</div>
@@ -31,6 +54,10 @@ export const ReportsPage = () => {
   return (
     <div className="anim-fade">
       <PageHeader title="Reports" sub="Weekly digest & threat analysis" />
+
+      {error && (
+        <div style={{ marginBottom: 12, color: T.red, fontSize: 12 }}>{error}</div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
         {/* Digest list */}

@@ -23,36 +23,35 @@ export const EventsPage = () => {
   const [total, setTotal] = useState(0)
   const [page, setPageNum] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<EventType | "">("")
   const [filterSeverity, setFilterSeverity] = useState<Severity | "">("")
 
-  const loadEvents = (p: number) => {
+  const loadEvents = async (p: number) => {
     setLoading(true)
-    apiListEvents({
-      event_type: filterType || undefined,
-      severity: filterSeverity || undefined,
-      page: p,
-      page_size: 20,
-    }).then(res => {
+    setError(null)
+    try {
+      const res = await apiListEvents({
+        event_type: filterType || undefined,
+        severity: filterSeverity || undefined,
+        page: p,
+        page_size: 20,
+      })
       setEvents(res.items)
       setTotal(res.total)
       setPageNum(p)
+    } catch {
+      setEvents([])
+      setTotal(0)
+      setPageNum(p)
+      setError("Failed to load events")
+    } finally {
       setLoading(false)
-    })
+    }
   }
 
   useEffect(() => {
-    apiListEvents({
-      event_type: filterType || undefined,
-      severity: filterSeverity || undefined,
-      page: 1,
-      page_size: 20,
-    }).then(res => {
-      setEvents(res.items)
-      setTotal(res.total)
-      setPageNum(1)
-      setLoading(false)
-    })
+    void loadEvents(1)
   }, [filterType, filterSeverity])
 
   return (
@@ -97,6 +96,9 @@ export const EventsPage = () => {
 
       {/* Events list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {!loading && error && events.length === 0 && (
+          <div style={{ textAlign: "center", padding: 24, color: T.red, fontSize: 12 }}>{error}</div>
+        )}
         {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading events...</div>}
         {!loading && events.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No events match this filter</div>
