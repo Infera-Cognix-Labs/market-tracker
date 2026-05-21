@@ -1,0 +1,12 @@
+{
+    "tracked_asins": [
+        {
+            "asin": "B0ABC12345",
+            "enabled": true
+        },
+        {
+            "asin": "B0XYZ67890",
+            "enabled": true
+        }
+    ]
+}

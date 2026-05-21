@@ -1,0 +1,170 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - "backend/**"
+
+env:
+  IMAGE_NAME: market-tracker/backend
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  # ── 1. Lint + Test ─────────────────────────────────────────────────────────
+  ci:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      #- name: Unit tests
+      #  run: uv run pytest
+
+  # ── 2. Build Docker image & push to registry ───────────────────────────────
+  publish:
+    name: Build & Push Docker image
+    runs-on: ubuntu-latest
+    needs: ci
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: |
+          SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+
+      - name: Trust registry CA certificate
+        run: |
+          echo "${{ secrets.REGISTRY_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/registry-ca.crt
+          sudo update-ca-certificates
+          sudo mkdir -p /etc/docker/certs.d/${{ secrets.REGISTRY }}
+          echo "${{ secrets.REGISTRY_CA_CERT }}" | sudo tee /etc/docker/certs.d/${{ secrets.REGISTRY }}/ca.crt
+
+      - name: Login to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ secrets.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+
+  # ── 3. SSH deploy to server & verify ────────────────────────────────────────
+  deploy-test:
+    name: Deploy & Health check
+    runs-on: ubuntu-latest
+    needs: publish
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Cập nhật image tag trong .env.staging
+            IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/backend:${{ needs.publish.outputs.image_tag }}"
+            sed -i "s|^BACKEND_IMAGE=.*|BACKEND_IMAGE=${IMAGE_TAG}|" .env.staging
+
+            # Login registry, pull image mới
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ secrets.REGISTRY }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+
+            docker compose -f docker-compose.staging.yml --env-file .env.staging pull backend
+            docker compose -f docker-compose.staging.yml --env-file .env.staging up backend -d --force-recreate
+
+            # Đợi container healthy (tối đa 600s)
+            echo "Waiting for backend health check..."
+            for i in $(seq 1 60); do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose -f docker-compose.staging.yml --env-file .env.staging ps -q backend) 2>/dev/null || echo "starting")
+              echo "  Attempt $i/60: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Backend is healthy!"
+                exit 0
+              fi
+              sleep 10
+            done
+
+            echo "Backend failed health check — rolling back"
+            docker compose -f docker-compose.staging.yml --env-file .env.staging down backend
+            exit 1
+  # ── 4. Sync host files for Airflow bind-mounts ────────────────────────────
+  # backend/dags, backend/app, backend/app-config.yaml được mount trực tiếp
+  # từ host vào Airflow containers → chỉ cần git pull là Airflow nhận code mới,
+  # không cần rebuild image.
+
+  sync-airflow-files:
+    name: Sync Airflow bind-mount files
+    runs-on: ubuntu-latest
+    needs: deploy-test
+
+    steps:
+      - name: Sync files via SSH (git pull)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            OLD_SHA=$(git rev-parse HEAD)
+            TARGET_SHA="${{ github.event.pull_request.head.sha }}"
+            echo "=== ${OLD_SHA:0:7} → ${TARGET_SHA:0:7} ==="
+
+            # Stop Airflow TRƯỚC khi reset để giải phóng lock trên các file DAG
+            docker compose -f docker-compose.staging.yml --env-file .env.staging stop airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver
+
+            # Trả lại quyền sở hữu các file bị Airflow container ghi đè
+            # (dùng Docker thay vì sudo — deploy user không có passwordless sudo)
+            DEPLOY_UID=$(id -u)
+            DEPLOY_GID=$(id -g)
+            docker run --rm \
+              -v "$(pwd)/backend/dags:/target/dags" \
+              -v "$(pwd)/backend/app:/target/app" \
+              alpine chown -R ${DEPLOY_UID}:${DEPLOY_GID} /target/dags /target/app
+
+            git fetch origin
+            git reset --hard ${TARGET_SHA}
+
+            # Start lại Airflow containers để nhận code mới + clear module cache
+            docker compose -f docker-compose.staging.yml --env-file .env.staging up airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver -d
+
+            echo "=== Sync complete. Airflow reloads DAGs automatically. ==="

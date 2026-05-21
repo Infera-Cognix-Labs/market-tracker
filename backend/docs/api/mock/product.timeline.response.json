@@ -1,0 +1,172 @@
+{
+  "marketplace": "amazon_us",
+  "asin": "B0ABC12345",
+  "from_date": "2026-03-28",
+  "to_date": "2026-04-03",
+  "granularity": "DAILY",
+  "points": [
+    {
+      "snapshot_date": "2026-03-28",
+      "bsr_position": 18,
+      "price_current": 39.99,
+      "price_original": 44.99,
+      "coupon_text": null,
+      "availability_status": "IN_STOCK",
+      "buy_box_status": "HAS_BUY_BOX",
+      "rating_value": 4.5,
+      "review_count": 995,
+      "title_hash": "sha256_title_v1",
+      "main_image_hash": "sha256_img_v1",
+      "variation_count": 3
+    },
+    {
+      "snapshot_date": "2026-03-29",
+      "bsr_position": 16,
+      "price_current": 39.99,
+      "price_original": 44.99,
+      "coupon_text": null,
+      "availability_status": "IN_STOCK",
+      "buy_box_status": "HAS_BUY_BOX",
+      "rating_value": 4.5,
+      "review_count": 1001,
+      "title_hash": "sha256_title_v1",
+      "main_image_hash": "sha256_img_v1",
+      "variation_count": 3
+    },
+    {
+      "snapshot_date": "2026-03-30",
+      "bsr_position": 14,
+      "price_current": 39.99,
+      "price_original": 44.99,
+      "coupon_text": null,
+      "availability_status": "IN_STOCK",
+      "buy_box_status": "HAS_BUY_BOX",
+      "rating_value": 4.5,
+      "review_count": 1009,
+      "title_hash": "sha256_title_v1",
+      "main_image_hash": "sha256_img_v1",
+      "variation_count": 3
+    },
+    {
+      "snapshot_date": "2026-04-01",
+      "bsr_position": 12,
+      "price_current": 37.99,
+      "price_original": 42.99,
+      "coupon_text": "5% off",
+      "availability_status": "IN_STOCK",
+      "buy_box_status": "HAS_BUY_BOX",
+      "rating_value": 4.5,
+      "review_count": 1016,
+      "title_hash": "sha256_title_v1",
+      "main_image_hash": "sha256_img_v1",
+      "variation_count": 3
+    },
+    {
+      "snapshot_date": "2026-04-02",
+      "bsr_position": 14,
+      "price_current": 39.99,
+      "price_original": 44.99,
+      "coupon_text": null,
+      "availability_status": "IN_STOCK",
+      "buy_box_status": "HAS_BUY_BOX",
+      "rating_value": 4.5,
+      "review_count": 1020,
+      "title_hash": "sha256_title_v1",
+      "main_image_hash": "sha256_img_v1",
+      "variation_count": 3
+    },
+    {
+      "snapshot_date": "2026-04-03",
+      "bsr_position": 9,
+      "price_current": 34.99,
+      "price_original": 39.99,
+      "coupon_text": "10% off",
+      "availability_status": "IN_STOCK",
+      "buy_box_status": "HAS_BUY_BOX",
+      "rating_value": 4.5,
+      "review_count": 1023,
+      "title_hash": "sha256_title_v2",
+      "main_image_hash": "sha256_img_v1",
+      "variation_count": 4
+    }
+  ],
+  "events": [
+    {
+      "event_code": "evt_20260403_001",
+      "tracker_type": "CATEGORY",
+      "tracker_code": "ct_baby_bottle_warmers_us",
+      "marketplace": "amazon_us",
+      "asin": "B0ABC12345",
+      "event_type": "ENTER_TOP10",
+      "event_time": "2026-04-03T02:13:00Z",
+      "snapshot_date": "2026-04-03",
+      "severity": "HIGH",
+      "title": "Product entered Top 10",
+      "summary": "ASIN B0ABC12345 moved from rank 14 to rank 9.",
+      "payload": {
+        "previous_rank": 14,
+        "current_rank": 9
+      },
+      "job_code": "job_cat_20260403_001",
+      "dedupe_key": "ENTER_TOP10|ct_baby_bottle_warmers_us|B0ABC12345|2026-04-03"
+    },
+    {
+      "event_code": "evt_20260403_002",
+      "tracker_type": "COMPETITOR",
+      "tracker_code": "cmp_baby_bottle_warmers_us",
+      "marketplace": "amazon_us",
+      "asin": "B0ABC12345",
+      "event_type": "PRICE_CHANGED",
+      "event_time": "2026-04-03T03:09:00Z",
+      "snapshot_date": "2026-04-03",
+      "severity": "MEDIUM",
+      "title": "Price dropped from 39.99 to 34.99",
+      "summary": "Detected a 12.5% price decrease for tracked competitor B0ABC12345.",
+      "payload": {
+        "previous": {
+          "price_current": 39.99,
+          "price_original": 44.99
+        },
+        "current": {
+          "price_current": 34.99,
+          "price_original": 39.99
+        },
+        "delta": {
+          "price_current_abs": -5.0,
+          "price_current_pct": -12.5
+        }
+      },
+      "job_code": "job_cmp_20260403_001",
+      "dedupe_key": "PRICE_CHANGED|amazon_us|B0ABC12345|2026-04-03"
+    },
+    {
+      "event_code": "evt_20260403_004",
+      "tracker_type": "COMPETITOR",
+      "tracker_code": "cmp_baby_bottle_warmers_us",
+      "marketplace": "amazon_us",
+      "asin": "B0ABC12345",
+      "event_type": "TITLE_CHANGED",
+      "event_time": "2026-04-03T03:09:10Z",
+      "snapshot_date": "2026-04-03",
+      "severity": "MEDIUM",
+      "title": "Title changed materially",
+      "summary": "The normalized title changed for tracked competitor B0ABC12345.",
+      "payload": {
+        "previous": {
+          "title": "MellowNest Fast Bottle Warmer"
+        },
+        "current": {
+          "title": "MellowNest Fast Bottle Warmer with Night Light"
+        }
+      },
+      "job_code": "job_cmp_20260403_001",
+      "dedupe_key": "TITLE_CHANGED|amazon_us|B0ABC12345|2026-04-03"
+    }
+  ],
+  "summary": {
+    "price_change_count": 2,
+    "availability_change_count": 0,
+    "listing_change_count": 2,
+    "buy_box_change_count": 0
+  }
+}

@@ -1,0 +1,1992 @@
+openapi: 3.1.0
+info:
+  title: Market Tracker API
+  version: 0.1.0-draft
+  description: |
+    Contract-first REST API draft derived from:
+    - backend/docs/Market Tracker.md
+    - backend/docs/DB_SCHEMA.md
+    - backend/docs/EVENT_LOGIC.md
+    - backend/docs/BE_ARCHITECTURE.md
+
+    Design assumptions:
+    - All routes are scoped by `workspace_id`.
+    - Public identifiers use `tracker_code`, `job_code`, `event_code`, and `digest_code`.
+    - Responses are built from normalized read models, not raw provider payloads.
+    - Category tracking is fixed to Top 50, with Top 10 alerting as a secondary signal.
+servers:
+  - url: https://api.example.com
+    description: Placeholder server
+tags:
+  - name: dashboard
+    description: Aggregated read models for dashboards and summaries.
+  - name: category-trackers
+    description: CRUD and read APIs for Top 50 category monitoring.
+  - name: competitor-trackers
+    description: CRUD and ASIN management APIs for deep competitor tracking.
+  - name: products
+    description: Product detail and timeline APIs backed by normalized snapshots.
+  - name: events
+    description: Event feed and event filtering APIs.
+  - name: jobs
+    description: Manual trigger and job status APIs.
+  - name: webhooks
+    description: External provider callbacks used to advance internal lifecycle state.
+  - name: reports
+    description: Weekly digest and reporting APIs.
+paths:
+  /health:
+    get:
+      tags: [dashboard]
+      operationId: healthcheck
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /v1/webhooks/apify/runs:
+    post:
+      tags: [webhooks]
+      operationId: receiveApifyRunWebhook
+      summary: Receive an Apify actor run lifecycle callback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApifyWebhookEnvelope'
+      responses:
+        '202':
+          description: Webhook accepted or safely ignored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApifyWebhookAck'
+
+  /v1/workspaces/{workspace_id}/dashboard/overview:
+    get:
+      tags: [dashboard]
+      operationId: getDashboardOverview
+      summary: Get dashboard overview for a workspace
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TimeframeQuery'
+      responses:
+        '200':
+          description: Dashboard overview for the requested timeframe.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardOverview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/workspaces/{workspace_id}/category-trackers:
+    get:
+      tags: [category-trackers]
+      operationId: listCategoryTrackers
+      summary: List category trackers
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+      responses:
+        '200':
+          description: Paged category tracker list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTrackerListResponse'
+    post:
+      tags: [category-trackers]
+      operationId: createCategoryTracker
+      summary: Create a category tracker
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryTrackerCreateRequest'
+      responses:
+        '201':
+          description: Category tracker created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTracker'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/workspaces/{workspace_id}/category-trackers/{tracker_code}:
+    get:
+      tags: [category-trackers]
+      operationId: getCategoryTracker
+      summary: Get category tracker detail
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TrackerCodePath'
+        - $ref: '#/components/parameters/TimeframeQuery'
+      responses:
+        '200':
+          description: Category tracker detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTracker'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [category-trackers]
+      operationId: updateCategoryTracker
+      summary: Update mutable fields of a category tracker
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TrackerCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryTrackerUpdateRequest'
+      responses:
+        '200':
+          description: Category tracker updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryTracker'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/category-trackers/{tracker_code}/snapshots/latest:
+    get:
+      tags: [category-trackers]
+      operationId: getLatestCategorySnapshot
+      summary: Get latest Top 50 snapshot for a category tracker
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TrackerCodePath'
+      responses:
+        '200':
+          description: Latest category snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategorySnapshot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/competitor-trackers:
+    get:
+      tags: [competitor-trackers]
+      operationId: listCompetitorTrackers
+      summary: List competitor trackers
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+      responses:
+        '200':
+          description: Paged competitor tracker list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorTrackerListResponse'
+    post:
+      tags: [competitor-trackers]
+      operationId: createCompetitorTracker
+      summary: Create a competitor tracker
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompetitorTrackerCreateRequest'
+      responses:
+        '201':
+          description: Competitor tracker created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorTrackerDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/workspaces/{workspace_id}/competitor-trackers/{tracker_code}:
+    get:
+      tags: [competitor-trackers]
+      operationId: getCompetitorTracker
+      summary: Get competitor tracker detail
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TrackerCodePath'
+      responses:
+        '200':
+          description: Competitor tracker detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorTrackerDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [competitor-trackers]
+      operationId: updateCompetitorTracker
+      summary: Update mutable fields of a competitor tracker
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TrackerCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompetitorTrackerUpdateRequest'
+      responses:
+        '200':
+          description: Competitor tracker updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorTrackerDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/competitor-trackers/{tracker_code}/tracked-asins:
+    put:
+      tags: [competitor-trackers]
+      operationId: replaceTrackedAsins
+      summary: Replace the ASIN set of a competitor tracker
+      description: Replaces the full tracked ASIN list for the specified competitor tracker.
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TrackerCodePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackedAsinReplacementRequest'
+      responses:
+        '200':
+          description: Tracked ASIN list replaced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorTrackerDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/products/{marketplace}/{asin}:
+    get:
+      tags: [products]
+      operationId: getProductDetail
+      summary: Get current product detail
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/MarketplacePath'
+        - $ref: '#/components/parameters/AsinPath'
+      responses:
+        '200':
+          description: Product detail built from the canonical product registry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/products/{marketplace}/{asin}/timeline:
+    get:
+      tags: [products]
+      operationId: getProductTimeline
+      summary: Get product timeline with daily or aggregated points
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/MarketplacePath'
+        - $ref: '#/components/parameters/AsinPath'
+        - $ref: '#/components/parameters/FromDateQuery'
+        - $ref: '#/components/parameters/ToDateQuery'
+        - name: granularity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [DAILY, WEEKLY, MONTHLY]
+            default: DAILY
+      responses:
+        '200':
+          description: Product timeline with aligned events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductTimelineResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/events:
+    get:
+      tags: [events]
+      operationId: listEvents
+      summary: List events with filters
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+        - $ref: '#/components/parameters/FromDateQuery'
+        - $ref: '#/components/parameters/ToDateQuery'
+        - name: tracker_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [CATEGORY, COMPETITOR]
+        - name: tracker_code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: marketplace
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^amazon_[a-z]{2}$'
+        - name: asin
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 10
+            maxLength: 10
+        - name: event_type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EventType'
+        - $ref: '#/components/parameters/SeverityQuery'
+      responses:
+        '200':
+          description: Paged event list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/workspaces/{workspace_id}/jobs:
+    get:
+      tags: [jobs]
+      operationId: listJobs
+      summary: List tracking jobs
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+        - $ref: '#/components/parameters/FromDateQuery'
+        - $ref: '#/components/parameters/ToDateQuery'
+        - name: tracker_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [CATEGORY, COMPETITOR]
+        - name: tracker_code
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/JobStatusQuery'
+      responses:
+        '200':
+          description: Paged job list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+    post:
+      tags: [jobs]
+      operationId: createJob
+      summary: Trigger a manual tracking job
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCreateRequest'
+      responses:
+        '202':
+          description: Manual tracking job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/workspaces/{workspace_id}/jobs/{job_code}:
+    get:
+      tags: [jobs]
+      operationId: getJob
+      summary: Get tracking job detail
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/JobCodePath'
+      responses:
+        '200':
+          description: Tracking job detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/workspaces/{workspace_id}/reports/weekly-digests:
+    get:
+      tags: [reports]
+      operationId: listWeeklyDigests
+      summary: List weekly digests
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+        - name: week_start
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Paged weekly digest list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyDigestListResponse'
+
+  /v1/workspaces/{workspace_id}/reports/weekly-digests/{digest_code}:
+    get:
+      tags: [reports]
+      operationId: getWeeklyDigest
+      summary: Get weekly digest detail
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/DigestCodePath'
+      responses:
+        '200':
+          description: Weekly digest detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyDigest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    WorkspaceIdPath:
+      name: workspace_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable workspace identifier.
+    TrackerCodePath:
+      name: tracker_code
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable public tracker code.
+    JobCodePath:
+      name: job_code
+      in: path
+      required: true
+      schema:
+        type: string
+    DigestCodePath:
+      name: digest_code
+      in: path
+      required: true
+      schema:
+        type: string
+    MarketplacePath:
+      name: marketplace
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^amazon_[a-z]{2}$'
+      description: Normalized marketplace code such as `amazon_us`.
+    AsinPath:
+      name: asin
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 10
+        maxLength: 10
+    PageQuery:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeQuery:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 20
+    FromDateQuery:
+      name: from_date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    ToDateQuery:
+      name: to_date
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    TimeframeQuery:
+      name: timeframe
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [DAILY, WEEKLY, MONTHLY]
+        default: WEEKLY
+    SeverityQuery:
+      name: severity
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [LOW, MEDIUM, HIGH]
+    JobStatusQuery:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/JobStatus'
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional idempotency key for write operations.
+    AuthorizationHeader:
+      name: Authorization
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional bearer token used to verify Apify webhook callbacks.
+
+  responses:
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: VALIDATION_ERROR
+            message: Invalid request body.
+            details:
+              field: scope.browse_node_id
+              reason: Either browse_node_id or browse_node_url must be provided.
+            request_id: req_01J8X9XYZ
+    NotFound:
+      description: Requested resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: NOT_FOUND
+            message: Resource not found.
+            request_id: req_01J8X9XYZ
+    Conflict:
+      description: Request conflicts with an existing logical resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: CONFLICT
+            message: A job already exists for tracker `ct_bottle_warmers_us` on 2026-04-03.
+            request_id: req_01J8X9XYZ
+    Forbidden:
+      description: Request is not allowed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: FORBIDDEN
+            message: Invalid webhook secret.
+            request_id: req_01J8X9XYZ
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+
+    Marketplace:
+      type: string
+      pattern: '^amazon_[a-z]{2}$'
+      examples: [amazon_us, amazon_de]
+
+    TrackerStatus:
+      type: string
+      enum: [ACTIVE, PAUSED, ARCHIVED]
+
+    JobStatus:
+      type: string
+      enum:
+        - QUEUED
+        - DISPATCHING
+        - RUNNING_EXTERNAL
+        - IMPORTING
+        - PROCESSING
+        - SUCCESS
+        - PARTIAL_SUCCESS
+        - FAILED
+
+    ExternalRunStatus:
+      type: string
+      enum:
+        - READY
+        - RUNNING
+        - SUCCEEDED
+        - FAILED
+        - TIMED_OUT
+        - ABORTED
+
+    ApifyWebhookEnvelope:
+      type: object
+      additionalProperties: true
+      properties:
+        eventType:
+          type: string
+        eventData:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+        resourceId:
+          type: string
+        resource:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+        payload:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+        data:
+          oneOf:
+            - type: object
+              additionalProperties: true
+            - type: string
+
+    ApifyWebhookAck:
+      type: object
+      required: [status, source]
+      properties:
+        status:
+          type: string
+          enum: [ACCEPTED, IGNORED]
+        source:
+          type: string
+          enum: [WEBHOOK]
+        apify_run_id:
+          type: string
+          nullable: true
+        tracking_job_code:
+          type: string
+          nullable: true
+        provider_status:
+          allOf:
+            - $ref: '#/components/schemas/ExternalRunStatus'
+          nullable: true
+        job_status:
+          allOf:
+            - $ref: '#/components/schemas/JobStatus'
+          nullable: true
+
+    EventType:
+      type: string
+      enum:
+        - NEW_ENTRANT_TOP50
+        - RETURNING_TOP50
+        - EXIT_TOP50
+        - ENTER_TOP10
+        - EXIT_TOP10
+        - PRICE_CHANGED
+        - PROMOTION_CHANGED
+        - TITLE_CHANGED
+        - MAIN_IMAGE_CHANGED
+        - VARIATIONS_ADDED
+        - CONTENT_CHANGED
+        - AVAILABILITY_CHANGED
+        - BUY_BOX_CHANGED
+
+    DashboardOverview:
+      type: object
+      required:
+        - timeframe
+        - generated_at
+        - summary
+        - top_events
+        - top_threats
+        - category_highlights
+        - competitor_highlights
+      properties:
+        timeframe:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY]
+        generated_at:
+          type: string
+          format: date-time
+        summary:
+          $ref: '#/components/schemas/DashboardOverviewSummary'
+        top_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        top_threats:
+          type: array
+          items:
+            $ref: '#/components/schemas/Threat'
+        category_highlights:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryHighlight'
+        competitor_highlights:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompetitorHighlight'
+
+    DashboardOverviewSummary:
+      type: object
+      required:
+        - active_category_tracker_count
+        - active_competitor_tracker_count
+        - tracked_product_count
+        - new_entrant_count
+        - returning_count
+        - top10_enter_count
+        - price_change_count
+        - listing_change_count
+      properties:
+        active_category_tracker_count:
+          type: integer
+        active_competitor_tracker_count:
+          type: integer
+        tracked_product_count:
+          type: integer
+        new_entrant_count:
+          type: integer
+        returning_count:
+          type: integer
+        top10_enter_count:
+          type: integer
+        price_change_count:
+          type: integer
+        listing_change_count:
+          type: integer
+
+    CategoryHighlight:
+      type: object
+      required: [tracker_code, tracker_name, new_entrant_count, exit_count, top10_enter_count]
+      properties:
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+        new_entrant_count:
+          type: integer
+        exit_count:
+          type: integer
+        top10_enter_count:
+          type: integer
+
+    CompetitorHighlight:
+      type: object
+      required: [tracker_code, tracker_name, price_change_count, availability_change_count, listing_change_count]
+      properties:
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+        price_change_count:
+          type: integer
+        availability_change_count:
+          type: integer
+        listing_change_count:
+          type: integer
+
+    CategoryTrackerListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryTracker'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+
+    CategoryTracker:
+      type: object
+      required:
+        - tracker_code
+        - name
+        - marketplace
+        - scope
+        - tracking_config
+        - schedule
+        - status
+        - stats
+        - created_at
+        - updated_at
+      properties:
+        tracker_code:
+          type: string
+        name:
+          type: string
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        scope:
+          $ref: '#/components/schemas/CategoryScope'
+        tracking_config:
+          $ref: '#/components/schemas/CategoryTrackingConfig'
+        schedule:
+          $ref: '#/components/schemas/TrackerSchedule'
+        status:
+          $ref: '#/components/schemas/TrackerStatus'
+        stats:
+          $ref: '#/components/schemas/CategoryTrackerStats'
+        latest_snapshot_summary:
+          $ref: '#/components/schemas/CategoryTrackerLatestSnapshotSummary'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CategoryTrackerCreateRequest:
+      type: object
+      required: [name, marketplace, scope, schedule]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        scope:
+          $ref: '#/components/schemas/CategoryScope'
+        tracking_config:
+          $ref: '#/components/schemas/CategoryTrackingConfigInput'
+        schedule:
+          $ref: '#/components/schemas/TrackerScheduleInput'
+
+    CategoryTrackerUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        tracking_config:
+          $ref: '#/components/schemas/CategoryTrackingConfigInput'
+        schedule:
+          $ref: '#/components/schemas/TrackerScheduleInput'
+        status:
+          $ref: '#/components/schemas/TrackerStatus'
+
+    CategoryScope:
+      type: object
+      properties:
+        browse_node_id:
+          type: string
+        browse_node_url:
+          type: string
+          format: uri
+      anyOf:
+        - required: [browse_node_id]
+        - required: [browse_node_url]
+
+    CategoryTrackingConfig:
+      type: object
+      required: [top_n, top10_alert_enabled]
+      properties:
+        top_n:
+          type: integer
+          enum: [50]
+        top10_alert_enabled:
+          type: boolean
+
+    CategoryTrackingConfigInput:
+      type: object
+      properties:
+        top10_alert_enabled:
+          type: boolean
+          default: true
+
+    TrackerSchedule:
+      type: object
+      required: [frequency, hour_utc]
+      properties:
+        frequency:
+          type: string
+          enum: [DAILY]
+        hour_utc:
+          type: integer
+          minimum: 0
+          maximum: 23
+
+    TrackerScheduleInput:
+      type: object
+      required: [frequency, hour_utc]
+      properties:
+        frequency:
+          type: string
+          enum: [DAILY]
+        hour_utc:
+          type: integer
+          minimum: 0
+          maximum: 23
+
+    CategoryTrackerStats:
+      type: object
+      required: [last_job_at, last_success_at, snapshot_count]
+      properties:
+        last_job_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+        snapshot_count:
+          type: integer
+
+    CategoryTrackerLatestSnapshotSummary:
+      type: object
+      properties:
+        snapshot_date:
+          type: string
+          format: date
+        captured_at:
+          type: string
+          format: date-time
+        top10_asins:
+          type: array
+          items:
+            type: string
+
+    CategorySnapshot:
+      type: object
+      required:
+        - tracker_code
+        - marketplace
+        - browse_node_id
+        - snapshot_date
+        - captured_at
+        - top_n
+        - products
+        - summary
+      properties:
+        tracker_code:
+          type: string
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        browse_node_id:
+          type: string
+        snapshot_date:
+          type: string
+          format: date
+        captured_at:
+          type: string
+          format: date-time
+        top_n:
+          type: integer
+          enum: [50]
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategorySnapshotProduct'
+        summary:
+          $ref: '#/components/schemas/CategorySnapshotSummary'
+        source_refs:
+          type: object
+          properties:
+            job_code:
+              type: string
+            provider:
+              type: string
+
+    CategorySnapshotSummary:
+      type: object
+      required: [asin_count, new_entrant_count, returning_count, exit_count, enter_top10_count, exit_top10_count]
+      properties:
+        asin_count:
+          type: integer
+        new_entrant_count:
+          type: integer
+        returning_count:
+          type: integer
+        exit_count:
+          type: integer
+        enter_top10_count:
+          type: integer
+        exit_top10_count:
+          type: integer
+
+    CategorySnapshotProduct:
+      type: object
+      required:
+        - asin
+        - rank_position
+        - title
+        - brand
+        - product_url
+        - price_current
+        - currency
+        - rating_value
+        - review_count
+        - image_url
+        - availability_status
+        - buy_box_status
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        rank_position:
+          type: integer
+          minimum: 1
+          maximum: 50
+        previous_rank_position:
+          type: integer
+          minimum: 1
+          maximum: 50
+          nullable: true
+          description: Rank position from the comparison snapshot for the selected timeframe.
+        rank_delta:
+          type: integer
+          nullable: true
+          description: Positive means the product moved up; negative means it moved down.
+        rank_trend:
+          type: string
+          enum: [UP, DOWN, STABLE, NEW]
+          nullable: true
+        comparison_snapshot_date:
+          type: string
+          format: date
+          nullable: true
+        title:
+          type: string
+        brand:
+          type: string
+        product_url:
+          type: string
+          format: uri
+        price_current:
+          type: number
+          format: float
+        price_original:
+          type: number
+          format: float
+          nullable: true
+        currency:
+          type: string
+        rating_value:
+          type: number
+          format: float
+        review_count:
+          type: integer
+        image_url:
+          type: string
+          format: uri
+        availability_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        buy_box_status:
+          $ref: '#/components/schemas/BuyBoxStatus'
+        coupon_text:
+          type: string
+          nullable: true
+
+    CompetitorTrackerListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompetitorTracker'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+
+    CompetitorTracker:
+      type: object
+      required:
+        - tracker_code
+        - name
+        - marketplace
+        - tracked_asins
+        - track_fields
+        - schedule
+        - status
+        - stats
+        - created_at
+        - updated_at
+      properties:
+        tracker_code:
+          type: string
+        name:
+          type: string
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        tracked_asins:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackedAsin'
+        track_fields:
+          $ref: '#/components/schemas/CompetitorTrackFields'
+        schedule:
+          $ref: '#/components/schemas/TrackerSchedule'
+        status:
+          $ref: '#/components/schemas/TrackerStatus'
+        stats:
+          $ref: '#/components/schemas/CompetitorTrackerStats'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CompetitorTrackerDetail:
+      allOf:
+        - $ref: '#/components/schemas/CompetitorTracker'
+        - type: object
+          properties:
+            tracked_products:
+              type: array
+              items:
+                $ref: '#/components/schemas/TrackedProductSummary'
+
+    CompetitorTrackerCreateRequest:
+      type: object
+      required: [name, marketplace, tracked_asins, track_fields, schedule]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        tracked_asins:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/TrackedAsinWrite'
+        track_fields:
+          $ref: '#/components/schemas/CompetitorTrackFields'
+        schedule:
+          $ref: '#/components/schemas/TrackerScheduleInput'
+
+    CompetitorTrackerUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        track_fields:
+          $ref: '#/components/schemas/CompetitorTrackFields'
+        schedule:
+          $ref: '#/components/schemas/TrackerScheduleInput'
+        status:
+          $ref: '#/components/schemas/TrackerStatus'
+
+    TrackedAsinWrite:
+      type: object
+      required: [asin]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        enabled:
+          type: boolean
+          default: true
+
+    TrackedAsin:
+      allOf:
+        - $ref: '#/components/schemas/TrackedAsinWrite'
+        - type: object
+          required: [enabled, added_at]
+          properties:
+            added_at:
+              type: string
+              format: date-time
+
+    TrackedAsinReplacementRequest:
+      type: object
+      required: [tracked_asins]
+      properties:
+        tracked_asins:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/TrackedAsinWrite'
+
+    CompetitorTrackFields:
+      type: object
+      required:
+        - bsr
+        - price
+        - buy_box
+        - availability
+        - promotions
+        - title_change
+        - main_image_change
+        - variation_change
+        - content_change
+      properties:
+        bsr:
+          type: boolean
+        price:
+          type: boolean
+        buy_box:
+          type: boolean
+        availability:
+          type: boolean
+        promotions:
+          type: boolean
+        title_change:
+          type: boolean
+        main_image_change:
+          type: boolean
+        variation_change:
+          type: boolean
+        content_change:
+          type: boolean
+
+    CompetitorTrackerStats:
+      type: object
+      required: [tracked_asin_count, last_job_at, last_success_at]
+      properties:
+        tracked_asin_count:
+          type: integer
+        last_job_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    TrackedProductSummary:
+      type: object
+      required:
+        - asin
+        - brand
+        - title
+        - current_bsr_position
+        - current_price
+        - currency
+        - availability_status
+        - last_snapshot_date
+      properties:
+        asin:
+          type: string
+        brand:
+          type: string
+        title:
+          type: string
+        current_bsr_position:
+          type: integer
+          nullable: true
+        current_price:
+          type: number
+          format: float
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        availability_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        last_snapshot_date:
+          type: string
+          format: date
+        recent_event_count_7d:
+          type: integer
+          default: 0
+
+    AvailabilityStatus:
+      type: string
+      enum: [IN_STOCK, OUT_OF_STOCK, INACTIVE, UNKNOWN]
+
+    BuyBoxStatus:
+      type: string
+      enum: [HAS_BUY_BOX, NO_BUY_BOX, UNKNOWN]
+
+    EventListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+
+    Event:
+      type: object
+      required:
+        - event_code
+        - tracker_type
+        - tracker_code
+        - marketplace
+        - asin
+        - event_type
+        - event_time
+        - snapshot_date
+        - severity
+        - title
+        - summary
+        - payload
+      properties:
+        event_code:
+          type: string
+        tracker_type:
+          type: string
+          enum: [CATEGORY, COMPETITOR]
+        tracker_code:
+          type: string
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        asin:
+          type: string
+        event_type:
+          $ref: '#/components/schemas/EventType'
+        event_time:
+          type: string
+          format: date-time
+        snapshot_date:
+          type: string
+          format: date
+        severity:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        title:
+          type: string
+        summary:
+          type: string
+        payload:
+          $ref: '#/components/schemas/EventPayload'
+        job_code:
+          type: string
+        dedupe_key:
+          type: string
+
+    EventPayload:
+      type: object
+      additionalProperties: true
+      properties:
+        rank_today:
+          type: integer
+        first_seen_in_tracker:
+          type: boolean
+        last_seen_date:
+          type: string
+          format: date
+        days_absent:
+          type: integer
+        previous_rank:
+          type: integer
+        current_rank:
+          type: integer
+        present_today:
+          type: boolean
+        previous:
+          $ref: '#/components/schemas/EventChangeState'
+        current:
+          $ref: '#/components/schemas/EventChangeState'
+        delta:
+          $ref: '#/components/schemas/EventDelta'
+
+    EventChangeState:
+      type: object
+      additionalProperties: true
+      properties:
+        price_current:
+          type: number
+          format: float
+          nullable: true
+        price_original:
+          type: number
+          format: float
+          nullable: true
+        coupon_text:
+          type: string
+          nullable: true
+        title:
+          type: string
+        main_image_url:
+          type: string
+          format: uri
+        variation_count:
+          type: integer
+        content_signature_hash:
+          type: string
+        a_plus_signature_hash:
+          type: string
+        availability_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        buy_box_status:
+          $ref: '#/components/schemas/BuyBoxStatus'
+        buy_box_seller_name:
+          type: string
+
+    EventDelta:
+      type: object
+      properties:
+        price_current_abs:
+          type: number
+          format: float
+        price_current_pct:
+          type: number
+          format: float
+
+    ProductDetail:
+      type: object
+      required:
+        - marketplace
+        - asin
+        - brand
+        - title_latest
+        - product_url
+        - main_image_url_latest
+        - first_seen_at
+        - last_seen_at
+        - current_state
+        - tracker_refs
+      properties:
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        asin:
+          type: string
+        parent_asin:
+          type: string
+          nullable: true
+        brand:
+          type: string
+        title_latest:
+          type: string
+        product_url:
+          type: string
+          format: uri
+        main_image_url_latest:
+          type: string
+          format: uri
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        current_state:
+          $ref: '#/components/schemas/ProductCurrentState'
+        tracker_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackerRef'
+
+    ProductCurrentState:
+      type: object
+      required:
+        - last_snapshot_date
+        - availability_status
+        - buy_box_status
+      properties:
+        price_current:
+          type: number
+          format: float
+          nullable: true
+        price_original:
+          type: number
+          format: float
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        bsr_position:
+          type: integer
+          nullable: true
+        availability_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        buy_box_status:
+          $ref: '#/components/schemas/BuyBoxStatus'
+        buy_box_seller_name:
+          type: string
+          nullable: true
+        coupon_text:
+          type: string
+          nullable: true
+        deal_info:
+          $ref: '#/components/schemas/DealInfo'
+        last_snapshot_date:
+          type: string
+          format: date
+
+    DealInfo:
+      type: object
+      properties:
+        deal_id:
+          type: string
+          nullable: true
+        deal_type:
+          type: string
+          nullable: true
+        deal_state:
+          type: string
+          nullable: true
+        deal_price:
+          type: number
+          format: float
+          nullable: true
+        list_price:
+          type: number
+          format: float
+          nullable: true
+        savings_percentage:
+          type: integer
+          nullable: true
+        savings_amount:
+          type: number
+          format: float
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        deal_starts_at:
+          type: string
+          format: date-time
+          nullable: true
+        deal_ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        deal_badge:
+          type: string
+          nullable: true
+        captured_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    TrackerRef:
+      type: object
+      required: [tracker_type, tracker_code, tracker_name]
+      properties:
+        tracker_type:
+          type: string
+          enum: [CATEGORY, COMPETITOR]
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    ProductTimelineResponse:
+      type: object
+      required:
+        - marketplace
+        - asin
+        - from_date
+        - to_date
+        - granularity
+        - points
+        - events
+        - summary
+      properties:
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        asin:
+          type: string
+        from_date:
+          type: string
+          format: date
+        to_date:
+          type: string
+          format: date
+        granularity:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY]
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductTimelinePoint'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        summary:
+          $ref: '#/components/schemas/ProductTimelineSummary'
+
+    ProductTimelinePoint:
+      type: object
+      required:
+        - snapshot_date
+        - availability_status
+        - buy_box_status
+      properties:
+        snapshot_date:
+          type: string
+          format: date
+        bsr_position:
+          type: integer
+          nullable: true
+        price_current:
+          type: number
+          format: float
+          nullable: true
+        price_original:
+          type: number
+          format: float
+          nullable: true
+        coupon_text:
+          type: string
+          nullable: true
+        availability_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        buy_box_status:
+          $ref: '#/components/schemas/BuyBoxStatus'
+        rating_value:
+          type: number
+          format: float
+          nullable: true
+        review_count:
+          type: integer
+          nullable: true
+        title_hash:
+          type: string
+          nullable: true
+        main_image_hash:
+          type: string
+          nullable: true
+        variation_count:
+          type: integer
+          nullable: true
+
+    ProductTimelineSummary:
+      type: object
+      required: [price_change_count, availability_change_count, listing_change_count, buy_box_change_count]
+      properties:
+        price_change_count:
+          type: integer
+        availability_change_count:
+          type: integer
+        listing_change_count:
+          type: integer
+        buy_box_change_count:
+          type: integer
+
+    JobListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+
+    Job:
+      type: object
+      required:
+        - job_code
+        - tracker_type
+        - tracker_code
+        - snapshot_date
+        - trigger_mode
+        - status
+        - run_strategy
+        - summary
+        - created_at
+      properties:
+        job_code:
+          type: string
+        tracker_type:
+          type: string
+          enum: [CATEGORY, COMPETITOR]
+        tracker_code:
+          type: string
+        snapshot_date:
+          type: string
+          format: date
+        trigger_mode:
+          type: string
+          enum: [SCHEDULED, MANUAL, RETRY]
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        run_strategy:
+          $ref: '#/components/schemas/JobRunStrategy'
+        external_run:
+          $ref: '#/components/schemas/ExternalRunSummary'
+          nullable: true
+        summary:
+          $ref: '#/components/schemas/JobSummary'
+        error:
+          $ref: '#/components/schemas/JobError'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    JobCreateRequest:
+      type: object
+      required: [tracker_type, tracker_code]
+      properties:
+        tracker_type:
+          type: string
+          enum: [CATEGORY, COMPETITOR]
+        tracker_code:
+          type: string
+        snapshot_date:
+          type: string
+          format: date
+          description: Optional override. If omitted, the backend uses the current UTC date.
+        trigger_mode:
+          type: string
+          enum: [MANUAL]
+          default: MANUAL
+
+    JobSummary:
+      type: object
+      required: [expected_items, imported_items, events_emitted]
+      properties:
+        expected_items:
+          type: integer
+        imported_items:
+          type: integer
+        events_emitted:
+          type: integer
+
+    JobRunStrategy:
+      type: object
+      required: [provider]
+      properties:
+        provider:
+          type: string
+          enum: [APIFY]
+        binding_code:
+          type: string
+
+    ExternalRunSummary:
+      type: object
+      properties:
+        provider_run_id:
+          type: string
+        status:
+          type: string
+          enum: [READY, RUNNING, SUCCEEDED, FAILED, TIMED_OUT, ABORTED]
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    JobError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+    WeeklyDigestListResponse:
+      type: object
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyDigest'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+
+    WeeklyDigest:
+      type: object
+      required:
+        - digest_code
+        - week_start
+        - week_end
+        - tracker_refs
+        - summary
+        - threats
+        - created_at
+      properties:
+        digest_code:
+          type: string
+        week_start:
+          type: string
+          format: date
+        week_end:
+          type: string
+          format: date
+        tracker_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackerRef'
+        summary:
+          $ref: '#/components/schemas/WeeklyDigestSummary'
+        threats:
+          type: array
+          items:
+            $ref: '#/components/schemas/Threat'
+        report_storage_uri:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    WeeklyDigestSummary:
+      type: object
+      required:
+        - new_entrant_count
+        - returning_count
+        - top10_enter_count
+        - price_change_count
+        - listing_change_count
+      properties:
+        new_entrant_count:
+          type: integer
+        returning_count:
+          type: integer
+        top10_enter_count:
+          type: integer
+        price_change_count:
+          type: integer
+        listing_change_count:
+          type: integer
+
+    Threat:
+      type: object
+      required: [asin, marketplace, reason, tracker_refs]
+      properties:
+        asin:
+          type: string
+        marketplace:
+          $ref: '#/components/schemas/Marketplace'
+        reason:
+          type: string
+        event_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventType'
+        tracker_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackerRef'
