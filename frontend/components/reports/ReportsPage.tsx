@@ -17,8 +17,6 @@ export const ReportsPage = () => {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
     apiListWeeklyDigests()
       .then(res => {
         if (cancelled) return

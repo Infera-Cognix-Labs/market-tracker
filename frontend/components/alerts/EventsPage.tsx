@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Filter } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
@@ -27,7 +27,7 @@ export const EventsPage = () => {
   const [filterType, setFilterType] = useState<EventType | "">("")
   const [filterSeverity, setFilterSeverity] = useState<Severity | "">("")
 
-  const loadEvents = async (p: number) => {
+  const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
     try {
@@ -48,11 +48,11 @@ export const EventsPage = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterType, filterSeverity])
 
   useEffect(() => {
     void loadEvents(1)
-  }, [filterType, filterSeverity])
+  }, [loadEvents])
 
   return (
     <div className="anim-fade">

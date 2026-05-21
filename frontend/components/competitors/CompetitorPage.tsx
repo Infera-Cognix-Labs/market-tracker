@@ -488,7 +488,7 @@ export const CompetitorPage = () => {
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [loadingDetail, setLoadingDetail] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
@@ -503,8 +503,6 @@ export const CompetitorPage = () => {
 
   // Load tracker list only
   useEffect(() => {
-    setLoading(true)
-    setError(null)
     apiListCompetitorTrackers()
       .then(res => {
         setTrackers(res.items as CompetitorTrackerDetail[])
@@ -521,7 +519,6 @@ export const CompetitorPage = () => {
   useEffect(() => {
     if (!selectedCode) return
     let cancelled = false
-    setLoadingDetail(true)
     apiGetCompetitorTracker(selectedCode)
       .then(d => { if (!cancelled) { setTrackerDetail(d); setLoadingDetail(false) } })
       .catch(() => {

@@ -319,8 +319,6 @@ export const CategoryPage = () => {
 
   // Load trackers
   useEffect(() => {
-    setLoading(true)
-    setError(null)
     apiListCategoryTrackers()
       .then(res => {
         setTrackers(res.items)
