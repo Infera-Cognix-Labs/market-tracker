@@ -20,9 +20,18 @@ function parseNodeId(input: string): string | null {
 }
 
 const extractBrandName = (url: string): string => {
+  if (!url) return url;
   try {
-    const match = url.match(/\/stores\/([^/]+)\//);
-    return match ? match[1] : url; 
+    // Try pattern 1: /stores/BrandName/
+    let match = url.match(/\/stores\/([^/]+)\//);
+    if (match?.[1]) return match[1];
+    
+    // Try pattern 2: /BrandName/b/ (Amazon store link)
+    match = url.match(/\/([^/]+)\/b\//);
+    if (match?.[1]) return match[1];
+    
+    // Return original if no pattern matches
+    return url;
   } catch {
     return url;
   }
