@@ -506,7 +506,9 @@ export const CompetitorPage = () => {
     apiListCompetitorTrackers()
       .then(res => {
         setTrackers(res.items as CompetitorTrackerDetail[])
-        if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
+        const firstActive = (res.items as CompetitorTrackerDetail[]).find(t => (t.status ?? "ACTIVE") === "ACTIVE")
+        const first = firstActive ?? res.items[0]
+        if (first) setSelectedCode(first.tracker_code)
       })
       .catch(() => {
         setTrackers([])
