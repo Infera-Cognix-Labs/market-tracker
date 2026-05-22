@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from beanie.operators import In
+
 from app.core.utils import utc_now
 from app.models.api import (
     AvailabilityStatus,
@@ -50,7 +52,7 @@ class InsightsQueryService:
     ) -> CategoryInsights:
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
-            EventDocument.event_type.in_(list(CATEGORY_ENTRANT_EVENT_TYPES)),
+            In(EventDocument.event_type, list(CATEGORY_ENTRANT_EVENT_TYPES)),
         ).to_list()
 
         events = [event_doc_to_model(doc) for doc in event_docs]
@@ -178,7 +180,7 @@ class InsightsQueryService:
     ) -> CompetitorInsights:
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
-            EventDocument.event_type.in_(list(COMPETITOR_CHANGE_EVENT_TYPES)),
+            In(EventDocument.event_type, list(COMPETITOR_CHANGE_EVENT_TYPES)),
         ).to_list()
 
         events = [event_doc_to_model(doc) for doc in event_docs]
@@ -314,7 +316,7 @@ class InsightsQueryService:
     ) -> CompetitorAlertCounts:
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
-            EventDocument.event_type.in_(list(COMPETITOR_CHANGE_EVENT_TYPES)),
+            In(EventDocument.event_type, list(COMPETITOR_CHANGE_EVENT_TYPES)),
         ).to_list()
 
         events = [event_doc_to_model(doc) for doc in event_docs]
