@@ -8,6 +8,9 @@ import type {
   TrackedAsinInput,
   CompetitorTrackerUpdateRequest,
   CategoryTrackerUpdateRequest,
+  CategoryInsights,
+  CompetitorInsights,
+  CompetitorAlertCounts,
 } from "./types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/market-tracker/api"
@@ -237,4 +240,18 @@ export const apiDownloadWeeklyDigest = async (
   link.download = `weekly_digest_${digestCode}.${ext}`
   link.click()
   URL.revokeObjectURL(link.href)
+}
+
+// ── Summaries ─────────────────────────────────────────────────────────────────
+
+export const apiGetCategoryInsights = async (timeframe: Timeframe = "WEEKLY"): Promise<CategoryInsights> => {
+  return apiFetch<CategoryInsights>(`/summaries/category-insights${qs({ timeframe })}`)
+}
+
+export const apiGetCompetitorInsights = async (timeframe: Timeframe = "WEEKLY"): Promise<CompetitorInsights> => {
+  return apiFetch<CompetitorInsights>(`/summaries/competitor-insights${qs({ timeframe })}`)
+}
+
+export const apiGetCompetitorAlerts = async (): Promise<CompetitorAlertCounts> => {
+  return apiFetch<CompetitorAlertCounts>(`/summaries/competitor-alerts`)
 }
