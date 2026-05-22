@@ -34,6 +34,8 @@ tags:
     description: External provider callbacks used to advance internal lifecycle state.
   - name: reports
     description: Weekly digest and reporting APIs.
+  - name: summaries
+    description: Category and competitor insight summary APIs.
 paths:
   /health:
     get:
@@ -514,6 +516,54 @@ paths:
                 $ref: '#/components/schemas/WeeklyDigest'
         '404':
           $ref: '#/components/responses/NotFound'
+
+
+  /v1/workspaces/{workspace_id}/summaries/category-insights:
+    get:
+      tags: [summaries]
+      operationId: getCategoryInsights
+      summary: Get category entrant insights
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TimeframeQuery'
+      responses:
+        '200':
+          description: Category entrant insights including new top 10 entrants, first time entrants, and returning entrants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryInsights'
+
+  /v1/workspaces/{workspace_id}/summaries/competitor-insights:
+    get:
+      tags: [summaries]
+      operationId: getCompetitorInsights
+      summary: Get competitor change insights
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+        - $ref: '#/components/parameters/TimeframeQuery'
+      responses:
+        '200':
+          description: Competitor change insights including price changes, promotions, availability changes, and variation changes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorInsights'
+
+  /v1/workspaces/{workspace_id}/summaries/competitor-alerts:
+    get:
+      tags: [summaries]
+      operationId: getCompetitorAlerts
+      summary: Get competitor alert counts for today
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceIdPath'
+      responses:
+        '200':
+          description: Competitor alert counts for sidebar badges.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorAlertCounts'
 
 components:
   parameters:
@@ -1990,3 +2040,242 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrackerRef'
+
+    CategoryEntrantItem:
+      type: object
+      required: [asin, title, brand, image_url, current_rank, entered_at, is_first_time_entrant, tracker_code, tracker_name]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        title:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+        current_rank:
+          type: integer
+        previous_rank:
+          type: integer
+          nullable: true
+        entered_at:
+          type: string
+          format: date
+        is_first_time_entrant:
+          type: boolean
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    ReturningEntrantItem:
+      type: object
+      required: [asin, title, brand, image_url, current_rank, entered_at, days_absent, tracker_code, tracker_name]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        title:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+        current_rank:
+          type: integer
+        previous_rank:
+          type: integer
+          nullable: true
+        entered_at:
+          type: string
+          format: date
+        days_absent:
+          type: integer
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    CategoryInsights:
+      type: object
+      required: [timeframe, generated_at, new_top10_entrants, first_time_entrants, returning_entrants]
+      properties:
+        timeframe:
+          $ref: '#/components/schemas/Timeframe'
+        generated_at:
+          type: string
+          format: date-time
+        new_top10_entrants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryEntrantItem'
+        first_time_entrants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryEntrantItem'
+        returning_entrants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReturningEntrantItem'
+
+    PriceChangeItem:
+      type: object
+      required: [asin, title, brand, image_url, changed_at, tracker_code, tracker_name]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        title:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+        previous_price:
+          type: number
+          nullable: true
+        current_price:
+          type: number
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        delta_abs:
+          type: number
+          nullable: true
+        delta_pct:
+          type: number
+          nullable: true
+        changed_at:
+          type: string
+          format: date
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    PromotionItem:
+      type: object
+      required: [asin, title, brand, image_url, changed_at, tracker_code, tracker_name]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        title:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+        coupon_text:
+          type: string
+          nullable: true
+        deal_info:
+          $ref: '#/components/schemas/DealInfo'
+        changed_at:
+          type: string
+          format: date
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    AvailabilityChangeItem:
+      type: object
+      required: [asin, title, brand, image_url, previous_status, current_status, changed_at, tracker_code, tracker_name]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        title:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+        previous_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        current_status:
+          $ref: '#/components/schemas/AvailabilityStatus'
+        changed_at:
+          type: string
+          format: date
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    VariationChangeItem:
+      type: object
+      required: [asin, title, brand, image_url, changed_at, tracker_code, tracker_name]
+      properties:
+        asin:
+          type: string
+          minLength: 10
+          maxLength: 10
+        title:
+          type: string
+        brand:
+          type: string
+        image_url:
+          type: string
+        previous_variation_count:
+          type: integer
+          nullable: true
+        current_variation_count:
+          type: integer
+          nullable: true
+        changed_at:
+          type: string
+          format: date
+        tracker_code:
+          type: string
+        tracker_name:
+          type: string
+
+    CompetitorInsights:
+      type: object
+      required: [timeframe, generated_at, price_changes, promotions, availability_changes, variation_changes]
+      properties:
+        timeframe:
+          $ref: '#/components/schemas/Timeframe'
+        generated_at:
+          type: string
+          format: date-time
+        price_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceChangeItem'
+        promotions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromotionItem'
+        availability_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailabilityChangeItem'
+        variation_changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariationChangeItem'
+
+    CompetitorAlertCounts:
+      type: object
+      required: [oos_count, price_drop_count, price_increase_count, new_promotion_count, new_variation_count]
+      properties:
+        oos_count:
+          type: integer
+        price_drop_count:
+          type: integer
+        price_increase_count:
+          type: integer
+        new_promotion_count:
+          type: integer
+        new_variation_count:
+          type: integer

@@ -56,6 +56,21 @@ SEVERITY_WEIGHT = {
     Severity.MEDIUM: 1,
     Severity.LOW: 2,
 }
+THREAT_SCORE_WEIGHT = {
+    EventType.AVAILABILITY_CHANGED: 10,
+    EventType.ENTER_TOP10: 8,
+    EventType.PRICE_CHANGED: 5,
+    EventType.NEW_ENTRANT_TOP50: 4,
+    EventType.PROMOTION_CHANGED: 3,
+    EventType.VARIATIONS_ADDED: 2,
+    EventType.RETURNING_TOP50: 4,
+    EventType.EXIT_TOP10: 3,
+    EventType.EXIT_TOP50: 2,
+    EventType.TITLE_CHANGED: 2,
+    EventType.MAIN_IMAGE_CHANGED: 2,
+    EventType.BUY_BOX_CHANGED: 2,
+    EventType.CONTENT_CHANGED: 1,
+}
 
 
 def category_doc_to_model(document: CategoryTrackerDocument) -> CategoryTracker:
@@ -253,7 +268,7 @@ def build_top_threats(
     for event in events:
         grouped[(event.marketplace, event.asin)].append(event)
 
-    threats: list[Threat] = []
+    threats: list[tuple[int, Threat]] = []
     for (marketplace, asin), group in grouped.items():
         unique_event_types: list[EventType] = list(
             dict.fromkeys(event.event_type for event in group)
@@ -262,6 +277,10 @@ def build_top_threats(
             event.severity == Severity.HIGH for event in group
         ):
             continue
+
+        threat_score = sum(
+            THREAT_SCORE_WEIGHT.get(event.event_type, 1) for event in group
+        )
 
         tracker_refs = list(
             {
@@ -280,16 +299,20 @@ def build_top_threats(
             "during the selected timeframe."
         )
         threats.append(
-            Threat(
-                asin=asin,
-                marketplace=marketplace,
-                reason=reason,
-                event_types=unique_event_types,
-                tracker_refs=tracker_refs,
+            (
+                threat_score,
+                Threat(
+                    asin=asin,
+                    marketplace=marketplace,
+                    reason=reason,
+                    event_types=unique_event_types,
+                    tracker_refs=tracker_refs,
+                ),
             )
         )
 
-    return threats[:5]
+    threats.sort(key=lambda x: x[0], reverse=True)
+    return [threat for _, threat in threats[:5]]
 
 
 def _dedupe_category_snapshot_products(
