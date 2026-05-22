@@ -54,6 +54,7 @@ class SnapshotService:
         )
 
         product_snapshots_written = 0
+        tracker_created_date = tracker_document.created_at.date()
         for record in records:
             source_refs = {
                 "provider": "APIFY",
@@ -68,6 +69,7 @@ class SnapshotService:
                 tracker_ref=tracker_ref,
                 record=record,
                 source_refs=source_refs,
+                tracker_created_date=tracker_created_date,
             )
             if inserted_snapshot:
                 product_snapshots_written += 1
@@ -88,6 +90,7 @@ class SnapshotService:
                 records=records,
                 apify_run_id=apify_run_id,
                 dataset_id=dataset_id,
+                tracker_created_date=tracker_created_date,
             )
 
         return SnapshotPersistResult(
@@ -127,6 +130,7 @@ class SnapshotService:
         tracker_ref: TrackerRef,
         record: NormalizedProductRecord,
         source_refs: dict[str, object],
+        tracker_created_date,
     ) -> bool:
         existing = await ProductSnapshotDocument.find_one(
             ProductSnapshotDocument.workspace_id == workspace_id,
@@ -139,6 +143,12 @@ class SnapshotService:
             _merge_tracker_refs(existing.tracker_refs, tracker_ref)
             if existing is not None
             else [tracker_ref]
+        )
+
+        bsr_position = (
+            record.bsr_position
+            if snapshot_date >= tracker_created_date
+            else None
         )
 
         payload = {
@@ -154,7 +164,7 @@ class SnapshotService:
             "product_url": record.product_url,
             "main_image_url": record.main_image_url,
             "main_image_hash": record.main_image_hash,
-            "bsr_position": record.bsr_position,
+            "bsr_position": bsr_position,
             "price_current": record.price_current,
             "price_original": record.price_original,
             "currency": record.currency,
@@ -247,8 +257,12 @@ class SnapshotService:
         records: list[NormalizedProductRecord],
         apify_run_id: str,
         dataset_id: str,
+        tracker_created_date,
     ) -> bool:
         if not isinstance(tracker_document, CategoryTrackerDocument):
+            return False
+
+        if snapshot_date < tracker_created_date:
             return False
 
         sorted_records = sorted(

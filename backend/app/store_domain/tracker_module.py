@@ -92,3 +92,13 @@ class TrackerModule:
         return await self._service.replace_tracked_asins(
             workspace_id, tracker_code, payload
         )
+
+    async def delete_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._service.delete_category_tracker(workspace_id, tracker_code)
+
+    async def delete_competitor_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._service.delete_competitor_tracker(workspace_id, tracker_code)

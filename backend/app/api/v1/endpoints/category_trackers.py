@@ -79,3 +79,12 @@ async def get_latest_category_snapshot(
     timeframe: Timeframe = Query(default=Timeframe.WEEKLY),
 ) -> CategorySnapshot:
     return await store.get_latest_category_snapshot(workspace_id, tracker_code, timeframe)
+
+
+@router.delete("/{tracker_code}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_category_tracker(
+    workspace_id: str,
+    tracker_code: str,
+    store: Annotated[BaseStore, Depends(get_store)],
+) -> None:
+    await store.delete_category_tracker(workspace_id, tracker_code)

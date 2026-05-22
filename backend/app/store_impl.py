@@ -304,6 +304,16 @@ class BaseStore:
     ) -> CompetitorAlertCounts:
         raise NotImplementedError
 
+    async def delete_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        raise NotImplementedError
+
+    async def delete_competitor_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        raise NotImplementedError
+
 
 class MongoStore(BaseStore):
     def __init__(
@@ -605,6 +615,16 @@ class MongoStore(BaseStore):
         self, workspace_id: str
     ) -> CompetitorAlertCounts:
         return await self._insights.get_competitor_alerts(workspace_id)
+
+    async def delete_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._trackers.delete_category_tracker(workspace_id, tracker_code)
+
+    async def delete_competitor_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._trackers.delete_competitor_tracker(workspace_id, tracker_code)
 
 
 async def build_store(settings: Config) -> BaseStore:
