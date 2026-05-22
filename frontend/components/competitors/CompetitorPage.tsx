@@ -488,7 +488,8 @@ export const CompetitorPage = () => {
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [loadingDetail, setLoadingDetail] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [showManageAsins, setShowManageAsins] = useState(false)
@@ -502,11 +503,16 @@ export const CompetitorPage = () => {
 
   // Load tracker list only
   useEffect(() => {
-    apiListCompetitorTrackers().then(res => {
-      setTrackers(res.items as CompetitorTrackerDetail[])
-      if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
-      setLoading(false)
-    })
+    apiListCompetitorTrackers()
+      .then(res => {
+        setTrackers(res.items as CompetitorTrackerDetail[])
+        if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
+      })
+      .catch(() => {
+        setTrackers([])
+        setError("Failed to load competitor trackers")
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   // Fetch detail (tracked_products) for selected tracker
@@ -561,6 +567,7 @@ export const CompetitorPage = () => {
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
   if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
+  if (!loading && trackers.length === 0 && error) return <div style={{ textAlign: "center", padding: 60, color: T.red }}>{error}</div>
   if (trackers.length === 0) return (
     <>
       {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setSelectedCode(t.tracker_code); setShowCreate(false) }} />}

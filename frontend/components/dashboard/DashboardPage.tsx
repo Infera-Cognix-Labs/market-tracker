@@ -14,28 +14,77 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
   const [timeframe, setTimeframe] = useState<Timeframe>("WEEKLY")
   const [data, setData] = useState<DashboardOverview | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [digest, setDigest] = useState<WeeklyDigest | null>(null)
   const [digestLoading, setDigestLoading] = useState(false)
 
   useEffect(() => {
-    apiGetDashboardOverview(timeframe).then(d => { setData(d); setLoading(false) })
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+
+    apiGetDashboardOverview(timeframe)
+      .then(d => {
+        if (cancelled) return
+        setData(d && typeof d === "object" ? d : null)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setData(null)
+        setError("Failed to load dashboard data")
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [timeframe])
+
+  const handleRefresh = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const d = await apiGetDashboardOverview(timeframe)
+      setData(d && typeof d === "object" ? d : null)
+    } catch {
+      setData(null)
+      setError("Failed to refresh dashboard data")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleWeeklyDigest = async () => {
     setDigestLoading(true)
-    const res = await apiListWeeklyDigests()
-    setDigest(res.items[0] || null)
-    setDigestLoading(false)
+    try {
+      const res = await apiListWeeklyDigests()
+      setDigest(res.items[0] || null)
+    } catch {
+      setDigest(null)
+    } finally {
+      setDigestLoading(false)
+    }
   }
 
-  if (loading || !data) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading dashboard...</div>
+  if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading dashboard...</div>
+
+  if (!data) {
+    return (
+      <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>
+        {error || "No dashboard data available"}
+      </div>
+    )
+  }
 
   const s = data.summary
 
   return (
     <div className="anim-fade">
       <PageHeader title="Dashboard" sub={`Generated at ${new Date(data.generated_at).toLocaleString()} — ${data.timeframe} view`}
-        actions={<button className="btn-ghost" onClick={() => apiGetDashboardOverview(timeframe).then(d => setData(d))}><RefreshCw size={14} /> Refresh</button>} />
+        actions={<button className="btn-ghost" onClick={handleRefresh}><RefreshCw size={14} /> Refresh</button>} />
 
       {/* Timeframe selector */}
       <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>

@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { ChevronLeft, ChevronRight, Filter } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListEvents } from "../shared/api"
+import { apiListEvents, apiGetProductDetail } from "../shared/api"
 import type { Event, EventType, Severity } from "../shared/types"
 
 const EVENT_TYPES: EventType[] = [
@@ -23,37 +23,50 @@ export const EventsPage = () => {
   const [total, setTotal] = useState(0)
   const [page, setPageNum] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<EventType | "">("")
   const [filterSeverity, setFilterSeverity] = useState<Severity | "">("")
+  const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
 
-  const loadEvents = (p: number) => {
+  const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
-    apiListEvents({
-      event_type: filterType || undefined,
-      severity: filterSeverity || undefined,
-      page: p,
-      page_size: 20,
-    }).then(res => {
+    setError(null)
+    try {
+      const res = await apiListEvents({
+        event_type: filterType || undefined,
+        severity: filterSeverity || undefined,
+        page: p,
+        page_size: 20,
+      })
       setEvents(res.items)
       setTotal(res.total)
       setPageNum(p)
+
+      // Batch-fetch product images for unique ASINs on this page
+      const pairs = [...new Map(res.items.map(e => [`${e.marketplace}:${e.asin}`, e])).values()]
+      const results = await Promise.allSettled(
+        pairs.map(e => apiGetProductDetail(e.marketplace, e.asin))
+      )
+      const imgMap = new Map<string, string>()
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled" && r.value?.main_image_url_latest) {
+          imgMap.set(`${pairs[i].marketplace}:${pairs[i].asin}`, r.value.main_image_url_latest)
+        }
+      })
+      setProductImages(imgMap)
+    } catch {
+      setEvents([])
+      setTotal(0)
+      setPageNum(p)
+      setError("Failed to load events")
+    } finally {
       setLoading(false)
-    })
-  }
+    }
+  }, [filterType, filterSeverity])
 
   useEffect(() => {
-    apiListEvents({
-      event_type: filterType || undefined,
-      severity: filterSeverity || undefined,
-      page: 1,
-      page_size: 20,
-    }).then(res => {
-      setEvents(res.items)
-      setTotal(res.total)
-      setPageNum(1)
-      setLoading(false)
-    })
-  }, [filterType, filterSeverity])
+    void loadEvents(1)
+  }, [loadEvents])
 
   return (
     <div className="anim-fade">
@@ -97,18 +110,28 @@ export const EventsPage = () => {
 
       {/* Events list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {!loading && error && events.length === 0 && (
+          <div style={{ textAlign: "center", padding: 24, color: T.red, fontSize: 12 }}>{error}</div>
+        )}
         {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading events...</div>}
         {!loading && events.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No events match this filter</div>
         )}
         {!loading && events.map(ev => {
           const meta = AlertTypeMeta(ev.event_type)
+          const imageUrl = ev.payload.current?.main_image_url || ev.payload.previous?.main_image_url
+            || productImages.get(`${ev.marketplace}:${ev.asin}`)
           return (
             <div key={ev.event_code}
               style={{ background: T.bg2, border: `1px solid ${T.border}`, borderLeft: `3px solid ${meta.color}`, borderRadius: 8, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, transition: "all .15s" }}
               className="row-hover">
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: `${meta.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: meta.color, flexShrink: 0 }}>
-                {meta.icon}
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", color: meta.color, flexShrink: 0 }}>
+                {imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={imageUrl} alt={ev.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                ) : (
+                  meta.icon
+                )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>

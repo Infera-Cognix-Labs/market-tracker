@@ -23,27 +23,37 @@ export const JobsPage = () => {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [triggering, setTriggering] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const loadJobs = () => {
+  const loadJobs = async () => {
     setLoading(true)
-    apiListJobs().then(res => {
+    setError(null)
+    try {
+      const res = await apiListJobs()
       setJobs(res.items)
+    } catch {
+      setJobs([])
+      setError("Failed to load jobs")
+    } finally {
       setLoading(false)
-    })
+    }
   }
 
   useEffect(() => {
-    apiListJobs().then(res => {
-      setJobs(res.items)
-      setLoading(false)
-    })
+    void loadJobs()
   }, [])
 
   const handleTrigger = async (trackerType: "CATEGORY" | "COMPETITOR", trackerCode: string) => {
     setTriggering(true)
-    const newJob = await apiTriggerJob(trackerType, trackerCode)
-    setJobs(prev => [newJob, ...prev])
-    setTriggering(false)
+    setError(null)
+    try {
+      const newJob = await apiTriggerJob(trackerType, trackerCode)
+      setJobs(prev => [newJob, ...prev])
+    } catch {
+      setError("Failed to trigger job")
+    } finally {
+      setTriggering(false)
+    }
   }
 
   const formatDuration = (start?: string | null, end?: string | null): string => {
@@ -64,6 +74,10 @@ export const JobsPage = () => {
             </button>
           </div>
         } />
+
+      {error && (
+        <div style={{ marginBottom: 12, color: T.red, fontSize: 12 }}>{error}</div>
+      )}
 
       {loading ? (
         <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading jobs...</div>
