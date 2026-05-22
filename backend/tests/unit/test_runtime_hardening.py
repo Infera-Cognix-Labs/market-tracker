@@ -177,6 +177,7 @@ def test_snapshot_service_append_only_does_not_overwrite_existing_payload(
                 deal_info=None,
             ),
             source_refs={"provider": "APIFY"},
+            tracker_created_date=date(2026, 1, 1),
         )
     )
 

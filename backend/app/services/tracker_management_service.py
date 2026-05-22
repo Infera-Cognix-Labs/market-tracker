@@ -27,11 +27,15 @@ from app.models.api import (
     TrackerStatus,
 )
 from app.models.documents import (
+    ApifyRunDocument,
     CategorySnapshotDocument,
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     EventDocument,
+    JobDocument,
     ProductDocument,
+    ProductSnapshotDocument,
+    RawImportBatchDocument,
 )
 from app.services.shared import (
     build_competitor_summaries,
@@ -405,6 +409,89 @@ class TrackerManagementService:
             setattr(document, key, value)
         await document.save()
         return tracker
+
+    async def _delete_tracker_data(
+        self, workspace_id: str, tracker_code: str, tracker_type: str
+    ) -> None:
+        job_docs = await JobDocument.find(
+            JobDocument.workspace_id == workspace_id,
+            JobDocument.tracker_code == tracker_code,
+        ).to_list()
+        job_codes = [j.job_code for j in job_docs]
+        if job_codes:
+            await JobDocument.find(
+                JobDocument.workspace_id == workspace_id,
+                JobDocument.tracker_code == tracker_code,
+            ).delete()
+
+            await ApifyRunDocument.find(
+                ApifyRunDocument.workspace_id == workspace_id,
+                In(ApifyRunDocument.tracking_job_code, job_codes),
+            ).delete()
+
+            await RawImportBatchDocument.find(
+                RawImportBatchDocument.workspace_id == workspace_id,
+                In(RawImportBatchDocument.tracking_job_code, job_codes),
+            ).delete()
+
+        await EventDocument.find(
+            EventDocument.workspace_id == workspace_id,
+            EventDocument.tracker_code == tracker_code,
+        ).delete()
+
+        if tracker_type == "CATEGORY":
+            await CategorySnapshotDocument.find(
+                CategorySnapshotDocument.workspace_id == workspace_id,
+                CategorySnapshotDocument.tracker_code == tracker_code,
+            ).delete()
+
+        product_snapshot_docs = await ProductSnapshotDocument.find(
+            ProductSnapshotDocument.workspace_id == workspace_id,
+            ProductSnapshotDocument.tracker_refs.tracker_code == tracker_code,
+        ).to_list()
+        for doc in product_snapshot_docs:
+            doc.tracker_refs = [
+                ref for ref in doc.tracker_refs
+                if ref.tracker_code != tracker_code
+            ]
+            await doc.save()
+
+        product_docs = await ProductDocument.find(
+            ProductDocument.workspace_id == workspace_id,
+            ProductDocument.tracker_refs.tracker_code == tracker_code,
+        ).to_list()
+        for doc in product_docs:
+            doc.tracker_refs = [
+                ref for ref in doc.tracker_refs
+                if ref.tracker_code != tracker_code
+            ]
+            await doc.save()
+
+    async def delete_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        document = await CategoryTrackerDocument.find_one(
+            CategoryTrackerDocument.workspace_id == workspace_id,
+            CategoryTrackerDocument.tracker_code == tracker_code,
+        )
+        if document is None:
+            raise NotFoundError("Category tracker not found.")
+
+        await self._delete_tracker_data(workspace_id, tracker_code, "CATEGORY")
+        await document.delete()
+
+    async def delete_competitor_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        document = await CompetitorTrackerDocument.find_one(
+            CompetitorTrackerDocument.workspace_id == workspace_id,
+            CompetitorTrackerDocument.tracker_code == tracker_code,
+        )
+        if document is None:
+            raise NotFoundError("Competitor tracker not found.")
+
+        await self._delete_tracker_data(workspace_id, tracker_code, "COMPETITOR")
+        await document.delete()
 
 
 def payload_tracking_stats() -> CategoryTrackerStats:
