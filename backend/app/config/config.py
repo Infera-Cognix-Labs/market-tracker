@@ -310,6 +310,29 @@ class ApifyConfig(BaseModel):
         100,
         "APIFY_DEALS_MAX_RESULTS",
     )
+    category_enrichment_actor_name: str | None = _binding_str(
+        "category_enrichment", "name"
+    )
+    category_enrichment_actor_id: str | None = _binding_str(
+        "category_enrichment",
+        "actor_id",
+        "APIFY_CATEGORY_ENRICHMENT_ACTOR_ID",
+    )
+    category_enrichment_task_id: str | None = _binding_str(
+        "category_enrichment",
+        "task_id",
+        "APIFY_CATEGORY_ENRICHMENT_TASK_ID",
+    )
+    category_enrichment_build: str | None = _binding_str(
+        "category_enrichment",
+        "build",
+        "APIFY_CATEGORY_ENRICHMENT_BUILD",
+    )
+    category_enrichment_memory_mbytes: int | None = _binding_int(
+        "category_enrichment",
+        "memory_mbytes",
+        "APIFY_CATEGORY_ENRICHMENT_MEMORY_MBYTES",
+    )
 
 
 class StorageConfig(BaseModel):

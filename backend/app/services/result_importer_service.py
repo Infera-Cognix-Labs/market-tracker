@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -31,7 +32,13 @@ from app.models.documents import (
     RawImportBatchDocument,
 )
 from app.services.event_engine import EventEngine
-from app.services.normalization_service import NormalizationService, RawImportedItem
+from app.services.normalization_service import (
+    NormalizationService,
+    NormalizedProductRecord,
+    NormalizationResult,
+    RawImportedItem,
+    normalize_junglee_item,
+)
 from app.services.object_storage_service import LocalObjectStorageService
 from app.services.run_orchestrator import coerce_datetime
 from app.services.snapshot_service import SnapshotService
@@ -39,6 +46,9 @@ from app.services.snapshot_service import SnapshotService
 logger = get_logger(__name__)
 metrics = get_metrics()
 MAX_CATEGORY_SEARCH_PAGES = 10
+ENRICHMENT_MAX_ASINS_PER_BATCH = 200
+ENRICHMENT_POLL_INTERVAL_SECS = 5
+ENRICHMENT_POLL_MAX_ATTEMPTS = 24
 
 
 @dataclass(frozen=True)
@@ -306,6 +316,47 @@ class ResultImporterService:
                         final_status=retry_status,
                     )
                 return retry_status
+
+        if tracker_context.tracker_type == TrackerType.CATEGORY and normalized.records:
+            null_asins = _detect_asins_with_nulls(normalized.records)
+            if null_asins:
+                enrichment_started = perf_counter()
+                logger.info(
+                    "Triggering junglee enrichment for null-field ASINs.",
+                    extra={
+                        "context": correlation_context(
+                            tracker_code=job_document.tracker_code,
+                            asins_count=len(null_asins),
+                        )
+                    },
+                )
+                enriched_records = await _enrich_with_junglee(
+                    gateway=self.gateway,
+                    asins=null_asins[:ENRICHMENT_MAX_ASINS_PER_BATCH],
+                    marketplace=tracker_context.marketplace,
+                )
+                if enriched_records:
+                    enriched_by_asin = {r.asin: r for r in enriched_records}
+                    merged_records = []
+                    for record in normalized.records:
+                        if record.asin in enriched_by_asin:
+                            merged_records.append(
+                                _merge_record(record, enriched_by_asin[record.asin])
+                            )
+                        else:
+                            merged_records.append(record)
+                    normalized = NormalizationResult(
+                        records=merged_records,
+                        invalid_count=normalized.invalid_count,
+                    )
+                enrichment_latency_ms = (perf_counter() - enrichment_started) * 1000.0
+                metrics.observe(
+                    "enrichment_latency_ms",
+                    enrichment_latency_ms,
+                    workspace_id=job_document.workspace_id,
+                    tracker_code=job_document.tracker_code,
+                    job_code=job_document.job_code,
+                )
 
         if normalized.records:
             snapshot_started = perf_counter()
@@ -1149,3 +1200,134 @@ async def _load_deals_dataset(
 
     expected_items = total_items if total_items is not None else len(imported_items)
     return imported_items, expected_items
+
+
+def _detect_asins_with_nulls(
+    records: list[NormalizedProductRecord],
+) -> list[str]:
+    null_asins: list[str] = []
+    for record in records:
+        has_null_price = record.price_current is None
+        has_null_rating = record.rating_value is None
+        has_null_reviews = record.review_count is None
+        if has_null_price or has_null_rating or has_null_reviews:
+            null_asins.append(record.asin)
+    return null_asins
+
+
+def _merge_record(
+    original: NormalizedProductRecord,
+    enriched: NormalizedProductRecord,
+) -> NormalizedProductRecord:
+    return NormalizedProductRecord(
+        marketplace=original.marketplace,
+        asin=original.asin,
+        rank_position=original.rank_position or enriched.rank_position,
+        captured_at=original.captured_at,
+        brand=original.brand if original.brand != "Unknown" else enriched.brand,
+        title=original.title if original.title != original.asin else enriched.title,
+        product_url=original.product_url,
+        main_image_url=original.main_image_url
+        or enriched.main_image_url,
+        title_hash=original.title_hash,
+        main_image_hash=original.main_image_hash,
+        bsr_position=original.bsr_position or enriched.bsr_position,
+        price_current=original.price_current or enriched.price_current,
+        price_original=original.price_original or enriched.price_original,
+        currency=original.currency or enriched.currency,
+        coupon_text=original.coupon_text or enriched.coupon_text,
+        availability_status=original.availability_status,
+        buy_box_status=original.buy_box_status,
+        buy_box_seller_name=original.buy_box_seller_name
+        or enriched.buy_box_seller_name,
+        rating_value=original.rating_value or enriched.rating_value,
+        review_count=original.review_count or enriched.review_count,
+        variation_count=original.variation_count or enriched.variation_count,
+        deal_info=original.deal_info or enriched.deal_info,
+        source_batch_no=original.source_batch_no,
+        source_item_index=original.source_item_index,
+    )
+
+
+async def _enrich_with_junglee(
+    *,
+    gateway: ApifyGateway,
+    asins: list[str],
+    marketplace: str,
+) -> list[NormalizedProductRecord]:
+    amazon_domain = _marketplace_to_amazon_domain(marketplace)
+    if amazon_domain.startswith("www."):
+        amazon_domain = amazon_domain[4:]
+
+    run_input: dict[str, object] = {
+        "asins": asins,
+        "amazonDomain": amazon_domain,
+        "language": "en",
+        "proxyCountry": "AUTO_SELECT_PROXY_COUNTRY",
+        "useCaptchaSolver": False,
+    }
+
+    try:
+        launch = await gateway.start_run(
+            "bind_category_enrichment_v1",
+            run_input,
+        )
+    except Exception:
+        logger.exception("Failed to start junglee enrichment run.")
+        return []
+
+    if launch.status != ExternalRunStatus.SUCCEEDED:
+        logger.warning(
+            "Junglee enrichment run did not start successfully.",
+            extra={"status": str(launch.status)},
+        )
+        return []
+
+    run_id = launch.provider_run_id
+    for _ in range(ENRICHMENT_POLL_MAX_ATTEMPTS):
+        await asyncio.sleep(ENRICHMENT_POLL_INTERVAL_SECS)
+        state = await gateway.get_run(run_id)
+        if state.status == ExternalRunStatus.SUCCEEDED:
+            break
+        if state.status in {
+            ExternalRunStatus.FAILED,
+            ExternalRunStatus.TIMED_OUT,
+            ExternalRunStatus.ABORTED,
+        }:
+            logger.warning(
+                "Junglee enrichment run failed.",
+                extra={"status": str(state.status)},
+            )
+            return []
+
+    dataset_id = launch.default_dataset_id
+    if not dataset_id:
+        return []
+
+    items_batch = await gateway.list_dataset_items(
+        dataset_id, limit=ENRICHMENT_MAX_ASINS_PER_BATCH
+    )
+
+    records: list[NormalizedProductRecord] = []
+    for item in items_batch.items:
+        record = normalize_junglee_item(item, marketplace)
+        if record is not None:
+            records.append(record)
+
+    return records
+
+
+def _marketplace_to_amazon_domain(marketplace: str) -> str:
+    mapping = {
+        "amazon_us": "www.amazon.com",
+        "amazon_uk": "www.amazon.co.uk",
+        "amazon_de": "www.amazon.de",
+        "amazon_fr": "www.amazon.fr",
+        "amazon_es": "www.amazon.es",
+        "amazon_it": "www.amazon.it",
+        "amazon_ca": "www.amazon.ca",
+        "amazon_jp": "www.amazon.co.jp",
+        "amazon_au": "www.amazon.com.au",
+        "amazon_in": "www.amazon.in",
+    }
+    return mapping.get(marketplace, "www.amazon.com")

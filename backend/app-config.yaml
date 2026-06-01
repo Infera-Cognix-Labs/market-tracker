@@ -30,6 +30,12 @@ apify:
       task_id: ""
       build: "latest"
       memory_mbytes: 4096
+    category_enrichment:
+      name: "Category ASIN Enrichment"
+      actor_id: "junglee/amazon-asins-scraper"
+      task_id: ""
+      build: "latest"
+      memory_mbytes: 4096
 
 storage:
   raw_batch_offload_enabled: false

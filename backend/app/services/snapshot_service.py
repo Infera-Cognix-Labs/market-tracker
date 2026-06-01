@@ -364,6 +364,58 @@ class SnapshotService:
 
         return False
 
+    async def enrich_snapshot_nulls(
+        self,
+        *,
+        workspace_id: str,
+        marketplace: str,
+        snapshot_date,
+        records: list[NormalizedProductRecord],
+    ) -> int:
+        updated_count = 0
+        for record in records:
+            existing = await ProductSnapshotDocument.find_one(
+                ProductSnapshotDocument.workspace_id == workspace_id,
+                ProductSnapshotDocument.marketplace == marketplace,
+                ProductSnapshotDocument.asin == record.asin,
+                ProductSnapshotDocument.snapshot_date == snapshot_date,
+            )
+            if existing is None:
+                continue
+
+            update_dict: dict[str, object] = {}
+            if existing.price_current is None and record.price_current is not None:
+                update_dict["price_current"] = record.price_current
+            if existing.price_original is None and record.price_original is not None:
+                update_dict["price_original"] = record.price_original
+            if existing.currency is None and record.currency is not None:
+                update_dict["currency"] = record.currency
+            if existing.rating_value is None and record.rating_value is not None:
+                update_dict["rating_value"] = record.rating_value
+            if existing.review_count is None and record.review_count is not None:
+                update_dict["review_count"] = record.review_count
+            if existing.bsr_position is None and record.bsr_position is not None:
+                update_dict["bsr_position"] = record.bsr_position
+            if existing.variation_count is None and record.variation_count is not None:
+                update_dict["variation_count"] = record.variation_count
+            if (
+                existing.buy_box_seller_name is None
+                and record.buy_box_seller_name is not None
+            ):
+                update_dict["buy_box_seller_name"] = record.buy_box_seller_name
+
+            if update_dict:
+                update_dict["captured_at"] = record.captured_at
+                await ProductSnapshotDocument.find_one(
+                    ProductSnapshotDocument.workspace_id == workspace_id,
+                    ProductSnapshotDocument.marketplace == marketplace,
+                    ProductSnapshotDocument.asin == record.asin,
+                    ProductSnapshotDocument.snapshot_date == snapshot_date,
+                ).update({"$set": update_dict})
+                updated_count += 1
+
+        return updated_count
+
 
 def _merge_tracker_refs(existing_refs, new_ref: TrackerRef) -> list[TrackerRef]:
     merged = {(ref.tracker_type, ref.tracker_code): ref for ref in existing_refs}
