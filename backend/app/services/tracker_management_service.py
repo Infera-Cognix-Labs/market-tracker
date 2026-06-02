@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
 from datetime import timedelta
 
 from beanie.operators import In
 from pymongo import ASCENDING
 
 from app.core.errors import ConflictError, NotFoundError
+from app.core.logging import get_logger
 from app.core.utils import paginate, utc_now
 from app.models.api import (
     CategorySnapshot,
@@ -51,6 +53,9 @@ from app.services.shared import (
 )
 
 
+_logger = get_logger("app.services.tracker_management")
+
+
 class TrackerManagementService:
     async def _hydrate_competitor_tracker_detail(
         self, workspace_id: str, document: CompetitorTrackerDocument
@@ -60,6 +65,7 @@ class TrackerManagementService:
         if not tracked_asins:
             return tracker
 
+        t0 = time.monotonic()
         product_docs = await ProductDocument.find(
             ProductDocument.workspace_id == workspace_id,
             ProductDocument.marketplace == tracker.marketplace,
@@ -77,7 +83,9 @@ class TrackerManagementService:
             .sort((EventDocument.snapshot_date, ASCENDING))
             .to_list()
         )
+        t_db = (time.monotonic() - t0) * 1000
 
+        t1 = time.monotonic()
         refreshed_tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
@@ -86,6 +94,21 @@ class TrackerManagementService:
             existing=tracker.tracked_products,
             reference_date=reference_date,
             recent_from_date=recent_from_date,
+        )
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "_hydrate_competitor_tracker_detail timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker.tracker_code,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "product_count": len(product_docs),
+                    "event_count": len(event_docs),
+                    "tracked_asin_count": len(tracked_asins),
+                }
+            },
         )
         if refreshed_tracked_products != tracker.tracked_products:
             tracker.tracked_products = refreshed_tracked_products
@@ -96,17 +119,30 @@ class TrackerManagementService:
     async def list_category_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CategoryTrackerListResponse:
+        t0 = time.monotonic()
+        all_docs = await CategoryTrackerDocument.find(
+            CategoryTrackerDocument.workspace_id == workspace_id
+        ).to_list()
+        t_db = (time.monotonic() - t0) * 1000
+        t1 = time.monotonic()
         items = sorted(
-            [
-                category_doc_to_model(doc)
-                for doc in await CategoryTrackerDocument.find(
-                    CategoryTrackerDocument.workspace_id == workspace_id
-                ).to_list()
-            ],
+            [category_doc_to_model(doc) for doc in all_docs],
             key=lambda tracker: tracker.updated_at,
             reverse=True,
         )
         paged_items, total = paginate(items, page, page_size)
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "list_category_trackers timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "total_docs": len(all_docs),
+                }
+            },
+        )
         return CategoryTrackerListResponse(
             items=paged_items,
             page=page,
@@ -241,17 +277,30 @@ class TrackerManagementService:
     async def list_competitor_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CompetitorTrackerListResponse:
+        t0 = time.monotonic()
+        all_docs = await CompetitorTrackerDocument.find(
+            CompetitorTrackerDocument.workspace_id == workspace_id
+        ).to_list()
+        t_db = (time.monotonic() - t0) * 1000
+        t1 = time.monotonic()
         items = sorted(
-            [
-                competitor_detail_to_list_model(competitor_doc_to_model(doc))
-                for doc in await CompetitorTrackerDocument.find(
-                    CompetitorTrackerDocument.workspace_id == workspace_id
-                ).to_list()
-            ],
+            [competitor_detail_to_list_model(competitor_doc_to_model(doc)) for doc in all_docs],
             key=lambda tracker: tracker.updated_at,
             reverse=True,
         )
         paged_items, total = paginate(items, page, page_size)
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "list_competitor_trackers timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "total_docs": len(all_docs),
+                }
+            },
+        )
         return CompetitorTrackerListResponse(
             items=paged_items,
             page=page,
@@ -272,12 +321,15 @@ class TrackerManagementService:
             TrackedAsin(asin=item.asin, enabled=item.enabled, added_at=now)
             for item in payload.tracked_asins
         ]
+        asin_list = [item.asin for item in tracked_asins]
         product_docs = await ProductDocument.find(
-            ProductDocument.workspace_id == workspace_id
-        ).to_list()
+            ProductDocument.workspace_id == workspace_id,
+            In(ProductDocument.asin, asin_list),
+        ).to_list() if asin_list else []
         event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id
-        ).to_list()
+            EventDocument.workspace_id == workspace_id,
+            In(EventDocument.asin, asin_list),
+        ).to_list() if asin_list else []
         tracker = CompetitorTrackerDetail(
             tracker_code=generate_tracker_code(
                 "cmp",
@@ -342,12 +394,15 @@ class TrackerManagementService:
         if payload.status is not None:
             tracker.status = payload.status
 
+        asin_list = [ta.asin for ta in tracker.tracked_asins]
         product_docs = await ProductDocument.find(
-            ProductDocument.workspace_id == workspace_id
-        ).to_list()
+            ProductDocument.workspace_id == workspace_id,
+            In(ProductDocument.asin, asin_list),
+        ).to_list() if asin_list else []
         event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id
-        ).to_list()
+            EventDocument.workspace_id == workspace_id,
+            In(EventDocument.asin, asin_list),
+        ).to_list() if asin_list else []
         tracker.tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
@@ -391,12 +446,15 @@ class TrackerManagementService:
         tracker.stats.tracked_asin_count = len(tracker.tracked_asins)
         tracker.updated_at = now
 
+        asin_list = [ta.asin for ta in tracker.tracked_asins]
         product_docs = await ProductDocument.find(
-            ProductDocument.workspace_id == workspace_id
-        ).to_list()
+            ProductDocument.workspace_id == workspace_id,
+            In(ProductDocument.asin, asin_list),
+        ).to_list() if asin_list else []
         event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id
-        ).to_list()
+            EventDocument.workspace_id == workspace_id,
+            In(EventDocument.asin, asin_list),
+        ).to_list() if asin_list else []
         tracker.tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
