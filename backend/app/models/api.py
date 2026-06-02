@@ -342,6 +342,7 @@ class EventChangeState(FlexibleApiModel):
     price_original: float | None = None
     coupon_text: str | None = None
     title: str | None = None
+    brand: str | None = None
     main_image_url: str | None = None
     variation_count: int | None = None
     content_signature_hash: str | None = None

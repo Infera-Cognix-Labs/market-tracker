@@ -457,6 +457,7 @@ export interface EventChangeState {
   price_original?: number | null
   coupon_text?: string | null
   title?: string
+  brand?: string
   main_image_url?: string
   variation_count?: number
   content_signature_hash?: string

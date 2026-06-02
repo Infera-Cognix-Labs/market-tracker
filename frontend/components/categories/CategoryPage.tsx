@@ -652,6 +652,7 @@ export const CategoryPage = () => {
                     const event = row.event
                     const imageUrl = getEventImageUrl(event)
                     const rankLabel = event.payload.current_rank ?? event.payload.previous_rank ?? event.payload.rank_today ?? null
+                    const prev = event.payload.previous
                     return (
                       <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: `${T.bg3}30` }}>
                         <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, color: T.text1 }}>
@@ -672,10 +673,25 @@ export const CategoryPage = () => {
                         </td>
                         <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>{event.asin}</td>
                         <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
-                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{event.title}</div>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prev?.title || event.title}</div>
                         </td>
-                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
-                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text3 }}>—</td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
+                          {prev?.brand ? (
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", width: "100%" }}>{extractBrandName(prev.brand)}</span>
+                          ) : <span style={{ color: T.text3 }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
+                          {prev?.price_current != null && prev.price_current > 0 ? (
+                            <>
+                              {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_current.toFixed(2)}
+                              {prev.price_original != null && prev.price_original > prev.price_current && (
+                                <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
+                                  {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_original.toFixed(2)}
+                                </span>
+                              )}
+                            </>
+                          ) : <span style={{ color: T.text3 }}>—</span>}
+                        </td>
                         <td style={{ padding: "9px 10px", fontSize: 12, color: T.text3 }}>—</td>
                         <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text3 }}>—</td>
                         <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
