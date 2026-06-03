@@ -8,8 +8,8 @@ import { PageHeader } from "../shared/PageHeader"
 import { KPICard } from "../shared/KPICard"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiGetDashboardOverview, apiListWeeklyDigests, apiGetCategoryInsights, apiGetCompetitorInsights, apiGetCompetitorAlerts } from "../shared/api"
-import type { DashboardOverview, Timeframe, WeeklyDigest, CategoryInsights, CompetitorInsights, CompetitorAlertCounts } from "../shared/types"
+import { apiGetDashboardOverview, apiListWeeklyDigests, apiGetCategoryInsights, apiGetCompetitorInsights } from "../shared/api"
+import type { DashboardOverview, Timeframe, WeeklyDigest, CategoryInsights, CompetitorInsights } from "../shared/types"
 
 export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>("WEEKLY")
@@ -20,9 +20,9 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
   const [digestLoading, setDigestLoading] = useState(false)
   const [categoryInsights, setCategoryInsights] = useState<CategoryInsights | null>(null)
   const [competitorInsights, setCompetitorInsights] = useState<CompetitorInsights | null>(null)
-  const [competitorAlerts, setCompetitorAlerts] = useState<CompetitorAlertCounts | null>(null)
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const [cardPages, setCardPages] = useState<Record<string, number>>({})
+  const [expandedHighlight, setExpandedHighlight] = useState<string | null>(null)
 
   const toggleCard = (label: string) => {
     setExpandedCard(prev => prev === label ? null : label)
@@ -51,7 +51,6 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
 
     apiGetCategoryInsights(timeframe).then(d => { if (!cancelled) setCategoryInsights(d) }).catch(() => {})
     apiGetCompetitorInsights(timeframe).then(d => { if (!cancelled) setCompetitorInsights(d) }).catch(() => {})
-    apiGetCompetitorAlerts().then(d => { if (!cancelled) setCompetitorAlerts(d) }).catch(() => {})
 
     return () => {
       cancelled = true
@@ -72,7 +71,6 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
     }
     apiGetCategoryInsights(timeframe).then(setCategoryInsights).catch(() => {})
     apiGetCompetitorInsights(timeframe).then(setCompetitorInsights).catch(() => {})
-    apiGetCompetitorAlerts().then(setCompetitorAlerts).catch(() => {})
   }
 
   const handleWeeklyDigest = async () => {
@@ -91,6 +89,17 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
   const chip = (text: string, color: string, dim?: boolean) => (
     <span style={{ display: "inline-block", fontSize: 10, color, background: dim ? `${color}12` : `${color}20`, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: T.mono, whiteSpace: "nowrap" }}>{text}</span>
   )
+  const hlPager = (k: string, total: number) => {
+    if (total <= 10) return null
+    const pg = cardPages[k] ?? 0, totalPg = Math.ceil(total / 10)
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "4px 0 2px", marginTop: 2, borderTop: `1px solid ${T.border}` }}>
+        <button className="btn-ghost" disabled={pg === 0} onClick={e => { e.stopPropagation(); setCardPages(p => ({ ...p, [k]: pg - 1 })) }} style={{ fontSize: 10, padding: "2px 8px" }}>← Prev</button>
+        <span style={{ fontSize: 10, color: T.text2, fontFamily: T.mono }}>{pg + 1} / {totalPg}</span>
+        <button className="btn-ghost" disabled={pg >= totalPg - 1} onClick={e => { e.stopPropagation(); setCardPages(p => ({ ...p, [k]: pg + 1 })) }} style={{ fontSize: 10, padding: "2px 8px" }}>Next →</button>
+      </div>
+    )
+  }
 
   function renderInsightPanel<T extends { asin: string; title: string; brand: string; image_url: string; tracker_name: string }>(
     label: string, items: T[], borderColor: string, chipsContent: (item: T) => ReactNode
@@ -164,25 +173,6 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
         <KPICard label="Competitor Trackers" value={s.active_competitor_tracker_count} sub="active" icon={<Package size={16} />} accent={T.teal} />
         <KPICard label="Tracked Products" value={s.tracked_product_count} sub="across all trackers" icon={<Package size={16} />} accent={T.green} />
         <KPICard label="Events This Period" value={s.new_entrant_count + s.returning_count + s.top10_enter_count + s.price_change_count + s.listing_change_count} sub="total signals" icon={<Bell size={16} />} accent={T.amber} />
-      </div>
-
-      {/* Event breakdown mini-cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 20 }}>
-        {[
-          { label: "New Entrants", value: s.new_entrant_count, color: T.green, icon: <Zap size={13} /> },
-          { label: "Returning", value: s.returning_count, color: "#90EE90", icon: <RefreshCw size={13} /> },
-          { label: "Top 10 Entry", value: s.top10_enter_count, color: T.amber, icon: <Star size={13} /> },
-          { label: "Price Changes", value: s.price_change_count, color: T.blue, icon: <TrendingDown size={13} /> },
-          { label: "Listing Changes", value: s.listing_change_count, color: T.purple, icon: <TrendingUp size={13} /> },
-        ].map(m => (
-          <div key={m.label} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 6, background: `${m.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color }}>{m.icon}</div>
-            <div>
-              <span style={{ fontSize: 20, fontWeight: 700, fontFamily: T.mono, color: m.color }}>{m.value}</span>
-              <div style={{ fontSize: 10, color: T.text2 }}>{m.label}</div>
-            </div>
-          </div>
-        ))}
       </div>
 
       {/* Category Insights */}
@@ -316,28 +306,6 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
           ))}
       </div>
 
-      {/* Competitor Alerts */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: T.text3, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Competitor Alerts</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
-          {[
-            { label: "Out of Stock", value: competitorAlerts?.oos_count ?? 0, color: T.red, icon: <AlertTriangle size={13} /> },
-            { label: "Price Drops", value: competitorAlerts?.price_drop_count ?? 0, color: T.green, icon: <TrendingDown size={13} /> },
-            { label: "Price Increases", value: competitorAlerts?.price_increase_count ?? 0, color: T.blue, icon: <TrendingUp size={13} /> },
-            { label: "New Promotions", value: competitorAlerts?.new_promotion_count ?? 0, color: T.amber, icon: <Bell size={13} /> },
-            { label: "New Variations", value: competitorAlerts?.new_variation_count ?? 0, color: T.purple, icon: <Package size={13} /> },
-          ].map(m => (
-            <div key={m.label} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 6, background: `${m.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color }}>{m.icon}</div>
-              <div>
-                <span style={{ fontSize: 20, fontWeight: 700, fontFamily: T.mono, color: m.color }}>{m.value}</span>
-                <div style={{ fontSize: 10, color: T.text2 }}>{m.label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* Highlights + Threats */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 20 }}>
         {/* Category Highlights */}
@@ -346,16 +314,97 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
           {data.category_highlights.length === 0 && (
             <div style={{ textAlign: "center", padding: "24px 0", color: T.text3, fontSize: 12 }}>No category data</div>
           )}
-          {data.category_highlights.map(h => (
-            <div key={h.tracker_code} style={{ padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
-              <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
-                <span style={{ color: T.green }}>+{h.new_entrant_count} new</span>
-                <span style={{ color: T.red }}>−{h.exit_count} exits</span>
-                <span style={{ color: T.amber }}>★{h.top10_enter_count} top10</span>
+          {data.category_highlights.map(h => {
+            const key = `cat-${h.tracker_code}`
+            const isOpen = expandedHighlight === key
+            const top10 = (categoryInsights?.new_top10_entrants ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const firstTime = (categoryInsights?.first_time_entrants ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const returning = (categoryInsights?.returning_entrants ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const firstTimeUnique = firstTime.filter(i => !top10.some(t => t.asin === i.asin))
+            const hasItems = top10.length + firstTimeUnique.length + returning.length > 0
+            return (
+              <div key={h.tracker_code} style={{ borderBottom: `1px solid ${T.border}` }}>
+                <div
+                  onClick={hasItems ? () => setExpandedHighlight(prev => prev === key ? null : key) : undefined}
+                  style={{ padding: "10px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: hasItems ? "pointer" : "default" }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
+                    <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
+                      <span style={{ color: T.green }}>+{top10.length + firstTimeUnique.length} new</span>
+                      <span style={{ color: T.red }}>−{h.exit_count} exits</span>
+                      <span style={{ color: T.amber }}>★{top10.length} top10</span>
+                    </div>
+                  </div>
+                  {hasItems && <ChevronDown size={12} style={{ color: T.text3, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0, marginTop: 4 }} />}
+                </div>
+                {isOpen && (
+                  <div style={{ paddingBottom: 8 }}>
+                    {top10.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.amber, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>Top 10</div>
+                        {top10.slice((cardPages[`${key}-t10`]??0)*10,((cardPages[`${key}-t10`]??0)+1)*10).map(item => (
+                          <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                            <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                              <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                            </a>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {chip(`#${item.current_rank}`, T.amber)}
+                                {item.is_first_time_entrant && chip("1st time", T.green)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {hlPager(`${key}-t10`, top10.length)}
+                      </>
+                    )}
+                    {firstTimeUnique.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.green, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>First-time</div>
+                        {firstTimeUnique.slice((cardPages[`${key}-ft`]??0)*10,((cardPages[`${key}-ft`]??0)+1)*10).map(item => (
+                          <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                            <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                              <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                            </a>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {chip(`#${item.current_rank}`, T.green)}
+                                {chip("1st time", T.green)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {hlPager(`${key}-ft`, firstTimeUnique.length)}
+                      </>
+                    )}
+                    {returning.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: "#90EE90", letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>Returning</div>
+                        {returning.slice((cardPages[`${key}-ret`]??0)*10,((cardPages[`${key}-ret`]??0)+1)*10).map(item => (
+                          <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                            <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                              <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                            </a>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {chip(`#${item.current_rank}`, "#90EE90")}
+                                {chip(`${item.days_absent}d`, T.amber)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {hlPager(`${key}-ret`, returning.length)}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
           <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("categories")}>
             View categories <ChevronRight size={13} />
           </button>
@@ -367,16 +416,103 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
           {data.competitor_highlights.length === 0 && (
             <div style={{ textAlign: "center", padding: "24px 0", color: T.text3, fontSize: 12 }}>No competitor data</div>
           )}
-          {data.competitor_highlights.map(h => (
-            <div key={h.tracker_code} style={{ padding: "10px 0", borderBottom: `1px solid ${T.border}` }}>
-              <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
-              <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
-                <span style={{ color: T.blue }}>💰 {h.price_change_count} price</span>
-                <span style={{ color: T.purple }}>📦 {h.availability_change_count} stock</span>
-                <span style={{ color: T.teal }}>📝 {h.listing_change_count} listing</span>
+          {data.competitor_highlights.map(h => {
+            const key = `comp-${h.tracker_code}`
+            const isOpen = expandedHighlight === key
+            const prices = (competitorInsights?.price_changes ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const promos = (competitorInsights?.promotions ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const avail = (competitorInsights?.availability_changes ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const hasItems = prices.length + promos.length + avail.length > 0
+            return (
+              <div key={h.tracker_code} style={{ borderBottom: `1px solid ${T.border}` }}>
+                <div
+                  onClick={hasItems ? () => setExpandedHighlight(prev => prev === key ? null : key) : undefined}
+                  style={{ padding: "10px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: hasItems ? "pointer" : "default" }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
+                    <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
+                      <span style={{ color: T.blue }}>💰 {prices.length} price</span>
+                      <span style={{ color: T.purple }}>📦 {avail.length} stock</span>
+                      <span style={{ color: T.amber }}>🎫 {promos.length} promo</span>
+                    </div>
+                  </div>
+                  {hasItems && <ChevronDown size={12} style={{ color: T.text3, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0, marginTop: 4 }} />}
+                </div>
+                {isOpen && (
+                  <div style={{ paddingBottom: 8 }}>
+                    {prices.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.blue, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>Price Changes</div>
+                        {prices.slice((cardPages[`${key}-pr`]??0)*10,((cardPages[`${key}-pr`]??0)+1)*10).map(item => {
+                          const sym = item.currency === "EUR" ? "€" : item.currency === "GBP" ? "£" : "$"
+                          return (
+                            <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                              <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                                <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                              </a>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                  {item.current_price != null && chip(`${sym}${item.current_price.toFixed(2)}`, T.blue)}
+                                  {item.delta_pct != null && chip(`${item.delta_pct > 0 ? "+" : ""}${item.delta_pct.toFixed(1)}%`, item.delta_pct < 0 ? T.green : T.red)}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {hlPager(`${key}-pr`, prices.length)}
+                      </>
+                    )}
+                    {avail.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.red, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>Availability</div>
+                        {avail.slice((cardPages[`${key}-av`]??0)*10,((cardPages[`${key}-av`]??0)+1)*10).map(item => {
+                          const sc = (s: string) => s === "IN_STOCK" ? T.green : T.red
+                          return (
+                            <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                              <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                                <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                              </a>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
+                                  {chip(item.previous_status, sc(item.previous_status))}
+                                  <span style={{ fontSize: 10, color: T.text3 }}>→</span>
+                                  {chip(item.current_status, sc(item.current_status))}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {hlPager(`${key}-av`, avail.length)}
+                      </>
+                    )}
+                    {promos.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.amber, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>Promotions</div>
+                        {promos.slice((cardPages[`${key}-pm`]??0)*10,((cardPages[`${key}-pm`]??0)+1)*10).map(item => (
+                          <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                            <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                              <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                            </a>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {item.coupon_text && chip(item.coupon_text, T.amber)}
+                                {item.deal_info?.deal_badge && chip(item.deal_info.deal_badge, T.amber)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {hlPager(`${key}-pm`, promos.length)}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
           <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("competitors")}>
             View competitors <ChevronRight size={13} />
           </button>

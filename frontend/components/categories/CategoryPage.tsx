@@ -518,16 +518,6 @@ export const CategoryPage = () => {
     return snapshot.products.filter(product => eventAsins.has(product.asin)).length
   }, [snapshot, activeKpiFilter, movementEvents])
 
-  const kpiCounts = useMemo(() => {
-    const count = (type: EventType) => movementEvents.filter(e => e.event_type === type).length
-    return {
-      new_entrants: count("NEW_ENTRANT_TOP50"),
-      returning: count("RETURNING_TOP50"),
-      exits: count("EXIT_TOP50"),
-      enter_top10: count("ENTER_TOP10"),
-      exit_top10: count("EXIT_TOP10"),
-    }
-  }, [movementEvents])
 
   if (loading && trackers.length === 0) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading trackers...</div>
   if (!loading && trackers.length === 0 && error) return <div style={{ textAlign: "center", padding: 60, color: T.red }}>{error}</div>
@@ -636,11 +626,11 @@ export const CategoryPage = () => {
         <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
           {[
             { key: "ALL" as const, label: "Total ASINs", v: snapshot.summary.asin_count, color: T.text0, icon: <TrendingUp size={14} /> },
-            { key: "NEW_ENTRANTS" as const, label: "New Entrants", v: kpiCounts.new_entrants, color: T.green, icon: <Zap size={14} /> },
-            { key: "RETURNING" as const, label: "Returning", v: kpiCounts.returning, color: "#90EE90", icon: <RefreshCw size={14} /> },
-            { key: "EXITS" as const, label: "Exits", v: kpiCounts.exits, color: T.red, icon: <TrendingDown size={14} /> },
-            { key: "ENTER_TOP10" as const, label: "Enter Top 10", v: kpiCounts.enter_top10, color: T.amber, icon: <Star size={14} /> },
-            { key: "EXIT_TOP10" as const, label: "Exit Top 10", v: kpiCounts.exit_top10, color: T.red, icon: <TrendingDown size={14} /> },
+            { key: "NEW_ENTRANTS" as const, label: "New Entrants", v: snapshot.summary.new_entrant_count, color: T.green, icon: <Zap size={14} /> },
+            { key: "RETURNING" as const, label: "Returning", v: snapshot.summary.returning_count, color: "#90EE90", icon: <RefreshCw size={14} /> },
+            { key: "EXITS" as const, label: "Exits", v: snapshot.summary.exit_count, color: T.red, icon: <TrendingDown size={14} /> },
+            { key: "ENTER_TOP10" as const, label: "Enter Top 10", v: snapshot.summary.enter_top10_count, color: T.amber, icon: <Star size={14} /> },
+            { key: "EXIT_TOP10" as const, label: "Exit Top 10", v: snapshot.summary.exit_top10_count, color: T.red, icon: <TrendingDown size={14} /> },
           ].map(s => (
             <button key={s.label} type="button" className="card" onClick={() => setActiveKpiFilter(s.key)} style={{ flex: 1, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left", border: `1px solid ${activeKpiFilter === s.key ? s.color : T.border}`, background: activeKpiFilter === s.key ? `${s.color}10` : undefined }}>
               <div style={{ width: 30, height: 30, borderRadius: 7, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>{s.icon}</div>
@@ -923,7 +913,14 @@ export const CategoryPage = () => {
           </div>
         )}
 
-        {!loading && allVisibleRows.length === 0 && (
+        {!loading && !snapshot && (
+          <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 13 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+            <div style={{ fontWeight: 600, color: T.text2, marginBottom: 6 }}>No snapshot yet</div>
+            <div style={{ fontSize: 12 }}>This tracker hasn&apos;t run yet. Trigger a job or wait for the scheduled run.</div>
+          </div>
+        )}
+        {!loading && snapshot && allVisibleRows.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
         )}
       </div>
