@@ -45,6 +45,8 @@ export const EventsPage = () => {
   const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
   const [slackStatus, setSlackStatus] = useState<Map<string, "sending" | "done" | "error">>(new Map())
+  const [webhookUrl, setWebhookUrl] = useState("")
+  const [showWebhookInput, setShowWebhookInput] = useState(false)
 
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
@@ -98,7 +100,16 @@ export const EventsPage = () => {
     void loadEvents(1)
   }, [loadEvents])
 
+  useEffect(() => {
+    const stored = localStorage.getItem("slack_webhook_url")
+    if (stored) setWebhookUrl(stored)
+  }, [])
+
   const sendToSlack = useCallback(async (ev: Event) => {
+    if (!webhookUrl) {
+      alert("Please set Slack webhook URL first")
+      return
+    }
     const status = new Map(slackStatus)
     status.set(ev.event_code, "sending")
     setSlackStatus(status)
@@ -122,31 +133,63 @@ export const EventsPage = () => {
           },
         ],
       }
-      const res = await fetch("https://hooks.slack.com/services/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", {
+      await fetch(webhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        mode: "no-cors",
       })
-      if (res.ok) {
-        status.set(ev.event_code, "done")
-        setTimeout(() => {
-          const st = new Map(slackStatus)
-          st.delete(ev.event_code)
-          setSlackStatus(st)
-        }, 2000)
-      } else {
-        status.set(ev.event_code, "error")
-      }
+      status.set(ev.event_code, "done")
+      setTimeout(() => {
+        const st = new Map(slackStatus)
+        st.delete(ev.event_code)
+        setSlackStatus(st)
+      }, 2000)
     } catch {
       status.set(ev.event_code, "error")
-    } finally {
       setSlackStatus(status)
     }
-  }, [slackStatus])
+  }, [slackStatus, webhookUrl])
 
   return (
     <div className="anim-fade">
       <PageHeader title="Events" sub={`${total} events detected`} />
+
+      {/* Slack Webhook Setting */}
+      <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: showWebhookInput ? 8 : 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>🔗 Slack Webhook:</span>
+          <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>
+            {webhookUrl ? `${webhookUrl.slice(0, 40)}...` : "Not configured"}
+          </span>
+          <button
+            onClick={() => setShowWebhookInput(!showWebhookInput)}
+            style={{ marginLeft: "auto", padding: "4px 8px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg3, color: T.text2, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+          >
+            {showWebhookInput ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {showWebhookInput && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="text"
+              value={webhookUrl}
+              onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="https://hooks.slack.com/services/..."
+              style={{ flex: 1, padding: "6px 10px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg3, color: T.text0, fontSize: 11, fontFamily: T.mono, outline: "none" }}
+            />
+            <button
+              onClick={() => {
+                localStorage.setItem("slack_webhook_url", webhookUrl)
+                setShowWebhookInput(false)
+              }}
+              style={{ padding: "6px 12px", borderRadius: 4, border: `1px solid ${T.green}`, background: T.green, color: T.bg0, fontSize: 10, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
+            >
+              Save
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
