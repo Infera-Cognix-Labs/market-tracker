@@ -187,6 +187,10 @@ class DiffService:
                             "previous_image_url": cur_product.image_url if cur_product else None,
                             "previous_price_current": cur_product.price_current if cur_product else None,
                             "previous_price_original": cur_product.price_original if cur_product else None,
+                            "previous_rating_value": cur_product.rating_value if cur_product else None,
+                            "previous_review_count": cur_product.review_count if cur_product else None,
+                            "previous_availability_status": cur_product.availability_status if cur_product else None,
+                            "previous_buy_box_status": cur_product.buy_box_status if cur_product else None,
                         },
                     )
                 )
@@ -217,6 +221,8 @@ class DiffService:
                         "previous_rating_value": prev_product.rating_value if prev_product else None,
                         "previous_review_count": prev_product.review_count if prev_product else None,
                         "previous_product_url": prev_product.product_url if prev_product else None,
+                        "previous_availability_status": prev_product.availability_status if prev_product else None,
+                        "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
                     },
                 )
             )
@@ -238,6 +244,10 @@ class DiffService:
                             "previous_image_url": prev_product.image_url if prev_product else None,
                             "previous_price_current": prev_product.price_current if prev_product else None,
                             "previous_price_original": prev_product.price_original if prev_product else None,
+                            "previous_rating_value": prev_product.rating_value if prev_product else None,
+                            "previous_review_count": prev_product.review_count if prev_product else None,
+                            "previous_availability_status": prev_product.availability_status if prev_product else None,
+                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
                         },
                     )
                 )

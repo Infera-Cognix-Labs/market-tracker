@@ -116,25 +116,40 @@ const getEventImageUrl = (event: Event): string | null => {
 
 const eventToProduct = (event: Event): CategorySnapshotProduct => {
   const prev = event.payload.previous
-  const rank = event.payload.previous_rank ?? event.payload.current_rank ?? 0
+  const prevRank = event.payload.previous_rank ?? null
+  const curRank = event.payload.current_rank ?? null
+  const rank = prevRank ?? curRank ?? 0
   const currency = prev?.price_current != null ? (event.marketplace === "amazon_us" ? "USD" : event.marketplace === "amazon_uk" ? "GBP" : "EUR") : "USD"
+
+  let rankDelta: number | null = null
+  let rankTrend: CategorySnapshotProduct["rank_trend"] = null
+  if (prevRank != null && curRank != null) {
+    rankDelta = curRank - prevRank
+    if (rankDelta > 0) rankTrend = "DOWN"
+    else if (rankDelta < 0) rankTrend = "UP"
+    else rankTrend = "STABLE"
+  } else if (prevRank != null && curRank == null) {
+    rankTrend = "DOWN"
+    rankDelta = 0
+  }
+
   return {
     asin: event.asin,
     rank_position: rank,
-    previous_rank_position: null,
-    rank_delta: null,
-    rank_trend: null,
+    previous_rank_position: prevRank,
+    rank_delta: rankDelta,
+    rank_trend: rankTrend,
     title: prev?.title || event.title || "",
     brand: prev?.brand || "",
     product_url: prev?.price_current != null ? `https://www.${event.marketplace.replace("amazon_", "amazon.")}/dp/${event.asin}` : "",
     price_current: prev?.price_current ?? 0,
     price_original: prev?.price_original ?? null,
     currency,
-    rating_value: 0,
-    review_count: 0,
+    rating_value: prev?.rating_value ?? 0,
+    review_count: prev?.review_count ?? 0,
     image_url: prev?.main_image_url || "",
-    availability_status: "UNKNOWN" as const,
-    buy_box_status: "UNKNOWN" as const,
+    availability_status: prev?.availability_status ?? "UNKNOWN",
+    buy_box_status: prev?.buy_box_status ?? "UNKNOWN",
   }
 }
 

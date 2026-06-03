@@ -459,6 +459,8 @@ export interface EventChangeState {
   title?: string
   brand?: string
   main_image_url?: string
+  rating_value?: number | null
+  review_count?: number | null
   variation_count?: number
   content_signature_hash?: string
   a_plus_signature_hash?: string
