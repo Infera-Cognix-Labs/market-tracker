@@ -7,7 +7,7 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents } from "../shared/api"
+import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents, ApiError } from "../shared/api"
 import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus, DealInfo } from "../shared/types"
 
 const MARKETPLACES = [
@@ -356,8 +356,18 @@ const CreateTrackerModal = ({
     try {
       const tracker = await apiCreateCompetitorTracker(payload)
       onCreate(tracker)
-    } catch {
-      setError("Failed to create tracker. Please try again.")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setError("A tracker for this marketplace and ASINs already exists.")
+        } else if (err.status === 400 && err.details?.reason) {
+          setError(err.details.reason)
+        } else {
+          setError(err.message || "Failed to create tracker. Please try again.")
+        }
+      } else {
+        setError("Failed to create tracker. Please try again.")
+      }
       setSubmitting(false)
     }
   }

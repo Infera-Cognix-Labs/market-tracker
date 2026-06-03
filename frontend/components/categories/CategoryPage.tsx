@@ -5,7 +5,7 @@ import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, P
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents } from "../shared/api"
+import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents, ApiError } from "../shared/api"
 import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
 
 type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
@@ -190,8 +190,18 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
     try {
       const tracker = await apiCreateCategoryTracker(payload)
       onCreate(tracker)
-    } catch {
-      setError("Failed to create tracker. Please try again.")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setError("A tracker for this marketplace and node already exists.")
+        } else if (err.status === 400 && err.details?.reason) {
+          setError(err.details.reason)
+        } else {
+          setError(err.message || "Failed to create tracker. Please try again.")
+        }
+      } else {
+        setError("Failed to create tracker. Please try again.")
+      }
       setSubmitting(false)
     }
   }
