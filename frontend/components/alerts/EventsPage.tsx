@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Filter } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, Send } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
@@ -44,6 +44,7 @@ export const EventsPage = () => {
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
+  const [slackStatus, setSlackStatus] = useState<Map<string, "sending" | "done" | "error">>(new Map())
 
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
@@ -96,6 +97,52 @@ export const EventsPage = () => {
   useEffect(() => {
     void loadEvents(1)
   }, [loadEvents])
+
+  const sendToSlack = useCallback(async (ev: Event) => {
+    const status = new Map(slackStatus)
+    status.set(ev.event_code, "sending")
+    setSlackStatus(status)
+    try {
+      const color = ev.severity === "HIGH" ? "danger" : ev.severity === "MEDIUM" ? "warning" : "#36a64f"
+      const payload = {
+        text: `🔔 Event: ${ev.title}`,
+        attachments: [
+          {
+            color,
+            fields: [
+              { title: "Type", value: ev.event_type, short: true },
+              { title: "Severity", value: ev.severity, short: true },
+              { title: "ASIN", value: ev.asin, short: true },
+              { title: "Tracker", value: `${ev.tracker_code} (${ev.tracker_type})`, short: true },
+              { title: "Product", value: ev.title, short: false },
+              { title: "Summary", value: ev.summary || "N/A", short: false },
+              { title: "Time", value: new Date(ev.event_time).toLocaleString(), short: true },
+              { title: "Marketplace", value: ev.marketplace, short: true },
+            ],
+          },
+        ],
+      }
+      const res = await fetch("https://hooks.slack.com/services/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", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        status.set(ev.event_code, "done")
+        setTimeout(() => {
+          const st = new Map(slackStatus)
+          st.delete(ev.event_code)
+          setSlackStatus(st)
+        }, 2000)
+      } else {
+        status.set(ev.event_code, "error")
+      }
+    } catch {
+      status.set(ev.event_code, "error")
+    } finally {
+      setSlackStatus(status)
+    }
+  }, [slackStatus])
 
   return (
     <div className="anim-fade">
@@ -184,20 +231,32 @@ export const EventsPage = () => {
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
                   <Badge type={meta.badgeType} text={meta.label} />
                   <Badge type={ev.severity === "HIGH" ? "exit" : ev.severity === "MEDIUM" ? "top10" : "info"} text={ev.severity} />
                   <span style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
                     {ev.tracker_type}
                   </span>
+                  {slackStatus.has(ev.event_code) && (
+                    <span style={{ fontSize: 9, fontFamily: T.mono, color: slackStatus.get(ev.event_code) === "done" ? T.green : slackStatus.get(ev.event_code) === "error" ? T.red : T.amber, padding: "1px 5px", background: T.bg5, borderRadius: 3 }}>
+                      {slackStatus.get(ev.event_code) === "done" ? "Sent ✓" : slackStatus.get(ev.event_code) === "error" ? "Failed ✗" : "Sending..."}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: T.text0, fontWeight: 500 }}>{ev.title}</div>
                 <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>{ev.summary}</div>
               </div>
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>{new Date(ev.event_time).toLocaleString()}</div>
-                <div style={{ fontSize: 10, fontFamily: T.mono, color: T.amber, marginTop: 2 }}>{ev.asin}</div>
-                <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
+              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>{new Date(ev.event_time).toLocaleString()}</div>
+                  <div style={{ fontSize: 10, fontFamily: T.mono, color: T.amber, marginTop: 2 }}>{ev.asin}</div>
+                  <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
+                </div>
+                <button onClick={() => void sendToSlack(ev)} disabled={slackStatus.get(ev.event_code) === "sending"}
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 4, border: `1px solid ${slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.border}`, background: slackStatus.get(ev.event_code) === "error" ? T.bg5 : slackStatus.get(ev.event_code) === "done" ? T.bg5 : T.bg3, color: slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.text3, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .2s" }}>
+                  <Send size={10} />
+                  {slackStatus.get(ev.event_code) === "sending" ? "..." : slackStatus.get(ev.event_code) === "done" ? "✓" : slackStatus.get(ev.event_code) === "error" ? "✗" : "Slack"}
+                </button>
               </div>
             </div>
           )
