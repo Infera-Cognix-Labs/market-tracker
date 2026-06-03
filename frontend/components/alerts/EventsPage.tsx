@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Filter } from "lucide-react"
+import { ChevronLeft, ChevronRight, Filter, Send } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
@@ -18,6 +18,20 @@ const EVENT_TYPES: EventType[] = [
 ]
 const SEVERITIES: Severity[] = ["HIGH", "MEDIUM", "LOW"]
 
+type DatePreset = "all" | "today" | "7d" | "30d" | "custom"
+
+const toISODate = (d: Date) => d.toISOString().slice(0, 10)
+
+const presetRange = (preset: DatePreset): { from: string; to: string } | null => {
+  if (preset === "all" || preset === "custom") return null
+  const now = new Date()
+  const to = toISODate(now)
+  if (preset === "today") return { from: to, to }
+  const from = new Date(now)
+  from.setDate(from.getDate() - (preset === "7d" ? 7 : 30))
+  return { from: toISODate(from), to }
+}
+
 export const EventsPage = () => {
   const [events, setEvents] = useState<Event[]>([])
   const [total, setTotal] = useState(0)
@@ -26,15 +40,33 @@ export const EventsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<EventType | "">("")
   const [filterSeverity, setFilterSeverity] = useState<Severity | "">("")
+  const [datePreset, setDatePreset] = useState<DatePreset>("all")
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
+  const [slackStatus, setSlackStatus] = useState<Map<string, "sending" | "done" | "error">>(new Map())
+  const [webhookUrl, setWebhookUrl] = useState("")
+  const [showWebhookInput, setShowWebhookInput] = useState(false)
 
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
     try {
+      let fromDate: string | undefined
+      let toDate: string | undefined
+      if (datePreset === "custom") {
+        fromDate = customFrom || undefined
+        toDate = customTo || undefined
+      } else {
+        const range = presetRange(datePreset)
+        fromDate = range?.from
+        toDate = range?.to
+      }
       const res = await apiListEvents({
         event_type: filterType || undefined,
         severity: filterSeverity || undefined,
+        from_date: fromDate,
+        to_date: toDate,
         page: p,
         page_size: 20,
       })
@@ -62,15 +94,102 @@ export const EventsPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [filterType, filterSeverity])
+  }, [filterType, filterSeverity, datePreset, customFrom, customTo])
 
   useEffect(() => {
     void loadEvents(1)
   }, [loadEvents])
 
+  useEffect(() => {
+    const stored = localStorage.getItem("slack_webhook_url")
+    if (stored) setWebhookUrl(stored)
+  }, [])
+
+  const sendToSlack = useCallback(async (ev: Event) => {
+    if (!webhookUrl) {
+      alert("Please set Slack webhook URL first")
+      return
+    }
+    const status = new Map(slackStatus)
+    status.set(ev.event_code, "sending")
+    setSlackStatus(status)
+    try {
+      const color = ev.severity === "HIGH" ? "danger" : ev.severity === "MEDIUM" ? "warning" : "#36a64f"
+      const payload = {
+        text: `🔔 Event: ${ev.title}`,
+        attachments: [
+          {
+            color,
+            fields: [
+              { title: "Type", value: ev.event_type, short: true },
+              { title: "Severity", value: ev.severity, short: true },
+              { title: "ASIN", value: ev.asin, short: true },
+              { title: "Tracker", value: `${ev.tracker_code} (${ev.tracker_type})`, short: true },
+              { title: "Product", value: ev.title, short: false },
+              { title: "Summary", value: ev.summary || "N/A", short: false },
+              { title: "Time", value: new Date(ev.event_time).toLocaleString(), short: true },
+              { title: "Marketplace", value: ev.marketplace, short: true },
+            ],
+          },
+        ],
+      }
+      await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        mode: "no-cors",
+      })
+      status.set(ev.event_code, "done")
+      setTimeout(() => {
+        const st = new Map(slackStatus)
+        st.delete(ev.event_code)
+        setSlackStatus(st)
+      }, 2000)
+    } catch {
+      status.set(ev.event_code, "error")
+      setSlackStatus(status)
+    }
+  }, [slackStatus, webhookUrl])
+
   return (
     <div className="anim-fade">
       <PageHeader title="Events" sub={`${total} events detected`} />
+
+      {/* Slack Webhook Setting */}
+      <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: showWebhookInput ? 8 : 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>🔗 Slack Webhook:</span>
+          <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>
+            {webhookUrl ? `${webhookUrl.slice(0, 40)}...` : "Not configured"}
+          </span>
+          <button
+            onClick={() => setShowWebhookInput(!showWebhookInput)}
+            style={{ marginLeft: "auto", padding: "4px 8px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg3, color: T.text2, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+          >
+            {showWebhookInput ? "Cancel" : "Edit"}
+          </button>
+        </div>
+        {showWebhookInput && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="text"
+              value={webhookUrl}
+              onChange={e => setWebhookUrl(e.target.value)}
+              placeholder="https://hooks.slack.com/services/..."
+              style={{ flex: 1, padding: "6px 10px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg3, color: T.text0, fontSize: 11, fontFamily: T.mono, outline: "none" }}
+            />
+            <button
+              onClick={() => {
+                localStorage.setItem("slack_webhook_url", webhookUrl)
+                setShowWebhookInput(false)
+              }}
+              style={{ padding: "6px 12px", borderRadius: 4, border: `1px solid ${T.green}`, background: T.green, color: T.bg0, fontSize: 10, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
+            >
+              Save
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -88,6 +207,27 @@ export const EventsPage = () => {
               </button>
             )
           })}
+        </div>
+
+        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
+
+        {/* Date range filter */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {(["all", "today", "7d", "30d", "custom"] as DatePreset[]).map(p => (
+            <button key={p} onClick={() => setDatePreset(p)}
+              style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${datePreset === p ? T.blue : T.border}`, background: datePreset === p ? T.bg4 : T.bg2, color: datePreset === p ? T.blue : T.text2, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+              {p === "all" ? "All time" : p === "today" ? "Today" : p === "7d" ? "Last 7d" : p === "30d" ? "Last 30d" : "Custom"}
+            </button>
+          ))}
+          {datePreset === "custom" && (
+            <>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
+              <span style={{ color: T.text3, fontSize: 11 }}>→</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
+            </>
+          )}
         </div>
 
         <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
@@ -134,20 +274,32 @@ export const EventsPage = () => {
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
                   <Badge type={meta.badgeType} text={meta.label} />
                   <Badge type={ev.severity === "HIGH" ? "exit" : ev.severity === "MEDIUM" ? "top10" : "info"} text={ev.severity} />
                   <span style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
                     {ev.tracker_type}
                   </span>
+                  {slackStatus.has(ev.event_code) && (
+                    <span style={{ fontSize: 9, fontFamily: T.mono, color: slackStatus.get(ev.event_code) === "done" ? T.green : slackStatus.get(ev.event_code) === "error" ? T.red : T.amber, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
+                      {slackStatus.get(ev.event_code) === "done" ? "Sent ✓" : slackStatus.get(ev.event_code) === "error" ? "Failed ✗" : "Sending..."}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: T.text0, fontWeight: 500 }}>{ev.title}</div>
                 <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>{ev.summary}</div>
               </div>
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>{new Date(ev.event_time).toLocaleString()}</div>
-                <div style={{ fontSize: 10, fontFamily: T.mono, color: T.amber, marginTop: 2 }}>{ev.asin}</div>
-                <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
+              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>{new Date(ev.event_time).toLocaleString()}</div>
+                  <div style={{ fontSize: 10, fontFamily: T.mono, color: T.amber, marginTop: 2 }}>{ev.asin}</div>
+                  <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
+                </div>
+                <button onClick={() => void sendToSlack(ev)} disabled={slackStatus.get(ev.event_code) === "sending"}
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 4, border: `1px solid ${slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.border}`, background: slackStatus.get(ev.event_code) === "error" ? T.bg4 : slackStatus.get(ev.event_code) === "done" ? T.bg4 : T.bg3, color: slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.text3, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .2s" }}>
+                  <Send size={10} />
+                  {slackStatus.get(ev.event_code) === "sending" ? "..." : slackStatus.get(ev.event_code) === "done" ? "✓" : slackStatus.get(ev.event_code) === "error" ? "✗" : "Slack"}
+                </button>
               </div>
             </div>
           )
