@@ -30,8 +30,18 @@ def test_diff_service_generates_category_and_product_candidates(run_async, monke
     previous_category_snapshot = SimpleNamespace(
         snapshot_date=date(2026, 4, 7),
         products=[
-            SimpleNamespace(asin="B0AAA11111", rank_position=14),
-            SimpleNamespace(asin="B0CCC33333", rank_position=47),
+            SimpleNamespace(
+                asin="B0AAA11111", rank_position=14,
+                title="Old Product Title", brand="BrandA", image_url="https://example.com/old.jpg",
+                price_current=34.99, price_original=44.99, currency="USD",
+                rating_value=4.5, review_count=100, product_url="https://amazon.com/dp/B0AAA11111",
+            ),
+            SimpleNamespace(
+                asin="B0CCC33333", rank_position=47,
+                title="Exited Product", brand="BrandC", image_url="https://example.com/exited.jpg",
+                price_current=19.99, price_original=None, currency="USD",
+                rating_value=3.8, review_count=50, product_url="https://amazon.com/dp/B0CCC33333",
+            ),
         ],
     )
 
@@ -131,9 +141,24 @@ def test_diff_service_dedupes_duplicate_products_in_category_snapshots(
     previous_category_snapshot = SimpleNamespace(
         snapshot_date=date(2026, 4, 7),
         products=[
-            SimpleNamespace(asin="B0AAA11111", rank_position=14),
-            SimpleNamespace(asin="B0AAA11111", rank_position=21),
-            SimpleNamespace(asin="B0CCC33333", rank_position=47),
+            SimpleNamespace(
+                asin="B0AAA11111", rank_position=14,
+                title="Old Product Title", brand="BrandA", image_url="https://example.com/old.jpg",
+                price_current=34.99, price_original=44.99, currency="USD",
+                rating_value=4.5, review_count=100, product_url="https://amazon.com/dp/B0AAA11111",
+            ),
+            SimpleNamespace(
+                asin="B0AAA11111", rank_position=21,
+                title="Old Product Title 2", brand="BrandA", image_url="https://example.com/old2.jpg",
+                price_current=34.99, price_original=44.99, currency="USD",
+                rating_value=4.5, review_count=100, product_url="https://amazon.com/dp/B0AAA11111",
+            ),
+            SimpleNamespace(
+                asin="B0CCC33333", rank_position=47,
+                title="Exited Product", brand="BrandC", image_url="https://example.com/exited.jpg",
+                price_current=19.99, price_original=None, currency="USD",
+                rating_value=3.8, review_count=50, product_url="https://amazon.com/dp/B0CCC33333",
+            ),
         ],
     )
 

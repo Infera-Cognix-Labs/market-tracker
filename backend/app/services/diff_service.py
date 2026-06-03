@@ -87,11 +87,17 @@ class DiffService:
         current_rank_map = {
             product.asin: product.rank_position for product in current_products
         }
+        current_product_map = {
+            product.asin: product for product in current_products
+        }
         previous_rank_map = (
             {product.asin: product.rank_position for product in previous_products}
             if previous_snapshot is not None
             else {}
         )
+        previous_product_map = {
+            product.asin: product for product in previous_products
+        }
 
         # Keep the most recent observed date for each ASIN in historical snapshots.
         historical_last_seen: dict[str, date] = {}
@@ -163,6 +169,7 @@ class DiffService:
                     )
                 )
             if previous_rank is not None and previous_rank <= 10 and current_rank > 10:
+                cur_product = current_product_map.get(asin)
                 candidates.append(
                     DiffCandidate(
                         tracker_type=TrackerType.CATEGORY,
@@ -175,6 +182,11 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": current_rank,
+                            "previous_title": cur_product.title if cur_product else None,
+                            "previous_brand": cur_product.brand if cur_product else None,
+                            "previous_image_url": cur_product.image_url if cur_product else None,
+                            "previous_price_current": cur_product.price_current if cur_product else None,
+                            "previous_price_original": cur_product.price_original if cur_product else None,
                         },
                     )
                 )
@@ -183,6 +195,7 @@ class DiffService:
             if asin in current_rank_map:
                 continue
 
+            prev_product = previous_product_map.get(asin)
             candidates.append(
                 DiffCandidate(
                     tracker_type=TrackerType.CATEGORY,
@@ -195,6 +208,15 @@ class DiffService:
                     metadata={
                         "previous_rank": previous_rank,
                         "present_today": False,
+                        "previous_title": prev_product.title if prev_product else None,
+                        "previous_brand": prev_product.brand if prev_product else None,
+                        "previous_image_url": prev_product.image_url if prev_product else None,
+                        "previous_price_current": prev_product.price_current if prev_product else None,
+                        "previous_price_original": prev_product.price_original if prev_product else None,
+                        "previous_currency": prev_product.currency if prev_product else None,
+                        "previous_rating_value": prev_product.rating_value if prev_product else None,
+                        "previous_review_count": prev_product.review_count if prev_product else None,
+                        "previous_product_url": prev_product.product_url if prev_product else None,
                     },
                 )
             )
@@ -211,6 +233,11 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": None,
+                            "previous_title": prev_product.title if prev_product else None,
+                            "previous_brand": prev_product.brand if prev_product else None,
+                            "previous_image_url": prev_product.image_url if prev_product else None,
+                            "previous_price_current": prev_product.price_current if prev_product else None,
+                            "previous_price_original": prev_product.price_original if prev_product else None,
                         },
                     )
                 )

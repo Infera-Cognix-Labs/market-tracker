@@ -194,12 +194,32 @@ class EventEngine:
             return EventPayload(
                 previous_rank=metadata.get("previous_rank"),
                 present_today=False,
+                previous=EventChangeState(
+                    title=metadata.get("previous_title"),
+                    brand=metadata.get("previous_brand"),
+                    main_image_url=metadata.get("previous_image_url"),
+                    price_current=metadata.get("previous_price_current"),
+                    price_original=metadata.get("previous_price_original"),
+                ),
             )
 
-        if event_type in {EventType.ENTER_TOP10, EventType.EXIT_TOP10}:
+        if event_type == EventType.ENTER_TOP10:
             return EventPayload(
                 previous_rank=metadata.get("previous_rank"),
                 current_rank=metadata.get("current_rank"),
+            )
+
+        if event_type == EventType.EXIT_TOP10:
+            return EventPayload(
+                previous_rank=metadata.get("previous_rank"),
+                current_rank=metadata.get("current_rank"),
+                previous=EventChangeState(
+                    title=metadata.get("previous_title"),
+                    brand=metadata.get("previous_brand"),
+                    main_image_url=metadata.get("previous_image_url"),
+                    price_current=metadata.get("previous_price_current"),
+                    price_original=metadata.get("previous_price_original"),
+                ),
             )
 
         if event_type == EventType.PRICE_CHANGED:

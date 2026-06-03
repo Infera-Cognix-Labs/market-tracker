@@ -430,3 +430,116 @@ def _coerce_datetime(value: object | None) -> datetime | None:
 
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def normalize_junglee_item(
+    payload: dict[str, object],
+    marketplace: str,
+) -> NormalizedProductRecord | None:
+    asin = _coerce_asin(_pick(payload, "asin", "originalAsin"))
+    if asin is None:
+        return None
+
+    title = _coerce_string(_pick(payload, "title")) or asin
+    brand = _coerce_string(_pick(payload, "brand")) or "Unknown"
+    product_url = (
+        _coerce_string(_pick(payload, "url"))
+        or f"https://www.amazon.com/dp/{asin}"
+    )
+    main_image_url = _pick_junglee_image_url(payload)
+
+    price_current = _extract_nested_price(payload, "price")
+    price_original = _extract_nested_price(payload, "listPrice")
+    currency = _coerce_currency(
+        _pick_nested(payload, "price", "currency")
+        or _pick_nested(payload, "listPrice", "currency")
+    )
+
+    rating_value = _coerce_float(_pick(payload, "stars", "rating", "rating_value"))
+    review_count = _coerce_int(
+        _pick(payload, "reviewsCount", "review_count", "n_reviews")
+    )
+
+    bsr_position = _extract_rank_from_payload(payload)
+
+    availability_status = _normalize_availability_status(payload)
+
+    buy_box_seller_name = _coerce_string(
+        _pick_nested(payload, "seller", "name")
+        or _pick(payload, "seller_name", "soldBy", "buy_box_seller_name")
+    )
+    buy_box_status = _normalize_buy_box_status(payload, buy_box_seller_name)
+
+    variation_count = _coerce_int(
+        _pick(payload, "variation_count", "variationCount")
+    )
+    if variation_count is None:
+        variation_count = _extract_variation_count(payload)
+
+    captured_at = (
+        _coerce_datetime(_pick(payload, "scrapedAt", "captured_at")) or utc_now()
+    )
+    deal_info = _extract_deal_info(payload, captured_at)
+
+    return NormalizedProductRecord(
+        marketplace=marketplace,
+        asin=asin,
+        rank_position=bsr_position,
+        captured_at=captured_at,
+        brand=brand,
+        title=title,
+        product_url=product_url,
+        main_image_url=main_image_url,
+        title_hash=_digest(title),
+        main_image_hash=_digest(main_image_url),
+        bsr_position=bsr_position,
+        price_current=price_current,
+        price_original=price_original,
+        currency=currency,
+        coupon_text=_coerce_string(_pick(payload, "coupon_text", "coupon")),
+        availability_status=availability_status,
+        buy_box_status=buy_box_status,
+        buy_box_seller_name=buy_box_seller_name,
+        rating_value=rating_value,
+        review_count=review_count,
+        variation_count=variation_count,
+        deal_info=deal_info,
+        source_batch_no=0,
+        source_item_index=0,
+    )
+
+
+def _extract_nested_price(payload: dict, key: str) -> float | None:
+    nested = payload.get(key)
+    if isinstance(nested, dict):
+        return _coerce_float(nested.get("value"))
+    return _coerce_float(payload.get(key))
+
+
+def _pick_nested(payload: dict, outer_key: str, inner_key: str) -> object | None:
+    outer = payload.get(outer_key)
+    if isinstance(outer, dict):
+        return outer.get(inner_key)
+    return None
+
+
+def _pick_junglee_image_url(payload: dict) -> str:
+    thumbnail = _coerce_string(payload.get("thumbnailImage"))
+    if thumbnail:
+        return thumbnail
+    gallery = payload.get("galleryThumbnails")
+    if isinstance(gallery, list) and gallery:
+        for item in gallery:
+            url = _coerce_string(item)
+            if url:
+                return url
+    hires = payload.get("highResolutionImages")
+    if isinstance(hires, list) and hires:
+        for item in hires:
+            url = _coerce_string(item)
+            if url:
+                return url
+    asin = _coerce_asin(_pick(payload, "asin"))
+    if asin:
+        return f"https://www.amazon.com/dp/{asin}"
+    return "https://www.amazon.com"
