@@ -238,7 +238,7 @@ export const EventsPage = () => {
                     {ev.tracker_type}
                   </span>
                   {slackStatus.has(ev.event_code) && (
-                    <span style={{ fontSize: 9, fontFamily: T.mono, color: slackStatus.get(ev.event_code) === "done" ? T.green : slackStatus.get(ev.event_code) === "error" ? T.red : T.amber, padding: "1px 5px", background: T.bg5, borderRadius: 3 }}>
+                    <span style={{ fontSize: 9, fontFamily: T.mono, color: slackStatus.get(ev.event_code) === "done" ? T.green : slackStatus.get(ev.event_code) === "error" ? T.red : T.amber, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
                       {slackStatus.get(ev.event_code) === "done" ? "Sent ✓" : slackStatus.get(ev.event_code) === "error" ? "Failed ✗" : "Sending..."}
                     </span>
                   )}
@@ -253,7 +253,7 @@ export const EventsPage = () => {
                   <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
                 </div>
                 <button onClick={() => void sendToSlack(ev)} disabled={slackStatus.get(ev.event_code) === "sending"}
-                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 4, border: `1px solid ${slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.border}`, background: slackStatus.get(ev.event_code) === "error" ? T.bg5 : slackStatus.get(ev.event_code) === "done" ? T.bg5 : T.bg3, color: slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.text3, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .2s" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 4, border: `1px solid ${slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.border}`, background: slackStatus.get(ev.event_code) === "error" ? T.bg4 : slackStatus.get(ev.event_code) === "done" ? T.bg4 : T.bg3, color: slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.text3, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .2s" }}>
                   <Send size={10} />
                   {slackStatus.get(ev.event_code) === "sending" ? "..." : slackStatus.get(ev.event_code) === "done" ? "✓" : slackStatus.get(ev.event_code) === "error" ? "✗" : "Slack"}
                 </button>
