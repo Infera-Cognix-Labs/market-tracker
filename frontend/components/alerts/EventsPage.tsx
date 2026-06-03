@@ -18,6 +18,20 @@ const EVENT_TYPES: EventType[] = [
 ]
 const SEVERITIES: Severity[] = ["HIGH", "MEDIUM", "LOW"]
 
+type DatePreset = "all" | "today" | "7d" | "30d" | "custom"
+
+const toISODate = (d: Date) => d.toISOString().slice(0, 10)
+
+const presetRange = (preset: DatePreset): { from: string; to: string } | null => {
+  if (preset === "all" || preset === "custom") return null
+  const now = new Date()
+  const to = toISODate(now)
+  if (preset === "today") return { from: to, to }
+  const from = new Date(now)
+  from.setDate(from.getDate() - (preset === "7d" ? 7 : 30))
+  return { from: toISODate(from), to }
+}
+
 export const EventsPage = () => {
   const [events, setEvents] = useState<Event[]>([])
   const [total, setTotal] = useState(0)
@@ -26,15 +40,30 @@ export const EventsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<EventType | "">("")
   const [filterSeverity, setFilterSeverity] = useState<Severity | "">("")
+  const [datePreset, setDatePreset] = useState<DatePreset>("all")
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
 
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
     try {
+      let fromDate: string | undefined
+      let toDate: string | undefined
+      if (datePreset === "custom") {
+        fromDate = customFrom || undefined
+        toDate = customTo || undefined
+      } else {
+        const range = presetRange(datePreset)
+        fromDate = range?.from
+        toDate = range?.to
+      }
       const res = await apiListEvents({
         event_type: filterType || undefined,
         severity: filterSeverity || undefined,
+        from_date: fromDate,
+        to_date: toDate,
         page: p,
         page_size: 20,
       })
@@ -62,7 +91,7 @@ export const EventsPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [filterType, filterSeverity])
+  }, [filterType, filterSeverity, datePreset, customFrom, customTo])
 
   useEffect(() => {
     void loadEvents(1)
@@ -88,6 +117,27 @@ export const EventsPage = () => {
               </button>
             )
           })}
+        </div>
+
+        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
+
+        {/* Date range filter */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {(["all", "today", "7d", "30d", "custom"] as DatePreset[]).map(p => (
+            <button key={p} onClick={() => setDatePreset(p)}
+              style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${datePreset === p ? T.blue : T.border}`, background: datePreset === p ? T.bg4 : T.bg2, color: datePreset === p ? T.blue : T.text2, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+              {p === "all" ? "All time" : p === "today" ? "Today" : p === "7d" ? "Last 7d" : p === "30d" ? "Last 30d" : "Custom"}
+            </button>
+          ))}
+          {datePreset === "custom" && (
+            <>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
+              <span style={{ color: T.text3, fontSize: 11 }}>→</span>
+              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
+            </>
+          )}
         </div>
 
         <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
