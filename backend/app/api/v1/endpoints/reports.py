@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from typing import Annotated
 
@@ -44,11 +45,11 @@ async def download_weekly_digest(
     digest = await store.get_weekly_digest(workspace_id, digest_code)
 
     if format == "pdf":
-        content = ReportPDFGenerator(digest).generate()
+        content = await asyncio.to_thread(ReportPDFGenerator(digest).generate)
         media_type = "application/pdf"
         filename = f"weekly_digest_{digest_code}.pdf"
     else:
-        content = ReportExcelGenerator(digest).generate()
+        content = await asyncio.to_thread(ReportExcelGenerator(digest).generate)
         media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         filename = f"weekly_digest_{digest_code}.xlsx"
 

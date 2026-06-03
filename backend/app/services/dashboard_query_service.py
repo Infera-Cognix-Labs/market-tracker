@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+import time
+from datetime import date, timedelta
 
 from app.core.errors import BadRequestError, NotFoundError
+from app.core.logging import get_logger
 from app.core.utils import paginate
 from app.models.api import (
     DashboardOverview,
@@ -33,24 +35,30 @@ from app.services.shared import (
     event_doc_to_model,
     product_doc_to_model,
     sort_events,
-    within_range,
 )
+
+_logger = get_logger("app.services.dashboard_query")
 
 
 class DashboardQueryService:
     async def get_dashboard_overview(
         self, workspace_id: str, timeframe: Timeframe
     ) -> DashboardOverview:
+        t0 = time.monotonic()
         category_docs = await CategoryTrackerDocument.find(
             CategoryTrackerDocument.workspace_id == workspace_id
         ).to_list()
         competitor_docs = await CompetitorTrackerDocument.find(
             CompetitorTrackerDocument.workspace_id == workspace_id
         ).to_list()
+        cutoff_date = date.today() - timedelta(days=30)
         event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id
+            EventDocument.workspace_id == workspace_id,
+            EventDocument.snapshot_date >= cutoff_date,
         ).to_list()
-        return build_dashboard_overview(
+        t_db = (time.monotonic() - t0) * 1000
+        t1 = time.monotonic()
+        result = build_dashboard_overview(
             timeframe=timeframe,
             category_trackers=[category_doc_to_model(doc) for doc in category_docs],
             competitor_trackers=[
@@ -58,6 +66,21 @@ class DashboardQueryService:
             ],
             events=[event_doc_to_model(doc) for doc in event_docs],
         )
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "get_dashboard_overview timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "category_count": len(category_docs),
+                    "competitor_count": len(competitor_docs),
+                    "event_count": len(event_docs),
+                }
+            },
+        )
+        return result
 
     async def get_product_detail(
         self, workspace_id: str, marketplace: str, asin: str
@@ -84,6 +107,7 @@ class DashboardQueryService:
         if from_date and to_date and from_date > to_date:
             raise BadRequestError("from_date must be less than or equal to to_date.")
 
+        t0 = time.monotonic()
         snapshot_documents = await ProductSnapshotDocument.find(
             ProductSnapshotDocument.workspace_id == workspace_id,
             ProductSnapshotDocument.marketplace == marketplace,
@@ -94,7 +118,9 @@ class DashboardQueryService:
             EventDocument.marketplace == marketplace,
             EventDocument.asin == asin,
         ).to_list()
+        t_db = (time.monotonic() - t0) * 1000
 
+        t1 = time.monotonic()
         if tracker_code is not None:
             snapshot_documents = [
                 document
@@ -109,7 +135,7 @@ class DashboardQueryService:
                 if document.tracker_code == tracker_code
             ]
 
-        return build_product_timeline_response(
+        result = build_product_timeline_response(
             marketplace=marketplace,
             asin=asin,
             snapshot_documents=snapshot_documents,
@@ -118,6 +144,22 @@ class DashboardQueryService:
             to_date=to_date,
             granularity=granularity,
         )
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "get_product_timeline timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "marketplace": marketplace,
+                    "asin": asin,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "snapshot_count": len(snapshot_documents),
+                    "event_count": len(event_documents),
+                }
+            },
+        )
+        return result
 
     async def list_events(
         self,
@@ -136,22 +178,43 @@ class DashboardQueryService:
         if from_date and to_date and from_date > to_date:
             raise BadRequestError("from_date must be less than or equal to to_date.")
 
-        items = sort_events(
-            [
-                event_doc_to_model(document)
-                for document in await EventDocument.find(
-                    EventDocument.workspace_id == workspace_id
-                ).to_list()
-                if within_range(document.snapshot_date, from_date, to_date)
-                and (tracker_type is None or document.tracker_type == tracker_type)
-                and (tracker_code is None or document.tracker_code == tracker_code)
-                and (marketplace is None or document.marketplace == marketplace)
-                and (asin is None or document.asin == asin)
-                and (event_type is None or document.event_type == event_type)
-                and (severity is None or document.severity == severity)
-            ]
-        )
+        t0 = time.monotonic()
+        query_filters = [EventDocument.workspace_id == workspace_id]
+        if from_date is not None:
+            query_filters.append(EventDocument.snapshot_date >= from_date)
+        if to_date is not None:
+            query_filters.append(EventDocument.snapshot_date <= to_date)
+        if tracker_type is not None:
+            query_filters.append(EventDocument.tracker_type == tracker_type.value)
+        if tracker_code is not None:
+            query_filters.append(EventDocument.tracker_code == tracker_code)
+        if marketplace is not None:
+            query_filters.append(EventDocument.marketplace == marketplace)
+        if asin is not None:
+            query_filters.append(EventDocument.asin == asin)
+        if event_type is not None:
+            query_filters.append(EventDocument.event_type == event_type.value)
+        if severity is not None:
+            query_filters.append(EventDocument.severity == severity.value)
+
+        all_docs = await EventDocument.find(*query_filters).to_list()
+        t_db = (time.monotonic() - t0) * 1000
+        t1 = time.monotonic()
+        items = sort_events([event_doc_to_model(doc) for doc in all_docs])
         paged_items, total = paginate(items, page, page_size)
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "list_events timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "total_docs": len(all_docs),
+                    "filtered_count": len(items),
+                }
+            },
+        )
         return EventListResponse(
             items=paged_items,
             page=page,

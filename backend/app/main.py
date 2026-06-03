@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -10,9 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.config.config import Config, get_settings
 from app.core.errors import AppError, app_error_handler, validation_error_handler
-from app.core.logging import configure_logging
+from app.core.logging import configure_logging, get_logger
 from app.seed import load_demo_seed
 from app.store import build_store
+
+_request_logger = get_logger("app.request")
 
 
 def create_app(settings: Config | None = None) -> FastAPI:
@@ -48,7 +51,22 @@ def create_app(settings: Config | None = None) -> FastAPI:
     @app.middleware("http")
     async def attach_request_id(request: Request, call_next):
         request.state.request_id = f"req_{uuid4().hex[:10]}"
-        return await call_next(request)
+        start = time.monotonic()
+        response = await call_next(request)
+        duration_ms = (time.monotonic() - start) * 1000
+        _request_logger.info(
+            "Request completed.",
+            extra={
+                "context": {
+                    "request_id": request.state.request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration_ms, 2),
+                }
+            },
+        )
+        return response
 
     @app.get("/health")
     async def healthcheck() -> dict[str, str]:

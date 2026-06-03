@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
+import time
+from datetime import date, timedelta
 
 from beanie.operators import In
 
+from app.core.logging import get_logger
 from app.core.utils import utc_now
 from app.models.api import (
     AvailabilityStatus,
@@ -46,13 +48,19 @@ COMPETITOR_CHANGE_EVENT_TYPES = {
 }
 
 
+_logger = get_logger("app.services.insights_query")
+
+
 class InsightsQueryService:
     async def get_category_insights(
         self, workspace_id: str, timeframe: Timeframe
     ) -> CategoryInsights:
+        t0 = time.monotonic()
+        cutoff_date = date.today() - timedelta(days=30)
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.event_type, list(CATEGORY_ENTRANT_EVENT_TYPES)),
+            EventDocument.snapshot_date >= cutoff_date,
         ).to_list()
 
         events = [event_doc_to_model(doc) for doc in event_docs]
@@ -64,16 +72,28 @@ class InsightsQueryService:
             doc.tracker_code: doc.name for doc in tracker_docs
         }
 
-        product_docs = await ProductDocument.find(
-            ProductDocument.workspace_id == workspace_id
-        ).to_list()
+        asin_keys = list({(e.marketplace, e.asin) for e in events})
+        if asin_keys:
+            product_docs = await ProductDocument.find(
+                ProductDocument.workspace_id == workspace_id,
+                In(ProductDocument.asin, [k[1] for k in asin_keys]),
+            ).to_list()
+        else:
+            product_docs = []
         product_map = {
             (doc.marketplace, doc.asin): doc for doc in product_docs
         }
 
-        snapshot_docs = await ProductSnapshotDocument.find(
-            ProductSnapshotDocument.workspace_id == workspace_id
-        ).to_list()
+        if asin_keys:
+            snapshot_docs = await ProductSnapshotDocument.find(
+                ProductSnapshotDocument.workspace_id == workspace_id,
+                In(ProductSnapshotDocument.asin, [k[1] for k in asin_keys]),
+            ).to_list()
+        else:
+            snapshot_docs = []
+        t_db = (time.monotonic() - t0) * 1000
+
+        t1 = time.monotonic()
         first_seen_map: dict[tuple[str, str], date] = {}
         for doc in sorted(snapshot_docs, key=lambda d: d.snapshot_date):
             key = (doc.marketplace, doc.asin)
@@ -167,6 +187,20 @@ class InsightsQueryService:
                     )
                 )
 
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "get_category_insights timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "event_count": len(event_docs),
+                    "product_count": len(product_docs),
+                    "snapshot_count": len(snapshot_docs),
+                }
+            },
+        )
         return CategoryInsights(
             timeframe=timeframe,
             generated_at=utc_now(),
@@ -178,9 +212,12 @@ class InsightsQueryService:
     async def get_competitor_insights(
         self, workspace_id: str, timeframe: Timeframe
     ) -> CompetitorInsights:
+        t0 = time.monotonic()
+        cutoff_date = date.today() - timedelta(days=30)
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.event_type, list(COMPETITOR_CHANGE_EVENT_TYPES)),
+            EventDocument.snapshot_date >= cutoff_date,
         ).to_list()
 
         events = [event_doc_to_model(doc) for doc in event_docs]
@@ -192,12 +229,20 @@ class InsightsQueryService:
             doc.tracker_code: doc.name for doc in competitor_docs
         }
 
-        product_docs = await ProductDocument.find(
-            ProductDocument.workspace_id == workspace_id
-        ).to_list()
+        asin_list = list({e.asin for e in events})
+        if asin_list:
+            product_docs = await ProductDocument.find(
+                ProductDocument.workspace_id == workspace_id,
+                In(ProductDocument.asin, asin_list),
+            ).to_list()
+        else:
+            product_docs = []
         product_map = {
             (doc.marketplace, doc.asin): doc for doc in product_docs
         }
+        t_db = (time.monotonic() - t0) * 1000
+
+        t1 = time.monotonic()
 
         reference_date = max(
             (event.snapshot_date for event in events), default=utc_now().date()
@@ -302,6 +347,19 @@ class InsightsQueryService:
                     )
                 )
 
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "get_competitor_insights timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "event_count": len(event_docs),
+                    "product_count": len(product_docs),
+                }
+            },
+        )
         return CompetitorInsights(
             timeframe=timeframe,
             generated_at=utc_now(),
@@ -314,24 +372,19 @@ class InsightsQueryService:
     async def get_competitor_alerts(
         self, workspace_id: str
     ) -> CompetitorAlertCounts:
+        t0 = time.monotonic()
+        today = utc_now().date()
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.event_type, list(COMPETITOR_CHANGE_EVENT_TYPES)),
+            EventDocument.snapshot_date == today,
         ).to_list()
 
         events = [event_doc_to_model(doc) for doc in event_docs]
+        t_db = (time.monotonic() - t0) * 1000
 
-        reference_date = max(
-            (event.snapshot_date for event in events), default=utc_now().date()
-        )
-        from_date = reference_date
-        to_date = reference_date
-
-        filtered_events = [
-            event
-            for event in events
-            if within_range(event.snapshot_date, from_date, to_date)
-        ]
+        t1 = time.monotonic()
+        filtered_events = events
 
         oos_count = 0
         price_drop_count = 0
@@ -359,6 +412,18 @@ class InsightsQueryService:
             elif event.event_type == EventType.VARIATIONS_ADDED:
                 new_variation_count += 1
 
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "get_competitor_alerts timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "event_count": len(event_docs),
+                }
+            },
+        )
         return CompetitorAlertCounts(
             oos_count=oos_count,
             price_drop_count=price_drop_count,
