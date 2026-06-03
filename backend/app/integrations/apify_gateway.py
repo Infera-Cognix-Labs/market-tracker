@@ -218,7 +218,6 @@ class ApifyGateway:
         if binding.task_id:
             task_kwargs: dict[str, object] = {
                 "task_input": run_input,
-                "timeout_secs": self.config.dispatch_timeout_secs,
             }
             if webhooks is not None:
                 task_kwargs["webhooks"] = webhooks
@@ -230,7 +229,6 @@ class ApifyGateway:
         if binding.actor_id:
             actor_kwargs: dict[str, object] = {
                 "run_input": run_input,
-                "timeout_secs": self.config.dispatch_timeout_secs,
             }
             if webhooks is not None:
                 actor_kwargs["webhooks"] = webhooks
