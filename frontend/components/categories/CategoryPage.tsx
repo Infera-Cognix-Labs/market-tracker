@@ -753,10 +753,11 @@ export const CategoryPage = () => {
                   }
 
                   const p = row.product
+                  const isExitFilter = activeKpiFilter === "EXITS"
                   return (
-                  <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
-                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: p.rank_position <= 10 ? 700 : 400, color: p.rank_position <= 10 ? T.amber : T.text1 }}>
-                    {String(p.rank_position).padStart(2, "0")}
+                  <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: !isExitFilter && p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
+                  <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: !isExitFilter && p.rank_position <= 10 ? 700 : 400, color: !isExitFilter && p.rank_position <= 10 ? T.amber : T.text1 }}>
+                    {isExitFilter ? "—" : String(p.rank_position).padStart(2, "0")}
                   </td>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>
                     {(() => {
