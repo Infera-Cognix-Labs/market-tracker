@@ -200,6 +200,10 @@ class EventEngine:
                     main_image_url=metadata.get("previous_image_url"),
                     price_current=metadata.get("previous_price_current"),
                     price_original=metadata.get("previous_price_original"),
+                    rating_value=metadata.get("previous_rating_value"),
+                    review_count=metadata.get("previous_review_count"),
+                    availability_status=metadata.get("previous_availability_status"),
+                    buy_box_status=metadata.get("previous_buy_box_status"),
                 ),
             )
 
@@ -219,6 +223,10 @@ class EventEngine:
                     main_image_url=metadata.get("previous_image_url"),
                     price_current=metadata.get("previous_price_current"),
                     price_original=metadata.get("previous_price_original"),
+                    rating_value=metadata.get("previous_rating_value"),
+                    review_count=metadata.get("previous_review_count"),
+                    availability_status=metadata.get("previous_availability_status"),
+                    buy_box_status=metadata.get("previous_buy_box_status"),
                 ),
             )
 

@@ -344,6 +344,8 @@ class EventChangeState(FlexibleApiModel):
     title: str | None = None
     brand: str | None = None
     main_image_url: str | None = None
+    rating_value: float | None = None
+    review_count: int | None = None
     variation_count: int | None = None
     content_signature_hash: str | None = None
     a_plus_signature_hash: str | None = None
