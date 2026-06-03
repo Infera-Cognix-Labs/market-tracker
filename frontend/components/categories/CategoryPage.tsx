@@ -128,9 +128,6 @@ const eventToProduct = (event: Event): CategorySnapshotProduct => {
     if (rankDelta > 0) rankTrend = "DOWN"
     else if (rankDelta < 0) rankTrend = "UP"
     else rankTrend = "STABLE"
-  } else if (prevRank != null && curRank == null) {
-    rankTrend = "DOWN"
-    rankDelta = 0
   }
 
   return {
