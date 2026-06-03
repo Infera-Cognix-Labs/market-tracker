@@ -5,7 +5,7 @@ import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, P
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents } from "../shared/api"
+import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents, ApiError } from "../shared/api"
 import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
 
 type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
@@ -114,6 +114,30 @@ const getEventImageUrl = (event: Event): string | null => {
   return event.payload.current?.main_image_url || event.payload.previous?.main_image_url || null
 }
 
+const eventToProduct = (event: Event): CategorySnapshotProduct => {
+  const prev = event.payload.previous
+  const rank = event.payload.previous_rank ?? event.payload.current_rank ?? 0
+  const currency = prev?.price_current != null ? (event.marketplace === "amazon_us" ? "USD" : event.marketplace === "amazon_uk" ? "GBP" : "EUR") : "USD"
+  return {
+    asin: event.asin,
+    rank_position: rank,
+    previous_rank_position: null,
+    rank_delta: null,
+    rank_trend: null,
+    title: prev?.title || event.title || "",
+    brand: prev?.brand || "",
+    product_url: prev?.price_current != null ? `https://www.${event.marketplace.replace("amazon_", "amazon.")}/dp/${event.asin}` : "",
+    price_current: prev?.price_current ?? 0,
+    price_original: prev?.price_original ?? null,
+    currency,
+    rating_value: 0,
+    review_count: 0,
+    image_url: prev?.main_image_url || "",
+    availability_status: "UNKNOWN" as const,
+    buy_box_status: "UNKNOWN" as const,
+  }
+}
+
 const matchesCategorySearch = (search: string, product: CategorySnapshotProduct): boolean => {
   if (!search) return true
   const normalized = search.toLowerCase()
@@ -166,8 +190,18 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
     try {
       const tracker = await apiCreateCategoryTracker(payload)
       onCreate(tracker)
-    } catch {
-      setError("Failed to create tracker. Please try again.")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setError("A tracker for this marketplace and node already exists.")
+        } else if (err.status === 400 && err.details?.reason) {
+          setError(err.details.reason)
+        } else {
+          setError(err.message || "Failed to create tracker. Please try again.")
+        }
+      } else {
+        setError("Failed to create tracker. Please try again.")
+      }
       setSubmitting(false)
     }
   }
@@ -435,7 +469,10 @@ export const CategoryPage = () => {
     if (activeKpiFilter === "EXITS") {
       return relevantEvents
         .filter(event => matchesCategoryEventSearch(search, event))
-        .map(event => ({ kind: "event", key: event.event_code, event }))
+        .map(event => {
+          const product = eventToProduct(event)
+          return { kind: "product" as const, key: `${product.asin}-exit-${event.snapshot_date}`, product }
+        })
     }
 
     if (activeKpiFilter === "EXIT_TOP10") {
@@ -445,7 +482,8 @@ export const CategoryPage = () => {
         .map(event => {
           const product = productsByAsin.get(event.asin)
           if (product) return { kind: "product" as const, key: `${product.asin}-${product.rank_position}`, product }
-          return { kind: "event" as const, key: event.event_code, event }
+          const fallbackProduct = eventToProduct(event)
+          return { kind: "product" as const, key: `${fallbackProduct.asin}-exit10-${event.snapshot_date}`, product: fallbackProduct }
         })
     }
 
@@ -459,7 +497,7 @@ export const CategoryPage = () => {
     if (!snapshot) return 0
     if (activeKpiFilter === "ALL") return snapshot.products.length
     const eventType = CATEGORY_FILTER_TO_EVENT[activeKpiFilter]
-    if (activeKpiFilter === "EXITS") {
+    if (activeKpiFilter === "EXITS" || activeKpiFilter === "EXIT_TOP10") {
       return movementEvents.filter(event => event.event_type === eventType).length
     }
     const eventAsins = new Set(

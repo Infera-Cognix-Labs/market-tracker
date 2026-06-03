@@ -5,7 +5,7 @@ import { Search, ExternalLink, CheckCircle, AlertCircle, Plus } from "lucide-rea
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiCreateCategoryTracker } from "../shared/api"
+import { apiCreateCategoryTracker, ApiError } from "../shared/api"
 import type { CategoryTracker, CategoryTrackerCreateRequest } from "../shared/types"
 
 // ── Parse browse node ID from an Amazon best-sellers URL ─────────────────────
@@ -107,8 +107,18 @@ export const NodeSearchPage = () => {
       setMarketplace("amazon_us")
       setTop10Alert(true)
       setHourUtc(2)
-    } catch {
-      setError("Failed to create tracker. Please try again.")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setError("A tracker for this marketplace and node already exists.")
+        } else if (err.status === 400 && err.details?.reason) {
+          setError(err.details.reason)
+        } else {
+          setError(err.message || "Failed to create tracker. Please try again.")
+        }
+      } else {
+        setError("Failed to create tracker. Please try again.")
+      }
     } finally {
       setSubmitting(false)
     }
