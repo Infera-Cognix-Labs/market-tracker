@@ -104,6 +104,10 @@ jobs:
           script: |
             cd ${{ secrets.SANDBOX_DEPLOY_PATH }}
 
+            # Kéo code mới nhất (bao gồm docker-compose.staging.yml)
+            git fetch origin
+            git reset --hard ${{ github.event.pull_request.head.sha }}
+
             # Cập nhật image tag trong .env.staging
             IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/frontend:${{ needs.publish.outputs.image_tag }}"
             sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${IMAGE_TAG}|" .env.staging
