@@ -184,13 +184,14 @@ class ResultImporterService:
 
             if final_status == JobStatus.SUCCESS:
                 succeeded_jobs += 1
-                if job_document.tracker_type == TrackerType.CATEGORY.value:
-                    try:
-                        await _trigger_deals_job_after_category(
-                            job_document, self.config, self.gateway
-                        )
-                    except Exception:
-                        pass
+                # TODO: re-enable when DE deals actor is fixed (Amazon returns 503)
+                # if job_document.tracker_type == TrackerType.CATEGORY.value:
+                #     try:
+                #         await _trigger_deals_job_after_category(
+                #             job_document, self.config, self.gateway
+                #         )
+                #     except Exception:
+                #         pass
             elif final_status == JobStatus.PARTIAL_SUCCESS:
                 partial_jobs += 1
             elif final_status == JobStatus.FAILED:

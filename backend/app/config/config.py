@@ -237,11 +237,6 @@ class MongoDBConfig(BaseModel):
 
 class ApifyConfig(BaseModel):
     token: str | None = _read_secret(env_name="APIFY_TOKEN")
-    dispatch_timeout_secs: int = _config_int(
-        ("apify", "dispatch_timeout_secs"),
-        300,
-        "APIFY_DISPATCH_TIMEOUT_SECS",
-    )
     webhook_url: str | None = _config_str(
         ("apify", "webhook_url"),
         None,
