@@ -83,6 +83,9 @@ jobs:
           context: ./frontend
           push: true
           tags: ${{ secrets.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          build-args: |
+            NEXT_PUBLIC_BASE_PATH=/market-tracker-test
+            BACKEND_URL=http://217.216.34.228:8001
 
   # ── 3. SSH deploy to server & verify ────────────────────────────────────────
   deploy-test:
@@ -99,7 +102,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd ${{ secrets.SANDBOX_DEPLOY_PATH }}
 
             # Cập nhật image tag trong .env.staging
             IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/frontend:${{ needs.publish.outputs.image_tag }}"
