@@ -8,7 +8,7 @@ from pymongo import ASCENDING
 
 from app.core.errors import ConflictError, NotFoundError
 from app.core.logging import get_logger
-from app.core.utils import paginate, utc_now
+from app.core.utils import utc_now
 from app.models.api import (
     CategorySnapshot,
     CategoryTracker,
@@ -120,17 +120,19 @@ class TrackerManagementService:
         self, workspace_id: str, page: int, page_size: int
     ) -> CategoryTrackerListResponse:
         t0 = time.monotonic()
-        all_docs = await CategoryTrackerDocument.find(
+        query = CategoryTrackerDocument.find(
             CategoryTrackerDocument.workspace_id == workspace_id
-        ).to_list()
+        )
+        total = await query.count()
+        page_docs = await (
+            query.sort("updated_at", -1)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+            .to_list()
+        )
         t_db = (time.monotonic() - t0) * 1000
         t1 = time.monotonic()
-        items = sorted(
-            [category_doc_to_model(doc) for doc in all_docs],
-            key=lambda tracker: tracker.updated_at,
-            reverse=True,
-        )
-        paged_items, total = paginate(items, page, page_size)
+        items = [category_doc_to_model(doc) for doc in page_docs]
         t_transform = (time.monotonic() - t1) * 1000
         _logger.info(
             "list_category_trackers timing.",
@@ -139,12 +141,12 @@ class TrackerManagementService:
                     "workspace_id": workspace_id,
                     "db_ms": round(t_db, 2),
                     "transform_ms": round(t_transform, 2),
-                    "total_docs": len(all_docs),
+                    "total": total,
                 }
             },
         )
         return CategoryTrackerListResponse(
-            items=paged_items,
+            items=items,
             page=page,
             page_size=page_size,
             total=total,
@@ -251,44 +253,56 @@ class TrackerManagementService:
         tracker_code: str,
         timeframe: Timeframe = Timeframe.WEEKLY,
     ) -> CategorySnapshot:
-        documents = await CategorySnapshotDocument.find(
+        t0 = time.monotonic()
+        latest_doc = await CategorySnapshotDocument.find(
             CategorySnapshotDocument.workspace_id == workspace_id,
             CategorySnapshotDocument.tracker_code == tracker_code,
-        ).to_list()
-        if not documents:
+        ).sort((CategorySnapshotDocument.snapshot_date, -1)).first_or_none()
+        if latest_doc is None:
             raise NotFoundError("Category snapshot not found.")
-        document = max(documents, key=lambda item: item.captured_at)
-        latest = snapshot_doc_to_model(document)
+        latest = snapshot_doc_to_model(latest_doc)
         from_date, _ = timeframe_bounds(timeframe, latest.snapshot_date)
-        comparison_documents = [
-            item
-            for item in documents
-            if from_date <= item.snapshot_date < latest.snapshot_date
-        ]
-        if not comparison_documents:
-            return latest
 
-        comparison_document = min(
-            comparison_documents, key=lambda item: (item.snapshot_date, item.captured_at)
+        comparison_doc = await CategorySnapshotDocument.find(
+            CategorySnapshotDocument.workspace_id == workspace_id,
+            CategorySnapshotDocument.tracker_code == tracker_code,
+            CategorySnapshotDocument.snapshot_date >= from_date,
+            CategorySnapshotDocument.snapshot_date < latest.snapshot_date,
+        ).sort((CategorySnapshotDocument.snapshot_date, 1)).first_or_none()
+        t_db = (time.monotonic() - t0) * 1000
+        _logger.info(
+            "get_latest_category_snapshot timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker_code,
+                    "db_ms": round(t_db, 2),
+                    "has_comparison": comparison_doc is not None,
+                }
+            },
         )
-        comparison = snapshot_doc_to_model(comparison_document)
+        if comparison_doc is None:
+            return latest
+        comparison = snapshot_doc_to_model(comparison_doc)
         return build_category_snapshot_with_rank_comparison(latest, comparison)
 
     async def list_competitor_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> CompetitorTrackerListResponse:
         t0 = time.monotonic()
-        all_docs = await CompetitorTrackerDocument.find(
+        query = CompetitorTrackerDocument.find(
             CompetitorTrackerDocument.workspace_id == workspace_id
-        ).to_list()
+        )
+        total = await query.count()
+        page_docs = await (
+            query.sort("updated_at", -1)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+            .to_list()
+        )
         t_db = (time.monotonic() - t0) * 1000
         t1 = time.monotonic()
-        items = sorted(
-            [competitor_detail_to_list_model(competitor_doc_to_model(doc)) for doc in all_docs],
-            key=lambda tracker: tracker.updated_at,
-            reverse=True,
-        )
-        paged_items, total = paginate(items, page, page_size)
+        items = [competitor_detail_to_list_model(competitor_doc_to_model(doc)) for doc in page_docs]
         t_transform = (time.monotonic() - t1) * 1000
         _logger.info(
             "list_competitor_trackers timing.",
@@ -297,12 +311,12 @@ class TrackerManagementService:
                     "workspace_id": workspace_id,
                     "db_ms": round(t_db, 2),
                     "transform_ms": round(t_transform, 2),
-                    "total_docs": len(all_docs),
+                    "total": total,
                 }
             },
         )
         return CompetitorTrackerListResponse(
-            items=paged_items,
+            items=items,
             page=page,
             page_size=page_size,
             total=total,

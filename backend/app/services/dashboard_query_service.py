@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from app.core.errors import BadRequestError, NotFoundError
 from app.core.logging import get_logger
-from app.core.utils import paginate
+
 from app.models.api import (
     DashboardOverview,
     EventListResponse,
@@ -197,11 +197,17 @@ class DashboardQueryService:
         if severity is not None:
             query_filters.append(EventDocument.severity == severity.value)
 
-        all_docs = await EventDocument.find(*query_filters).to_list()
+        query = EventDocument.find(*query_filters)
+        total = await query.count()
+        page_docs = await (
+            query.sort("event_time", -1)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+            .to_list()
+        )
         t_db = (time.monotonic() - t0) * 1000
         t1 = time.monotonic()
-        items = sort_events([event_doc_to_model(doc) for doc in all_docs])
-        paged_items, total = paginate(items, page, page_size)
+        paged_items = sort_events([event_doc_to_model(doc) for doc in page_docs])
         t_transform = (time.monotonic() - t1) * 1000
         _logger.info(
             "list_events timing.",
@@ -210,8 +216,8 @@ class DashboardQueryService:
                     "workspace_id": workspace_id,
                     "db_ms": round(t_db, 2),
                     "transform_ms": round(t_transform, 2),
-                    "total_docs": len(all_docs),
-                    "filtered_count": len(items),
+                    "total": total,
+                    "page_docs": len(page_docs),
                 }
             },
         )
@@ -229,20 +235,20 @@ class DashboardQueryService:
         page_size: int,
         week_start: date | None = None,
     ) -> WeeklyDigestListResponse:
-        items = sorted(
-            [
-                digest_doc_to_model(document)
-                for document in await WeeklyDigestDocument.find(
-                    WeeklyDigestDocument.workspace_id == workspace_id
-                ).to_list()
-                if week_start is None or document.week_start == week_start
-            ],
-            key=lambda digest: digest.week_start,
-            reverse=True,
+        query_filters = [WeeklyDigestDocument.workspace_id == workspace_id]
+        if week_start is not None:
+            query_filters.append(WeeklyDigestDocument.week_start == week_start)
+        query = WeeklyDigestDocument.find(*query_filters)
+        total = await query.count()
+        page_docs = await (
+            query.sort("week_start", -1)
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+            .to_list()
         )
-        paged_items, total = paginate(items, page, page_size)
+        items = [digest_doc_to_model(doc) for doc in page_docs]
         return WeeklyDigestListResponse(
-            items=paged_items,
+            items=items,
             page=page,
             page_size=page_size,
             total=total,
