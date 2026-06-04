@@ -228,9 +228,9 @@ class JungleeProductAdapter:
         bsr_position = None
         bestseller_ranks = raw_payload.get("bestsellerRanks")
         if isinstance(bestseller_ranks, list) and bestseller_ranks:
-            first_rank = bestseller_ranks[0]
-            if isinstance(first_rank, dict):
-                bsr_position = _coerce_int(first_rank.get("rank"))
+            last_rank = bestseller_ranks[-1]
+            if isinstance(last_rank, dict):
+                bsr_position = _coerce_int(last_rank.get("rank"))
 
         return CategoryProductRecord(
             asin=asin,
@@ -365,9 +365,9 @@ class JungleeAsinsAdapter:
         bsr_position = None
         bestseller_ranks = raw_payload.get("bestsellerRanks")
         if isinstance(bestseller_ranks, list) and bestseller_ranks:
-            first_rank = bestseller_ranks[0]
-            if isinstance(first_rank, dict):
-                bsr_position = _coerce_int(first_rank.get("rank"))
+            last_rank = bestseller_ranks[-1]
+            if isinstance(last_rank, dict):
+                bsr_position = _coerce_int(last_rank.get("rank"))
 
         return CategoryProductRecord(
             asin=asin,

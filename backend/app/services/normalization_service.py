@@ -348,6 +348,7 @@ def _coerce_currency(value: object | None) -> str | None:
 
 
 def _extract_rank_from_payload(payload: dict[str, object]) -> int | None:
+    result: int | None = None
     for key in ("bestsellerRanks", "bestSellerRank"):
         candidate = payload.get(key)
         if isinstance(candidate, list):
@@ -355,15 +356,16 @@ def _extract_rank_from_payload(payload: dict[str, object]) -> int | None:
                 if isinstance(item, dict):
                     rank = _coerce_int(item.get("rank"))
                     if rank is not None:
-                        return rank
-                    rank = _coerce_int(item.get("position"))
-                    if rank is not None:
-                        return rank
+                        result = rank
+                    else:
+                        rank = _coerce_int(item.get("position"))
+                        if rank is not None:
+                            result = rank
         elif isinstance(candidate, dict):
             rank = _coerce_int(candidate.get("rank"))
             if rank is not None:
-                return rank
-    return None
+                result = rank
+    return result
 
 
 def _extract_variation_count(payload: dict[str, object]) -> int | None:
