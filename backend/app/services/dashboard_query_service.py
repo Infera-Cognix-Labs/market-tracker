@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from datetime import date, timedelta
+from datetime import date
 
 from app.core.errors import BadRequestError, NotFoundError
 from app.core.logging import get_logger
@@ -34,7 +34,6 @@ from app.services.shared import (
     digest_doc_to_model,
     event_doc_to_model,
     product_doc_to_model,
-    sort_events,
 )
 
 _logger = get_logger("app.services.dashboard_query")
@@ -51,11 +50,18 @@ class DashboardQueryService:
         competitor_docs = await CompetitorTrackerDocument.find(
             CompetitorTrackerDocument.workspace_id == workspace_id
         ).to_list()
-        cutoff_date = date.today() - timedelta(days=30)
+
+        # Compute timeframe bounds to limit event query
+        from app.services.shared import timeframe_bounds
+        from datetime import date as _date
+        reference_date = _date.today()
+        from_date, to_date = timeframe_bounds(timeframe, reference_date)
+
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
-            EventDocument.snapshot_date >= cutoff_date,
-        ).to_list()
+            EventDocument.snapshot_date >= from_date,
+            EventDocument.snapshot_date <= to_date,
+        ).sort(("event_time", -1)).limit(1000).to_list()
         t_db = (time.monotonic() - t0) * 1000
         t1 = time.monotonic()
         result = build_dashboard_overview(
@@ -200,14 +206,14 @@ class DashboardQueryService:
         query = EventDocument.find(*query_filters)
         total = await query.count()
         page_docs = await (
-            query.sort("event_time", -1)
+            query.sort(("event_time", -1))
             .skip((page - 1) * page_size)
             .limit(page_size)
             .to_list()
         )
         t_db = (time.monotonic() - t0) * 1000
         t1 = time.monotonic()
-        paged_items = sort_events([event_doc_to_model(doc) for doc in page_docs])
+        paged_items = [event_doc_to_model(doc) for doc in page_docs]
         t_transform = (time.monotonic() - t1) * 1000
         _logger.info(
             "list_events timing.",
@@ -241,7 +247,7 @@ class DashboardQueryService:
         query = WeeklyDigestDocument.find(*query_filters)
         total = await query.count()
         page_docs = await (
-            query.sort("week_start", -1)
+            query.sort(("week_start", -1))
             .skip((page - 1) * page_size)
             .limit(page_size)
             .to_list()

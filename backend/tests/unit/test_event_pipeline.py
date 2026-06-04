@@ -83,7 +83,11 @@ def test_diff_service_generates_category_and_product_candidates(run_async, monke
         buy_box_seller_name="Amazon",
     )
 
-    async def fake_category_find_one(*args, **kwargs):
+    async def fake_category_find_one(query=None, **kwargs):
+        if query is not None:
+            snapshot_filter = query.get("snapshot_date")
+            if isinstance(snapshot_filter, dict) and "$lt" in snapshot_filter:
+                return previous_category_snapshot
         return current_category_snapshot
 
     def fake_category_find(*args, **kwargs):
@@ -172,7 +176,11 @@ def test_diff_service_dedupes_duplicate_products_in_category_snapshots(
         ],
     )
 
-    async def fake_category_find_one(*args, **kwargs):
+    async def fake_category_find_one(query=None, **kwargs):
+        if query is not None:
+            snapshot_filter = query.get("snapshot_date")
+            if isinstance(snapshot_filter, dict) and "$lt" in snapshot_filter:
+                return previous_category_snapshot
         return current_category_snapshot
 
     def fake_category_find(*args, **kwargs):

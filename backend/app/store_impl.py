@@ -76,7 +76,6 @@ LISTING_EVENT_TYPES = {
     EventType.TITLE_CHANGED,
     EventType.MAIN_IMAGE_CHANGED,
     EventType.VARIATIONS_ADDED,
-    EventType.CONTENT_CHANGED,
 }
 
 

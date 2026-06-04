@@ -125,7 +125,7 @@ class TrackerManagementService:
         )
         total = await query.count()
         page_docs = await (
-            query.sort("updated_at", -1)
+            query.sort(("updated_at", -1))
             .skip((page - 1) * page_size)
             .limit(page_size)
             .to_list()
@@ -295,7 +295,7 @@ class TrackerManagementService:
         )
         total = await query.count()
         page_docs = await (
-            query.sort("updated_at", -1)
+            query.sort(("updated_at", -1))
             .skip((page - 1) * page_size)
             .limit(page_size)
             .to_list()

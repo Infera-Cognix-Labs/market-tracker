@@ -49,7 +49,6 @@ LISTING_EVENT_TYPES = {
     EventType.TITLE_CHANGED,
     EventType.MAIN_IMAGE_CHANGED,
     EventType.VARIATIONS_ADDED,
-    EventType.CONTENT_CHANGED,
 }
 SEVERITY_WEIGHT = {
     Severity.HIGH: 0,
@@ -69,7 +68,6 @@ THREAT_SCORE_WEIGHT = {
     EventType.TITLE_CHANGED: 2,
     EventType.MAIN_IMAGE_CHANGED: 2,
     EventType.BUY_BOX_CHANGED: 2,
-    EventType.CONTENT_CHANGED: 1,
 }
 
 

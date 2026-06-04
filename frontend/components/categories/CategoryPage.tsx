@@ -138,7 +138,7 @@ const eventToProduct = (event: Event): CategorySnapshotProduct => {
     rank_delta: rankDelta,
     rank_trend: rankTrend,
     title: prev?.title || event.title || "",
-    brand: prev?.brand || "",
+    brand: extractBrandName(prev?.brand || ""),
     product_url: prev?.price_current != null ? `https://www.${event.marketplace.replace("amazon_", "amazon.")}/dp/${event.asin}` : "",
     price_current: prev?.price_current ?? 0,
     price_original: prev?.price_original ?? null,
@@ -493,7 +493,7 @@ export const CategoryPageInner = () => {
       tracker_code: selectedCode,
       from_date: snapshot.snapshot_date,
       to_date: snapshot.snapshot_date,
-      page_size: 500,
+      page_size: 200,
     })
       .then(res => {
         if (cancelled) return
