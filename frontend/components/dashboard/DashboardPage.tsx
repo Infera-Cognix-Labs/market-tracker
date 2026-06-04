@@ -141,12 +141,30 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
     )
   }
 
-  if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading dashboard...</div>
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: 60, color: T.text3, fontSize: 13 }}>
+      Loading dashboard…
+    </div>
+  )
 
   if (!data) {
     return (
-      <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>
-        {error || "No dashboard data available"}
+      <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+        <BarChart2 size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No dashboard data yet</div>
+        <div style={{ fontSize: 12, color: T.text3, marginBottom: 24 }}>
+          {error ?? "Add your first tracker to start monitoring the market."}
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+          <button className="btn-primary" onClick={() => setPage("categories")}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <BarChart2 size={14} /> Add Category Tracker
+          </button>
+          <button className="btn-ghost" onClick={() => setPage("competitors")}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <Package size={14} /> Add Competitor Tracker
+          </button>
+        </div>
       </div>
     )
   }

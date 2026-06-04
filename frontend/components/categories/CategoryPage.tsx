@@ -519,8 +519,40 @@ export const CategoryPage = () => {
   }, [snapshot, activeKpiFilter, movementEvents])
 
 
-  if (loading && trackers.length === 0) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading trackers...</div>
-  if (!loading && trackers.length === 0 && error) return <div style={{ textAlign: "center", padding: 60, color: T.red }}>{error}</div>
+  if (loading && trackers.length === 0) return (
+    <div style={{ textAlign: "center", padding: 60, color: T.text3, fontSize: 13 }}>Loading trackers…</div>
+  )
+  if (!loading && trackers.length === 0 && error) return (
+    <div style={{ textAlign: "center", padding: 60, color: T.red, fontSize: 13 }}>{error}</div>
+  )
+  if (!loading && trackers.length === 0) return (
+    <>
+      {showCreate && (
+        <CreateCategoryTrackerModal
+          onClose={() => setShowCreate(false)}
+          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedCode(t.tracker_code); setShowCreate(false) }}
+        />
+      )}
+      <div className="anim-fade">
+        <PageHeader title="Category Tracker" sub="Top 50 BSR — Daily snapshots from normalized data"
+          actions={
+            <button className="btn-primary" onClick={() => setShowCreate(true)}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Plus size={14} /> New Tracker
+            </button>
+          } />
+        <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+          <TrendingUp size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No category trackers yet</div>
+          <div style={{ fontSize: 12, color: T.text3, marginBottom: 24 }}>Create a tracker to start monitoring BSR rankings.</div>
+          <button className="btn-primary" onClick={() => setShowCreate(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <Plus size={14} /> New Tracker
+          </button>
+        </div>
+      </div>
+    </>
+  )
 
   return (
     <>

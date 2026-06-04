@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2 } from "lucide-react"
+import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2, Package } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
@@ -586,9 +586,14 @@ export const CompetitorPage = () => {
       <div className="anim-fade">
         <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
           actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
-        <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>
-          No competitor trackers configured.{" "}
-          <button onClick={() => setShowCreate(true)} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 13 }}>Create one &rarr;</button>
+        <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+          <Package size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+          <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No competitor trackers yet</div>
+          <div style={{ fontSize: 12, color: T.text3, marginBottom: 24 }}>Add ASINs you want to track for price, availability, and listing changes.</div>
+          <button className="btn-primary" onClick={() => setShowCreate(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <Plus size={14} /> New Tracker
+          </button>
         </div>
       </div>
     </>
