@@ -1,0 +1,129 @@
+name: Frontend — Deploy Production
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+
+env:
+  IMAGE_NAME: market-tracker/frontend
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  # ── 1. Lint + Type-check + Build ────────────────────────────────────────────
+  ci:
+    name: Lint, Type-check & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build check
+        run: npm run build
+        env:
+          CI: true
+
+  # ── 2. Build Docker image & push to registry ───────────────────────────────
+  publish:
+    name: Build & Push Docker image
+    runs-on: ubuntu-latest
+    needs: ci
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: meta
+        run: |
+          SHA=$(echo ${{ github.event.pull_request.head.sha }} | cut -c1-7)
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+
+      - name: Trust registry CA certificate
+        run: |
+          echo "${{ secrets.REGISTRY_CA_CERT }}" | sudo tee /usr/local/share/ca-certificates/registry-ca.crt
+          sudo update-ca-certificates
+          sudo mkdir -p /etc/docker/certs.d/${{ secrets.REGISTRY }}
+          echo "${{ secrets.REGISTRY_CA_CERT }}" | sudo tee /etc/docker/certs.d/${{ secrets.REGISTRY }}/ca.crt
+
+      - name: Login to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+          # NEXT_PUBLIC_BASE_PATH defaults to /market-tracker in Dockerfile
+
+  # ── 3. SSH deploy to server & verify ────────────────────────────────────────
+  deploy-prod:
+    name: Deploy & Health check
+    runs-on: ubuntu-latest
+    needs: publish
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Cập nhật image tag trong .env.staging
+            IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/frontend:${{ needs.publish.outputs.image_tag }}"
+            sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${IMAGE_TAG}|" .env.staging
+
+            # Login registry, pull image mới
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ secrets.REGISTRY }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
+
+            docker compose -f docker-compose.staging.yml --env-file .env.staging pull frontend
+            docker compose -f docker-compose.staging.yml --env-file .env.staging up frontend -d --force-recreate
+
+            # Đợi container healthy (tối đa 60s)
+            echo "Waiting for frontend health check..."
+            for i in $(seq 1 12); do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose -f docker-compose.staging.yml --env-file .env.staging ps -q frontend) 2>/dev/null || echo "starting")
+              echo "  Attempt $i/12: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Frontend is healthy!"
+                exit 0
+              fi
+              sleep 5
+            done
+
+            echo "Frontend failed health check — rolling back"
+            docker compose -f docker-compose.staging.yml --env-file .env.staging down frontend
+            exit 1
