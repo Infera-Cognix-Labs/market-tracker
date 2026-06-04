@@ -112,6 +112,11 @@ jobs:
             IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/frontend:${{ needs.publish.outputs.image_tag }}"
             sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${IMAGE_TAG}|" .env.staging
 
+            # Đặt BASE_PATH khớp với basePath đã bake vào image (test env)
+            grep -q "^BASE_PATH=" .env.staging \
+              && sed -i "s|^BASE_PATH=.*|BASE_PATH=/market-tracker-test|" .env.staging \
+              || echo "BASE_PATH=/market-tracker-test" >> .env.staging
+
             # Login registry, pull image mới
             echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ secrets.REGISTRY }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin
 
