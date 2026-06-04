@@ -6,8 +6,8 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListEvents, apiGetProductDetail } from "../shared/api"
-import type { Event, EventType, Severity } from "../shared/types"
+import { apiListEvents, apiGetProductDetail, apiListCategoryTrackers, apiListCompetitorTrackers } from "../shared/api"
+import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker } from "../shared/types"
 
 const EVENT_TYPES: EventType[] = [
   "NEW_ENTRANT_TOP50", "RETURNING_TOP50", "EXIT_TOP50",
@@ -47,6 +47,12 @@ export const EventsPage = () => {
   const [slackStatus, setSlackStatus] = useState<Map<string, "sending" | "done" | "error">>(new Map())
   const [webhookUrl, setWebhookUrl] = useState("")
   const [showWebhookInput, setShowWebhookInput] = useState(false)
+  const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR">("")
+  const [selectedTrackerCode, setSelectedTrackerCode] = useState<string | "">("")
+  const [categoryTrackers, setCategoryTrackers] = useState<CategoryTracker[]>([])
+  const [competitorTrackers, setCompetitorTrackers] = useState<CompetitorTracker[]>([])
+  const [trackerSearchQuery, setTrackerSearchQuery] = useState("")
+  const [showTrackerDropdown, setShowTrackerDropdown] = useState(false)
 
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
@@ -65,6 +71,8 @@ export const EventsPage = () => {
       const res = await apiListEvents({
         event_type: filterType || undefined,
         severity: filterSeverity || undefined,
+        tracker_type: filterTrackerType || undefined,
+        tracker_code: selectedTrackerCode || undefined,
         from_date: fromDate,
         to_date: toDate,
         page: p,
@@ -94,11 +102,44 @@ export const EventsPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [filterType, filterSeverity, datePreset, customFrom, customTo])
+  }, [filterType, filterSeverity, filterTrackerType, selectedTrackerCode, datePreset, customFrom, customTo])
 
   useEffect(() => {
     void loadEvents(1)
   }, [loadEvents])
+
+  useEffect(() => {
+    void Promise.all([
+      apiListCategoryTrackers().then(res => setCategoryTrackers(res.items)),
+      apiListCompetitorTrackers().then(res => setCompetitorTrackers(res.items)),
+    ])
+  }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const isDropdownClick = target.closest("[data-tracker-dropdown]")
+      if (!isDropdownClick && showTrackerDropdown) {
+        setShowTrackerDropdown(false)
+      }
+    }
+    if (showTrackerDropdown) {
+      document.addEventListener("click", handleClickOutside)
+      return () => document.removeEventListener("click", handleClickOutside)
+    }
+  }, [showTrackerDropdown])
+
+  // Reset tracker selection when tracker type filter changes
+  useEffect(() => {
+    if (filterTrackerType) {
+      const isValidSelection = 
+        (filterTrackerType === "CATEGORY" && categoryTrackers.some(t => t.tracker_code === selectedTrackerCode)) ||
+        (filterTrackerType === "COMPETITOR" && competitorTrackers.some(t => t.tracker_code === selectedTrackerCode))
+      if (!isValidSelection && selectedTrackerCode) {
+        setSelectedTrackerCode("")
+      }
+    }
+  }, [filterTrackerType, selectedTrackerCode, categoryTrackers, competitorTrackers])
 
   useEffect(() => {
     const stored = localStorage.getItem("slack_webhook_url")
@@ -207,6 +248,167 @@ export const EventsPage = () => {
               </button>
             )
           })}
+        </div>
+
+        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
+
+        {/* Tracker type filter */}
+        <div style={{ display: "flex", gap: 4 }}>
+          {[
+            { type: "CATEGORY" as const, label: "Categories" },
+            { type: "COMPETITOR" as const, label: "Competitors" },
+          ].map(({ type, label }) => {
+            const active = filterTrackerType === type
+            return (
+              <button key={type} onClick={() => setFilterTrackerType(active ? "" : type)}
+                style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${active ? T.blue : T.border}`, background: active ? T.bg4 : T.bg2, color: active ? T.blue : T.text2, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
+        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
+
+        {/* Tracker selector dropdown */}
+        <div style={{ position: "relative" }} data-tracker-dropdown>
+          <button onClick={() => setShowTrackerDropdown(!showTrackerDropdown)}
+            style={{ 
+              padding: "5px 10px", 
+              borderRadius: 6, 
+              border: `1px solid ${selectedTrackerCode ? T.blue : T.border}`, 
+              background: selectedTrackerCode ? T.bg4 : T.bg2, 
+              color: selectedTrackerCode ? T.blue : T.text2, 
+              fontSize: 11, 
+              fontWeight: 600, 
+              cursor: "pointer", 
+              transition: "all .15s",
+              maxWidth: 150,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }}>
+            {selectedTrackerCode 
+              ? (categoryTrackers.find(t => t.tracker_code === selectedTrackerCode)?.tracker_name || 
+                 competitorTrackers.find(t => t.tracker_code === selectedTrackerCode)?.tracker_name || 
+                 selectedTrackerCode)
+              : "Tracker: All"}
+          </button>
+
+          {showTrackerDropdown && (
+            <div style={{ 
+              position: "absolute", 
+              top: "100%", 
+              left: 0, 
+              marginTop: 4, 
+              background: T.bg2, 
+              border: `1px solid ${T.border}`, 
+              borderRadius: 8, 
+              zIndex: 100,
+              minWidth: 220,
+              maxHeight: 250,
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: `0 4px 12px ${T.bg1}80`
+            }}>
+              <input 
+                type="text" 
+                placeholder="Search tracker..."
+                value={trackerSearchQuery}
+                onChange={e => setTrackerSearchQuery(e.target.value)}
+                style={{
+                  padding: "8px 12px",
+                  borderBottom: `1px solid ${T.border}`,
+                  borderRadius: "8px 8px 0 0",
+                  border: "none",
+                  background: T.bg2,
+                  color: T.text0,
+                  fontSize: 11,
+                  outline: "none"
+                }}
+              />
+              <div style={{ overflowY: "auto", flexGrow: 1 }}>
+                <button
+                  onClick={() => { setSelectedTrackerCode(""); setShowTrackerDropdown(false); setTrackerSearchQuery("") }}
+                  style={{ 
+                    width: "100%", 
+                    padding: "8px 12px", 
+                    background: selectedTrackerCode === "" ? `${T.blue}20` : "transparent",
+                    color: selectedTrackerCode === "" ? T.blue : T.text2,
+                    border: "none", 
+                    textAlign: "left", 
+                    fontSize: 11, 
+                    cursor: "pointer",
+                    borderBottom: `1px solid ${T.border}`,
+                    transition: "all .15s"
+                  }}>
+                  <strong>All Trackers</strong>
+                </button>
+
+                {filterTrackerType !== "COMPETITOR" && (
+                  <>
+                    <div style={{ padding: "6px 12px", fontSize: 10, fontWeight: 600, color: T.text3, background: T.bg3 }}>
+                      CATEGORIES
+                    </div>
+                    {categoryTrackers
+                      .filter(t => !trackerSearchQuery || t.tracker_name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
+                      .map(t => (
+                        <button
+                          key={t.tracker_code}
+                          onClick={() => { setSelectedTrackerCode(t.tracker_code); setShowTrackerDropdown(false); setTrackerSearchQuery("") }}
+                          style={{ 
+                            width: "100%", 
+                            padding: "8px 12px", 
+                            background: selectedTrackerCode === t.tracker_code ? `${T.blue}20` : "transparent",
+                            color: selectedTrackerCode === t.tracker_code ? T.blue : T.text2,
+                            border: "none", 
+                            textAlign: "left", 
+                            fontSize: 11, 
+                            cursor: "pointer",
+                            transition: "all .15s",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis"
+                          }}>
+                          {t.tracker_name}
+                        </button>
+                      ))}
+                  </>
+                )}
+
+                {filterTrackerType !== "CATEGORY" && (
+                  <>
+                    <div style={{ padding: "6px 12px", fontSize: 10, fontWeight: 600, color: T.text3, background: T.bg3 }}>
+                      COMPETITORS
+                    </div>
+                    {competitorTrackers
+                      .filter(t => !trackerSearchQuery || t.tracker_name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
+                      .map(t => (
+                        <button
+                          key={t.tracker_code}
+                          onClick={() => { setSelectedTrackerCode(t.tracker_code); setShowTrackerDropdown(false); setTrackerSearchQuery("") }}
+                          style={{ 
+                            width: "100%", 
+                            padding: "8px 12px", 
+                            background: selectedTrackerCode === t.tracker_code ? `${T.blue}20` : "transparent",
+                            color: selectedTrackerCode === t.tracker_code ? T.blue : T.text2,
+                            border: "none", 
+                            textAlign: "left", 
+                            fontSize: 11, 
+                            cursor: "pointer",
+                            transition: "all .15s",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis"
+                          }}>
+                          {t.tracker_name}
+                        </button>
+                      ))}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
