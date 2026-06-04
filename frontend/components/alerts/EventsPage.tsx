@@ -289,8 +289,8 @@ export const EventsPage = () => {
               textOverflow: "ellipsis"
             }}>
             {selectedTrackerCode 
-              ? (categoryTrackers.find(t => t.tracker_code === selectedTrackerCode)?.tracker_name || 
-                 competitorTrackers.find(t => t.tracker_code === selectedTrackerCode)?.tracker_name || 
+              ? (categoryTrackers.find(t => t.tracker_code === selectedTrackerCode)?.name || 
+                 competitorTrackers.find(t => t.tracker_code === selectedTrackerCode)?.name || 
                  selectedTrackerCode)
               : "Tracker: All"}
           </button>
@@ -351,7 +351,7 @@ export const EventsPage = () => {
                       CATEGORIES
                     </div>
                     {categoryTrackers
-                      .filter(t => !trackerSearchQuery || t.tracker_name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
+                      .filter(t => !trackerSearchQuery || t.name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
                       .map(t => (
                         <button
                           key={t.tracker_code}
@@ -370,7 +370,7 @@ export const EventsPage = () => {
                             overflow: "hidden",
                             textOverflow: "ellipsis"
                           }}>
-                          {t.tracker_name}
+                          {t.name}
                         </button>
                       ))}
                   </>
@@ -382,7 +382,7 @@ export const EventsPage = () => {
                       COMPETITORS
                     </div>
                     {competitorTrackers
-                      .filter(t => !trackerSearchQuery || t.tracker_name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
+                      .filter(t => !trackerSearchQuery || t.name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
                       .map(t => (
                         <button
                           key={t.tracker_code}
@@ -401,7 +401,7 @@ export const EventsPage = () => {
                             overflow: "hidden",
                             textOverflow: "ellipsis"
                           }}>
-                          {t.tracker_name}
+                          {t.name}
                         </button>
                       ))}
                   </>
