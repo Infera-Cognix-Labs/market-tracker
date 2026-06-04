@@ -578,8 +578,6 @@ export const CompetitorPage = () => {
 
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
-  if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
-  if (!loading && trackers.length === 0 && error) return <div style={{ textAlign: "center", padding: 60, color: T.red }}>{error}</div>
   if (trackers.length === 0) return (
     <>
       {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setSelectedCode(t.tracker_code); setShowCreate(false) }} />}
@@ -587,13 +585,20 @@ export const CompetitorPage = () => {
         <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
           actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
         <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
-          <Package size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
-          <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No competitor trackers yet</div>
-          <div style={{ fontSize: 12, color: T.text3, marginBottom: 24 }}>Add ASINs you want to track for price, availability, and listing changes.</div>
-          <button className="btn-primary" onClick={() => setShowCreate(true)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <Plus size={14} /> New Tracker
-          </button>
+          {loading
+            ? <div style={{ fontSize: 13 }}>Loading trackers…</div>
+            : <>
+                <Package size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No competitor trackers yet</div>
+                <div style={{ fontSize: 12, color: error ? T.red : T.text3, marginBottom: 24 }}>
+                  {error ?? "Add ASINs you want to track for price, availability, and listing changes."}
+                </div>
+                <button className="btn-primary" onClick={() => setShowCreate(true)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <Plus size={14} /> New Tracker
+                </button>
+              </>
+          }
         </div>
       </div>
     </>
