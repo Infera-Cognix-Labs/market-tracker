@@ -784,7 +784,7 @@ export const CategoryPageInner = () => {
             <table style={{ width: "100%", minWidth: 1260, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Deal", "Coupon"].map(h => (
+                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Deal", "Coupon"].map(h => (
                     <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -909,9 +909,6 @@ export const CategoryPageInner = () => {
                   </td>
                   <td style={{ padding: "9px 10px" }}>
                     <Badge type={p.availability_status === "IN_STOCK" ? "listing" : "stock"} text={p.availability_status === "IN_STOCK" ? "In Stock" : p.availability_status === "OUT_OF_STOCK" ? "OOS" : p.availability_status} />
-                  </td>
-                  <td style={{ padding: "9px 10px" }}>
-                    <Badge type={p.buy_box_status === "HAS_BUY_BOX" ? "listing" : p.buy_box_status === "NO_BUY_BOX" ? "stock" : "info"} text={p.buy_box_status === "HAS_BUY_BOX" ? "Has BB" : p.buy_box_status === "NO_BUY_BOX" ? "No BB" : "—"} />
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.blue }}>
                     {(() => {
