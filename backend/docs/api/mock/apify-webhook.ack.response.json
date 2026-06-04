@@ -1,8 +1,0 @@
-{
-  "status": "ACCEPTED",
-  "source": "WEBHOOK",
-  "apify_run_id": "apify_run_test_001",
-  "tracking_job_code": "job_cat_20260405_001",
-  "provider_status": "SUCCEEDED",
-  "job_status": "IMPORTING"
-}

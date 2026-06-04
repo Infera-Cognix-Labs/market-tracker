@@ -73,7 +73,6 @@ class EventType(str, Enum):
     TITLE_CHANGED = "TITLE_CHANGED"
     MAIN_IMAGE_CHANGED = "MAIN_IMAGE_CHANGED"
     VARIATIONS_ADDED = "VARIATIONS_ADDED"
-    CONTENT_CHANGED = "CONTENT_CHANGED"
     AVAILABILITY_CHANGED = "AVAILABILITY_CHANGED"
     BUY_BOX_CHANGED = "BUY_BOX_CHANGED"
 
@@ -158,7 +157,7 @@ class CategoryScope(ApiModel):
 
 
 class CategoryTrackingConfig(ApiModel):
-    top_n: int = Field(default=50)
+    top_n: int = Field(default=100)
     top10_alert_enabled: bool
 
 
@@ -256,7 +255,7 @@ class CategorySnapshot(ApiModel):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 50
+    top_n: int = 100
     products: list[CategorySnapshotProduct]
     summary: CategorySnapshotSummary
     source_refs: dict[str, Any] | None = None
@@ -341,6 +340,7 @@ class EventChangeState(FlexibleApiModel):
     price_current: float | None = None
     price_original: float | None = None
     coupon_text: str | None = None
+    deal_info: DealInfo | None = None
     title: str | None = None
     brand: str | None = None
     main_image_url: str | None = None
@@ -492,6 +492,7 @@ class JobSummary(ApiModel):
 class JobRunStrategy(ApiModel):
     provider: Provider
     binding_code: str | None = None
+    pool_code: str | None = None
 
 
 class ExternalRunSummary(ApiModel):

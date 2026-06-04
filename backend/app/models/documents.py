@@ -62,7 +62,7 @@ class CategorySnapshotDocument(WorkspaceDocument):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 50
+    top_n: int = 100
     products: list[CategorySnapshotProduct] = Field(default_factory=list)
     summary: CategorySnapshotSummary
     source_refs: dict[str, object] | None = None
@@ -126,6 +126,14 @@ class EventDocument(WorkspaceDocument):
                     ("marketplace", 1),
                     ("asin", 1),
                     ("snapshot_date", -1),
+                ]
+            ),
+            IndexModel(
+                [
+                    ("workspace_id", 1),
+                    ("tracker_code", 1),
+                    ("snapshot_date", -1),
+                    ("event_type", 1),
                 ]
             ),
             IndexModel(
@@ -220,6 +228,8 @@ class JobDocument(WorkspaceDocument):
     external_run: ExternalRunSummary | None = None
     summary: JobSummary
     error: JobError | None = None
+    pool_code: str | None = None
+    current_pool_index: int = 0
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -253,6 +263,9 @@ class ApifyRunDocument(WorkspaceDocument):
     status: str
     apify_status_raw: str | None = None
     origin: str = "API"
+    pool_actor_id: str | None = None
+    pool_actor_name: str | None = None
+    pool_index: int | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     webhook_received_at: datetime | None = None

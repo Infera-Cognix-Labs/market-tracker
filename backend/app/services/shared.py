@@ -49,7 +49,6 @@ LISTING_EVENT_TYPES = {
     EventType.TITLE_CHANGED,
     EventType.MAIN_IMAGE_CHANGED,
     EventType.VARIATIONS_ADDED,
-    EventType.CONTENT_CHANGED,
 }
 SEVERITY_WEIGHT = {
     Severity.HIGH: 0,
@@ -69,7 +68,6 @@ THREAT_SCORE_WEIGHT = {
     EventType.TITLE_CHANGED: 2,
     EventType.MAIN_IMAGE_CHANGED: 2,
     EventType.BUY_BOX_CHANGED: 2,
-    EventType.CONTENT_CHANGED: 1,
 }
 
 
@@ -173,7 +171,10 @@ def product_doc_to_model(document: ProductDocument) -> ProductDetail:
 
 def job_doc_to_model(document: JobDocument) -> Job:
     return Job.model_validate(
-        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+        document.model_dump(
+            exclude={"id", "workspace_id", "pool_code", "current_pool_index"},
+            mode="python",
+        )
     )
 
 

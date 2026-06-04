@@ -237,11 +237,6 @@ class MongoDBConfig(BaseModel):
 
 class ApifyConfig(BaseModel):
     token: str | None = _read_secret(env_name="APIFY_TOKEN")
-    dispatch_timeout_secs: int = _config_int(
-        ("apify", "dispatch_timeout_secs"),
-        300,
-        "APIFY_DISPATCH_TIMEOUT_SECS",
-    )
     webhook_url: str | None = _config_str(
         ("apify", "webhook_url"),
         None,
@@ -333,6 +328,68 @@ class ApifyConfig(BaseModel):
         "memory_mbytes",
         "APIFY_CATEGORY_ENRICHMENT_MEMORY_MBYTES",
     )
+
+    @property
+    def actor_pools(self) -> dict[str, list[ActorPoolEntryConfig]]:
+        return _actor_pools_config()
+
+
+class InputAdapterConfig(BaseModel):
+    field_map: dict[str, str] = Field(default_factory=dict)
+
+
+class ActorPoolEntryConfig(BaseModel):
+    actor_id: str | None = None
+    task_id: str | None = None
+    name: str | None = None
+    adapter: str | None = None
+    build: str | None = "latest"
+    memory_mbytes: int | None = 4096
+    enabled: bool = True
+    priority: int = 0
+    input_adapter: InputAdapterConfig | None = None
+
+
+def _actor_pools_config() -> dict[str, list[ActorPoolEntryConfig]]:
+    file_config = _load_app_file_config()
+    apify_config = file_config.get("apify")
+    if not isinstance(apify_config, dict):
+        return {}
+
+    pools_raw = apify_config.get("actor_pools")
+    if not isinstance(pools_raw, dict):
+        return {}
+
+    result: dict[str, list[ActorPoolEntryConfig]] = {}
+    for pool_code, entries_raw in pools_raw.items():
+        if not isinstance(entries_raw, dict):
+            continue
+        entries: list[ActorPoolEntryConfig] = []
+        for entry_name, entry_raw in entries_raw.items():
+            if not isinstance(entry_raw, dict):
+                continue
+            input_adapter_raw = entry_raw.get("input_adapter")
+            input_adapter = None
+            if isinstance(input_adapter_raw, dict):
+                field_map = input_adapter_raw.get("field_map")
+                input_adapter = InputAdapterConfig(
+                    field_map=field_map if isinstance(field_map, dict) else {}
+                )
+            entries.append(
+                ActorPoolEntryConfig(
+                    actor_id=entry_raw.get("actor_id"),
+                    task_id=entry_raw.get("task_id"),
+                    name=entry_raw.get("name") or entry_name,
+                    adapter=entry_raw.get("adapter"),
+                    build=entry_raw.get("build", "latest"),
+                    memory_mbytes=entry_raw.get("memory_mbytes", 4096),
+                    enabled=entry_raw.get("enabled", True),
+                    priority=entry_raw.get("priority", 0),
+                    input_adapter=input_adapter,
+                )
+            )
+        result[pool_code] = sorted(entries, key=lambda e: e.priority)
+    return result
 
 
 class StorageConfig(BaseModel):

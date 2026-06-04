@@ -97,6 +97,12 @@ class JobService:
                 f"A job already exists for tracker `{payload.tracker_code}` on {snapshot_date}."
             )
 
+        pool_code = (
+            "category"
+            if payload.tracker_type == TrackerType.CATEGORY
+            else "competitor"
+        )
+
         job = Job(
             job_code=generate_job_code(
                 payload.tracker_type,
@@ -115,12 +121,15 @@ class JobService:
                     if payload.tracker_type == TrackerType.CATEGORY
                     else "bind_competitor_tracking_v1"
                 ),
+                pool_code=pool_code,
             ),
             summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),
             created_at=utc_now(),
         )
         await JobDocument(
-            workspace_id=workspace_id, **job.model_dump(mode="python")
+            workspace_id=workspace_id,
+            pool_code=pool_code,
+            **job.model_dump(mode="python"),
         ).insert()
         logger.info(
             "Created tracking job.",

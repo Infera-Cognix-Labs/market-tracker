@@ -4,7 +4,6 @@ app:
   seed_demo_data: false
 
 apify:
-  dispatch_timeout_secs: 300
   webhook_url: ""
   poll_batch_size: 25
   poll_interval_secs: 60
@@ -30,12 +29,85 @@ apify:
       task_id: ""
       build: "latest"
       memory_mbytes: 4096
-    category_enrichment:
-      name: "Category ASIN Enrichment"
-      actor_id: "junglee/amazon-asins-scraper"
-      task_id: ""
-      build: "latest"
-      memory_mbytes: 4096
+  actor_pools:
+    category:
+      saswave:
+        actor_id: "saswave/amazon-product-scraper"
+        task_id: ""
+        name: "Saswave Amazon Scraper"
+        adapter: "saswave_category"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 1
+      junglee:
+        actor_id: "junglee/amazon-bestsellers"
+        task_id: ""
+        name: "Junglee Bestsellers"
+        adapter: "junglee_category"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 2
+        input_adapter:
+          field_map:
+            search_url: "categoryUrls"
+            max_pages: "maxItemsPerStartUrl"
+      crawlerbros:
+        actor_id: "crawlerbros/amazon-bestseller-scraper"
+        task_id: ""
+        name: "CrawlerBros Bestseller Scraper"
+        adapter: "crawlerbros_category"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 3
+        input_adapter:
+          field_map:
+            search_url: "categoryUrls"
+            max_pages: "maxItems"
+    competitor:
+      saswave:
+        actor_id: "saswave/amazon-product-scraper"
+        task_id: ""
+        name: "Saswave Amazon Scraper"
+        adapter: "saswave_competitor"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 1
+      junglee_crawler:
+        actor_id: "junglee/amazon-crawler"
+        task_id: ""
+        name: "Junglee Product Crawler"
+        adapter: "junglee_product"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 2
+        input_adapter:
+          field_map:
+            asins: "categoryOrProductUrls"
+            max_pages: "maxSearchPagesPerStartUrl"
+      junglee_asins:
+        actor_id: "junglee/amazon-asins-scraper"
+        task_id: ""
+        name: "Junglee ASIN Scraper"
+        adapter: "junglee_asins"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 3
+    deals:
+      deals_scraper:
+        actor_id: "hJNp8X1wuz14Wc5wU"
+        task_id: ""
+        name: "Deals Scraper"
+        adapter: "deals_scraper"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 1
 
 storage:
   raw_batch_offload_enabled: false

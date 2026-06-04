@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from datetime import date
 
+from pymongo.errors import DuplicateKeyError
+
 from app.core.logging import correlation_context, get_logger
 from app.core.metrics import get_metrics
 from app.models.api import (
@@ -115,7 +117,36 @@ class EventEngine:
             )
             return 0
 
-        await EventDocument.insert_many(event_documents)
+        try:
+            await EventDocument.insert_many(event_documents)
+        except DuplicateKeyError:
+            logger.warning(
+                "Duplicate event detected during insert, retrying with dedup.",
+                extra={
+                    "context": correlation_context(
+                        workspace_id=workspace_id,
+                        tracker_code=job_document.tracker_code,
+                        job_code=job_document.job_code,
+                        snapshot_date=job_document.snapshot_date,
+                    )
+                },
+            )
+            existing = await EventDocument.find(
+                {
+                    "workspace_id": workspace_id,
+                    "dedupe_key": {"$in": dedupe_keys},
+                }
+            ).to_list()
+            existing_dedupe = {
+                event.dedupe_key for event in existing if event.dedupe_key
+            }
+            event_documents = [
+                event
+                for event in event_documents
+                if event.dedupe_key and event.dedupe_key not in existing_dedupe
+            ]
+            if event_documents:
+                await EventDocument.insert_many(event_documents)
         metrics.increment(
             "events_emitted_total",
             float(len(event_documents)),
@@ -200,6 +231,8 @@ class EventEngine:
                     main_image_url=metadata.get("previous_image_url"),
                     price_current=metadata.get("previous_price_current"),
                     price_original=metadata.get("previous_price_original"),
+                    coupon_text=metadata.get("previous_coupon_text"),
+                    deal_info=metadata.get("previous_deal_info"),
                     rating_value=metadata.get("previous_rating_value"),
                     review_count=metadata.get("previous_review_count"),
                     availability_status=metadata.get("previous_availability_status"),
@@ -223,10 +256,23 @@ class EventEngine:
                     main_image_url=metadata.get("previous_image_url"),
                     price_current=metadata.get("previous_price_current"),
                     price_original=metadata.get("previous_price_original"),
+                    coupon_text=metadata.get("previous_coupon_text"),
+                    deal_info=metadata.get("previous_deal_info"),
                     rating_value=metadata.get("previous_rating_value"),
                     review_count=metadata.get("previous_review_count"),
                     availability_status=metadata.get("previous_availability_status"),
                     buy_box_status=metadata.get("previous_buy_box_status"),
+                ),
+                current=EventChangeState(
+                    title=metadata.get("current_title"),
+                    brand=metadata.get("current_brand"),
+                    main_image_url=metadata.get("current_image_url"),
+                    price_current=metadata.get("current_price_current"),
+                    price_original=metadata.get("current_price_original"),
+                    coupon_text=metadata.get("current_coupon_text"),
+                    deal_info=metadata.get("current_deal_info"),
+                    availability_status=metadata.get("current_availability_status"),
+                    buy_box_status=metadata.get("current_buy_box_status"),
                 ),
             )
 

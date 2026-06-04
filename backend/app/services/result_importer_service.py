@@ -12,7 +12,7 @@ from app.config.config import ApifyConfig, StorageConfig
 from app.core.logging import correlation_context, get_logger
 from app.core.metrics import get_metrics
 from app.core.utils import utc_now
-from app.integrations.apify_gateway import ApifyGateway
+from app.integrations.apify_gateway import ApifyGateway, ApifyRunStartError
 from app.models.api import (
     DealInfo,
     ExternalRunStatus,
@@ -184,13 +184,14 @@ class ResultImporterService:
 
             if final_status == JobStatus.SUCCESS:
                 succeeded_jobs += 1
-                if job_document.tracker_type == TrackerType.CATEGORY.value:
-                    try:
-                        await _trigger_deals_job_after_category(
-                            job_document, self.config, self.gateway
-                        )
-                    except Exception:
-                        pass
+                # TODO: re-enable when DE deals actor is fixed (Amazon returns 503)
+                # if job_document.tracker_type == TrackerType.CATEGORY.value:
+                #     try:
+                #         await _trigger_deals_job_after_category(
+                #             job_document, self.config, self.gateway
+                #         )
+                #     except Exception:
+                #         pass
             elif final_status == JobStatus.PARTIAL_SUCCESS:
                 partial_jobs += 1
             elif final_status == JobStatus.FAILED:
@@ -284,7 +285,7 @@ class ResultImporterService:
 
         if tracker_context.tracker_type == TrackerType.CATEGORY and normalized.records:
             category_unique_asin_count = _count_unique_asins(normalized.records)
-            target_unique_count = tracker_context.category_top_n or 50
+            target_unique_count = tracker_context.category_top_n or 100
             next_max_pages = _next_category_search_max_pages(
                 current_max_pages=_current_category_search_max_pages(
                     run_document,
@@ -319,40 +320,28 @@ class ResultImporterService:
 
         if tracker_context.tracker_type == TrackerType.CATEGORY and normalized.records:
             null_asins = _detect_asins_with_nulls(normalized.records)
-            if null_asins:
-                enrichment_started = perf_counter()
+            if null_asins and job_document.pool_code:
+                fallback_started = perf_counter()
                 logger.info(
-                    "Triggering junglee enrichment for null-field ASINs.",
+                    "Triggering pool fallback for null-field ASINs.",
                     extra={
                         "context": correlation_context(
                             tracker_code=job_document.tracker_code,
                             asins_count=len(null_asins),
+                            pool_code=job_document.pool_code,
                         )
                     },
                 )
-                enriched_records = await _enrich_with_junglee(
-                    gateway=self.gateway,
-                    asins=null_asins[:ENRICHMENT_MAX_ASINS_PER_BATCH],
-                    marketplace=tracker_context.marketplace,
+                normalized = await self._try_pool_fallback(
+                    job_document=job_document,
+                    current_records=normalized.records,
+                    run_document=run_document,
+                    tracker_context=tracker_context,
                 )
-                if enriched_records:
-                    enriched_by_asin = {r.asin: r for r in enriched_records}
-                    merged_records = []
-                    for record in normalized.records:
-                        if record.asin in enriched_by_asin:
-                            merged_records.append(
-                                _merge_record(record, enriched_by_asin[record.asin])
-                            )
-                        else:
-                            merged_records.append(record)
-                    normalized = NormalizationResult(
-                        records=merged_records,
-                        invalid_count=normalized.invalid_count,
-                    )
-                enrichment_latency_ms = (perf_counter() - enrichment_started) * 1000.0
+                fallback_latency_ms = (perf_counter() - fallback_started) * 1000.0
                 metrics.observe(
-                    "enrichment_latency_ms",
-                    enrichment_latency_ms,
+                    "pool_fallback_latency_ms",
+                    fallback_latency_ms,
                     workspace_id=job_document.workspace_id,
                     tracker_code=job_document.tracker_code,
                     job_code=job_document.job_code,
@@ -404,7 +393,7 @@ class ResultImporterService:
         elif (
             tracker_context.tracker_type == TrackerType.CATEGORY
             and normalized.records
-            and (tracker_context.category_top_n or 50)
+            and (tracker_context.category_top_n or 100)
             > (category_unique_asin_count or 0)
         ):
             final_status = JobStatus.PARTIAL_SUCCESS
@@ -412,8 +401,8 @@ class ResultImporterService:
                 code="CATEGORY_UNIQUE_INSUFFICIENT",
                 message=(
                     f"Collected only {category_unique_asin_count or 0} unique ASINs for target "
-                    f"top {tracker_context.category_top_n or 50} after reaching "
-                    f"max_pages={_current_category_search_max_pages(run_document, fallback_top_n=tracker_context.category_top_n or 50)}."
+                    f"top {tracker_context.category_top_n or 100} after reaching "
+                    f"max_pages={_current_category_search_max_pages(run_document, fallback_top_n=tracker_context.category_top_n or 100)}."
                 ),
             )
         elif normalized.invalid_count > 0 and expected_items > 0:
@@ -658,6 +647,153 @@ class ResultImporterService:
             tracker_type=tracker_type,
             marketplace=tracker_document.marketplace,
         )
+
+    async def _try_pool_fallback(
+        self,
+        *,
+        job_document: JobDocument,
+        current_records: list[NormalizedProductRecord],
+        run_document: ApifyRunDocument,
+        tracker_context: TrackerContext,
+    ) -> NormalizationResult:
+        pool_code = job_document.pool_code
+        if not pool_code:
+            return NormalizationResult(records=current_records, invalid_count=0)
+
+        try:
+            pool = self.gateway.resolve_pool(pool_code)
+        except Exception:
+            logger.warning(
+                "Could not resolve pool for fallback.",
+                extra={"pool_code": pool_code},
+            )
+            return NormalizationResult(records=current_records, invalid_count=0)
+
+        current_index = job_document.current_pool_index or 0
+
+        for next_index in range(current_index + 1, len(pool)):
+            entry = pool[next_index]
+
+            binding_code = f"{pool_code}:{next_index}"
+            run_input = dict(run_document.run_input or {})
+
+            try:
+                launch = await self.gateway.start_run(
+                    binding_code, run_input, webhooks=self._build_run_webhooks()
+                )
+            except (ApifyRunStartError, Exception) as exc:
+                logger.warning(
+                    "Pool fallback dispatch failed, trying next.",
+                    extra={
+                        "actor_id": entry.actor_id,
+                        "pool_code": pool_code,
+                        "error": str(exc),
+                    },
+                )
+                metrics.increment(
+                    "apify_pool_actor_dispatch_failed_total",
+                    1.0,
+                    pool_code=pool_code,
+                    actor_id=entry.actor_id or "",
+                    error_type=type(exc).__name__,
+                )
+                continue
+
+            new_run = ApifyRunDocument(
+                workspace_id=job_document.workspace_id,
+                tracking_job_code=job_document.job_code,
+                provider=job_document.run_strategy.provider,
+                binding_code=launch.binding.binding_code,
+                actor_ref=launch.binding.actor_id,
+                task_ref=launch.binding.task_id,
+                apify_run_id=launch.provider_run_id,
+                default_dataset_id=launch.default_dataset_id,
+                run_input=launch.run_input,
+                input_hash=launch.input_hash,
+                status=(launch.status or ExternalRunStatus.READY).value,
+                apify_status_raw=launch.raw_status,
+                origin="POOL_FALLBACK",
+                pool_actor_id=entry.actor_id,
+                pool_actor_name=entry.name,
+                pool_index=next_index,
+                started_at=coerce_datetime(launch.started_at),
+                finished_at=coerce_datetime(launch.finished_at),
+                poll_count=0,
+                created_at=utc_now(),
+                updated_at=utc_now(),
+            )
+            await new_run.insert()
+
+            job_document.current_pool_index = next_index
+            await job_document.save()
+
+            metrics.increment(
+                "apify_pool_actor_dispatch_total",
+                1.0,
+                pool_code=pool_code,
+                actor_id=entry.actor_id or "",
+                pool_index=next_index,
+                result="dispatched",
+            )
+
+            if launch.status not in {
+                ExternalRunStatus.SUCCEEDED,
+                ExternalRunStatus.READY,
+                ExternalRunStatus.RUNNING,
+            }:
+                logger.info(
+                    "Pool fallback run did not succeed, trying next.",
+                    extra={
+                        "pool_code": pool_code,
+                        "actor_id": entry.actor_id,
+                        "status": str(launch.status),
+                    },
+                )
+                continue
+
+            if launch.status != ExternalRunStatus.SUCCEEDED:
+                logger.info(
+                    "Pool fallback run still running, waiting for completion.",
+                    extra={
+                        "pool_code": pool_code,
+                        "apify_run_id": launch.provider_run_id,
+                    },
+                )
+                continue
+
+            raw_items, _ = await self._load_or_import_raw_items(
+                workspace_id=job_document.workspace_id,
+                job_document=job_document,
+                run_document=new_run,
+            )
+
+            fallback_normalized = self.normalization_service.normalize_items(
+                tracker_type=tracker_context.tracker_type,
+                marketplace=tracker_context.marketplace,
+                raw_items=raw_items,
+            )
+
+            merged_records = _merge_records(current_records, fallback_normalized.records)
+
+            if not any(_has_null_critical_fields(r) for r in merged_records):
+                metrics.increment(
+                    "apify_pool_fallback_completed_total",
+                    1.0,
+                    pool_code=pool_code,
+                )
+                return NormalizationResult(
+                    records=merged_records,
+                    invalid_count=fallback_normalized.invalid_count,
+                )
+
+            current_records = merged_records
+
+        metrics.increment(
+            "apify_pool_fallback_exhausted_total",
+            1.0,
+            pool_code=pool_code,
+        )
+        return NormalizationResult(records=current_records, invalid_count=0)
 
     async def _redispatch_category_run(
         self,
@@ -924,6 +1060,7 @@ async def _trigger_deals_job_after_category(
     run_strategy = JobRunStrategy(
         provider="APIFY",
         binding_code="bind_deals_v1",
+        pool_code="deals",
     )
 
     deals_job = JobDocument(
@@ -1022,7 +1159,7 @@ async def _process_deals_import(
             "Deals run document not found, dispatching deals scrape.",
             extra={"context": correlation_context(job_code=job_document.job_code)},
         )
-        return await _dispatch_deals_run(job_document, gateway, config)
+        return await _dispatch_deals_run(job_document, gateway, config, marketplace)
 
     if run_document.status != ExternalRunStatus.SUCCEEDED.value:
         logger.info(
@@ -1091,16 +1228,23 @@ async def _dispatch_deals_run(
     job_document: JobDocument,
     gateway: ApifyGateway,
     config: ApifyConfig,
+    marketplace: str = "amazon_us",
 ) -> JobStatus:
     workspace_id = job_document.workspace_id
 
     run_input = {
         "maxResults": config.deals_max_results,
-        "geo": "US",
+        "geo": _marketplace_to_geo(marketplace),
     }
 
+    binding_code = "deals:0"
+    try:
+        gateway.resolve_pool("deals")
+    except Exception:
+        binding_code = "bind_deals_v1"
+
     launch = await gateway.start_run(
-        "bind_deals_v1",
+        binding_code,
         run_input,
     )
 
@@ -1207,46 +1351,64 @@ def _detect_asins_with_nulls(
 ) -> list[str]:
     null_asins: list[str] = []
     for record in records:
-        has_null_price = record.price_current is None
-        has_null_rating = record.rating_value is None
-        has_null_reviews = record.review_count is None
-        if has_null_price or has_null_rating or has_null_reviews:
+        if _has_null_critical_fields(record):
             null_asins.append(record.asin)
     return null_asins
 
 
-def _merge_record(
-    original: NormalizedProductRecord,
-    enriched: NormalizedProductRecord,
-) -> NormalizedProductRecord:
-    return NormalizedProductRecord(
-        marketplace=original.marketplace,
-        asin=original.asin,
-        rank_position=original.rank_position or enriched.rank_position,
-        captured_at=original.captured_at,
-        brand=original.brand if original.brand != "Unknown" else enriched.brand,
-        title=original.title if original.title != original.asin else enriched.title,
-        product_url=original.product_url,
-        main_image_url=original.main_image_url
-        or enriched.main_image_url,
-        title_hash=original.title_hash,
-        main_image_hash=original.main_image_hash,
-        bsr_position=original.bsr_position or enriched.bsr_position,
-        price_current=original.price_current or enriched.price_current,
-        price_original=original.price_original or enriched.price_original,
-        currency=original.currency or enriched.currency,
-        coupon_text=original.coupon_text or enriched.coupon_text,
-        availability_status=original.availability_status,
-        buy_box_status=original.buy_box_status,
-        buy_box_seller_name=original.buy_box_seller_name
-        or enriched.buy_box_seller_name,
-        rating_value=original.rating_value or enriched.rating_value,
-        review_count=original.review_count or enriched.review_count,
-        variation_count=original.variation_count or enriched.variation_count,
-        deal_info=original.deal_info or enriched.deal_info,
-        source_batch_no=original.source_batch_no,
-        source_item_index=original.source_item_index,
+def _has_null_critical_fields(record: NormalizedProductRecord) -> bool:
+    return (
+        record.price_current is None
+        or record.rating_value is None
+        or record.review_count is None
     )
+
+
+def _merge_records(
+    base: list[NormalizedProductRecord],
+    overlay: list[NormalizedProductRecord],
+) -> list[NormalizedProductRecord]:
+    overlay_by_asin = {r.asin: r for r in overlay}
+    merged: list[NormalizedProductRecord] = []
+    for record in base:
+        if record.asin in overlay_by_asin:
+            o = overlay_by_asin[record.asin]
+            merged.append(
+                NormalizedProductRecord(
+                    marketplace=record.marketplace,
+                    asin=record.asin,
+                    rank_position=record.rank_position or o.rank_position,
+                    captured_at=record.captured_at,
+                    brand=record.brand
+                    if record.brand not in (None, "Unknown")
+                    else o.brand,
+                    title=record.title
+                    if record.title != record.asin
+                    else o.title,
+                    product_url=record.product_url or o.product_url,
+                    main_image_url=record.main_image_url or o.main_image_url,
+                    title_hash=record.title_hash,
+                    main_image_hash=record.main_image_hash,
+                    bsr_position=record.bsr_position or o.bsr_position,
+                    price_current=record.price_current or o.price_current,
+                    price_original=record.price_original or o.price_original,
+                    currency=record.currency or o.currency,
+                    coupon_text=record.coupon_text or o.coupon_text,
+                    availability_status=record.availability_status,
+                    buy_box_status=record.buy_box_status,
+                    buy_box_seller_name=record.buy_box_seller_name
+                    or o.buy_box_seller_name,
+                    rating_value=record.rating_value or o.rating_value,
+                    review_count=record.review_count or o.review_count,
+                    variation_count=record.variation_count or o.variation_count,
+                    deal_info=record.deal_info or o.deal_info,
+                    source_batch_no=record.source_batch_no,
+                    source_item_index=record.source_item_index,
+                )
+            )
+        else:
+            merged.append(record)
+    return merged
 
 
 async def _enrich_with_junglee(
@@ -1331,3 +1493,19 @@ def _marketplace_to_amazon_domain(marketplace: str) -> str:
         "amazon_in": "www.amazon.in",
     }
     return mapping.get(marketplace, "www.amazon.com")
+
+
+def _marketplace_to_geo(marketplace: str) -> str:
+    mapping = {
+        "amazon_us": "US",
+        "amazon_uk": "UK",
+        "amazon_de": "DE",
+        "amazon_fr": "FR",
+        "amazon_es": "ES",
+        "amazon_it": "IT",
+        "amazon_ca": "CA",
+        "amazon_jp": "JP",
+        "amazon_au": "AU",
+        "amazon_in": "IN",
+    }
+    return mapping.get(marketplace, "US")
