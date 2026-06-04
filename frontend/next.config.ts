@@ -1,19 +1,12 @@
 import type { NextConfig } from "next";
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "/market-tracker";
+
 const nextConfig: NextConfig = {
   output: "standalone",
 
-  basePath: "/market-tracker",
-  assetPrefix: "/market-tracker/",
-
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: "http://217.216.34.228:8000/:path*",
-      },
-    ];
-  },
+  basePath: BASE_PATH,
+  assetPrefix: `${BASE_PATH}/`,
 };
 
 export default nextConfig;

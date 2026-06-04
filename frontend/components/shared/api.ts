@@ -13,7 +13,7 @@ import type {
   CompetitorAlertCounts,
 } from "./types"
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/market-tracker/api"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_BASE_PATH || "/market-tracker"}/api`
 const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID || "ws_demo_us"
 const API_PREFIX = `${BASE_URL}/v1/workspaces/${WORKSPACE_ID}`
 

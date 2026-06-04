@@ -253,9 +253,19 @@ export const EventsPage = () => {
         {!loading && error && events.length === 0 && (
           <div style={{ textAlign: "center", padding: 24, color: T.red, fontSize: 12 }}>{error}</div>
         )}
-        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading events...</div>}
+        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading events…</div>}
         {!loading && events.length === 0 && (
-          <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No events match this filter</div>
+          <div style={{ textAlign: "center", padding: "40px 0", color: T.text3 }}>
+            <Filter size={32} style={{ margin: "0 auto 12px", opacity: 0.25 }} />
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.text2, marginBottom: 4 }}>
+              {filterType || filterSeverity || datePreset !== "all" ? "No events match this filter" : "No events yet"}
+            </div>
+            <div style={{ fontSize: 11, color: T.text3 }}>
+              {filterType || filterSeverity || datePreset !== "all"
+                ? "Try adjusting or clearing the filters above."
+                : "Events appear here once your trackers start running."}
+            </div>
+          </div>
         )}
         {!loading && events.map(ev => {
           const meta = AlertTypeMeta(ev.event_type)
