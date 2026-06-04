@@ -50,7 +50,7 @@ services:
       - NODE_ENV=production
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/market-tracker || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000${BASE_PATH:-/market-tracker} || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -93,7 +93,7 @@ services:
     volumes:
       - mongo_data_staging:/data/db
     ports:
-      - "27019:27017"
+      - "${MONGO_HOST_PORT:-27019}:27017"
     networks:
       - market-tracker-network-staging
 
@@ -104,7 +104,7 @@ services:
     volumes:
       - redis_data_staging:/data
     ports:
-      - "6381:6379"
+      - "${REDIS_HOST_PORT:-6381}:6379"
     expose:
       - 6379
     healthcheck:
@@ -140,7 +140,7 @@ services:
     <<: *airflow-common
     command: api-server
     ports:
-      - "8090:8080"
+      - "${AIRFLOW_HOST_PORT:-8090}:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
       interval: 30s
