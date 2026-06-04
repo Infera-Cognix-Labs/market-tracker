@@ -64,10 +64,15 @@ class RunOrchestrator:
 
         try:
             tracker_document = await self._load_tracker(workspace_id, job_document)
+
+            pool_code = job_document.pool_code
             binding_code = job_document.run_strategy.binding_code
-            if not binding_code:
+
+            if pool_code:
+                binding_code = f"{pool_code}:0"
+            elif not binding_code:
                 raise ApifyBindingResolutionError(
-                    f"Job `{job_document.job_code}` is missing an Apify binding_code."
+                    f"Job `{job_document.job_code}` is missing an Apify binding_code or pool_code."
                 )
 
             job_document.status = JobStatus.DISPATCHING
@@ -108,6 +113,9 @@ class RunOrchestrator:
                 status=(launch.status or ExternalRunStatus.READY).value,
                 apify_status_raw=launch.raw_status,
                 origin="API",
+                pool_actor_id=launch.pool_actor_id,
+                pool_actor_name=launch.pool_actor_name,
+                pool_index=launch.pool_index,
                 started_at=coerce_datetime(launch.started_at),
                 finished_at=coerce_datetime(launch.finished_at),
                 poll_count=0,
@@ -123,6 +131,8 @@ class RunOrchestrator:
                 or job_document.started_at,
                 finished_at=coerce_datetime(launch.finished_at),
             )
+            if launch.pool_index is not None:
+                job_document.current_pool_index = launch.pool_index
             if launch.status in TERMINAL_APIFY_SUCCEEDED_STATUSES:
                 job_document.status = JobStatus.IMPORTING
                 job_document.error = None
@@ -318,7 +328,7 @@ def _marketplace_to_amazon_domain(marketplace: str) -> str:
 
 
 def _category_search_max_pages(top_n: int) -> int:
-    # Search result pages usually expose far fewer than 50 organic products,
-    # so 1 page is not enough to reliably build a top-50 snapshot.
+    # Search result pages usually expose far fewer than 100 organic products,
+    # so 1 page is not enough to reliably build a top-100 snapshot.
     estimated_items_per_page = 16
     return max(1, min(10, math.ceil(top_n / estimated_items_per_page)))

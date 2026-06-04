@@ -173,7 +173,10 @@ def product_doc_to_model(document: ProductDocument) -> ProductDetail:
 
 def job_doc_to_model(document: JobDocument) -> Job:
     return Job.model_validate(
-        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+        document.model_dump(
+            exclude={"id", "workspace_id", "pool_code", "current_pool_index"},
+            mode="python",
+        )
     )
 
 

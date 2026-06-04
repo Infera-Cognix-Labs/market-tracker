@@ -1,4 +1,5 @@
 from app.integrations.apify_gateway import (
+    ActorPoolEntry,
     ApifyBindingResolutionError,
     ApifyGateway,
     ApifyGatewayError,
@@ -9,6 +10,7 @@ from app.integrations.apify_gateway import (
 )
 
 __all__ = [
+    "ActorPoolEntry",
     "ApifyBindingResolutionError",
     "ApifyGateway",
     "ApifyGatewayError",

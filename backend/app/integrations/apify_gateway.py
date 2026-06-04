@@ -8,7 +8,7 @@ from typing import Any
 
 from apify_client import ApifyClient
 
-from app.config.config import ApifyConfig
+from app.config.config import ApifyConfig, InputAdapterConfig
 from app.models.api import ExternalRunStatus
 
 
@@ -33,6 +33,18 @@ class ApifyDatasetLookupError(ApifyGatewayError):
 
 
 @dataclass(frozen=True)
+class ActorPoolEntry:
+    index: int
+    actor_id: str | None
+    task_id: str | None
+    name: str | None
+    build: str | None
+    memory_mbytes: int | None
+    adapter_name: str | None
+    input_adapter: InputAdapterConfig | None
+
+
+@dataclass(frozen=True)
 class ApifyBindingTarget:
     binding_code: str
     actor_name: str | None
@@ -53,6 +65,9 @@ class ApifyRunLaunch:
     input_hash: str
     binding: ApifyBindingTarget
     run_input: dict[str, object]
+    pool_actor_id: str | None = None
+    pool_actor_name: str | None = None
+    pool_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +135,52 @@ class ApifyGateway:
             f"Unsupported Apify binding_code `{binding_code}`."
         )
 
+    def resolve_pool(self, pool_code: str) -> list[ActorPoolEntry]:
+        pools = self.config.actor_pools
+        entries_config = pools.get(pool_code)
+        if not entries_config:
+            raise ApifyBindingResolutionError(
+                f"Unknown actor pool `{pool_code}`."
+            )
+        result: list[ActorPoolEntry] = []
+        for idx, entry in enumerate(entries_config):
+            if not entry.enabled:
+                continue
+            result.append(
+                ActorPoolEntry(
+                    index=idx,
+                    actor_id=entry.actor_id,
+                    task_id=entry.task_id,
+                    name=entry.name,
+                    build=entry.build,
+                    memory_mbytes=entry.memory_mbytes,
+                    adapter_name=entry.adapter,
+                    input_adapter=entry.input_adapter,
+                )
+            )
+        return result
+
+    def _apply_adapter(
+        self, entry: ActorPoolEntry, run_input: dict[str, object]
+    ) -> dict[str, object]:
+        if not entry.input_adapter or not entry.input_adapter.field_map:
+            return dict(run_input)
+        adapted = dict(run_input)
+        for source_key, target_key in entry.input_adapter.field_map.items():
+            if source_key in adapted:
+                adapted[target_key] = adapted.pop(source_key)
+        return adapted
+
+    @staticmethod
+    def _parse_binding(binding_code: str) -> tuple[str, int]:
+        if ":" in binding_code:
+            pool_code, index_str = binding_code.rsplit(":", 1)
+            try:
+                return pool_code, int(index_str)
+            except ValueError:
+                pass
+        return binding_code, 0
+
     async def start_run(
         self,
         binding_code: str,
@@ -130,18 +191,49 @@ class ApifyGateway:
         if not self.config.token:
             raise ApifyBindingResolutionError("Missing APIFY_TOKEN for Apify dispatch.")
 
-        binding = self.resolve_binding(binding_code)
-        if not binding.actor_id and not binding.task_id:
-            raise ApifyBindingResolutionError(
-                f"Missing actor/task configuration for binding `{binding_code}`."
+        pool_index: int | None = None
+        pool_actor_id: str | None = None
+        pool_actor_name: str | None = None
+
+        if ":" in binding_code and not binding_code.startswith("bind_"):
+            pool_code, idx = self._parse_binding(binding_code)
+            pool = self.resolve_pool(pool_code)
+            if idx >= len(pool):
+                raise ApifyBindingResolutionError(
+                    f"Pool index {idx} out of range for pool `{pool_code}` "
+                    f"(size={len(pool)})."
+                )
+            entry = pool[idx]
+            pool_index = idx
+            pool_actor_id = entry.actor_id
+            pool_actor_name = entry.name
+            adapted_input = self._apply_adapter(entry, run_input)
+            binding = ApifyBindingTarget(
+                binding_code=binding_code,
+                actor_name=entry.name,
+                actor_id=entry.actor_id,
+                task_id=entry.task_id,
+                build=entry.build,
+                memory_mbytes=entry.memory_mbytes,
             )
+            if not binding.actor_id and not binding.task_id:
+                raise ApifyBindingResolutionError(
+                    f"Missing actor/task configuration for pool entry `{pool_code}:{idx}`."
+                )
+        else:
+            binding = self.resolve_binding(binding_code)
+            if not binding.actor_id and not binding.task_id:
+                raise ApifyBindingResolutionError(
+                    f"Missing actor/task configuration for binding `{binding_code}`."
+                )
+            adapted_input = dict(run_input)
 
         input_hash = hashlib.sha256(
-            json.dumps(run_input, sort_keys=True, default=str).encode("utf-8")
+            json.dumps(adapted_input, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
         try:
             run = await asyncio.to_thread(
-                self._start_run_sync, binding, run_input, webhooks
+                self._start_run_sync, binding, adapted_input, webhooks
             )
         except (
             Exception
@@ -157,7 +249,10 @@ class ApifyGateway:
             finished_at=run.get("finishedAt"),
             input_hash=input_hash,
             binding=binding,
-            run_input=run_input,
+            run_input=adapted_input,
+            pool_actor_id=pool_actor_id,
+            pool_actor_name=pool_actor_name,
+            pool_index=pool_index,
         )
 
     async def get_run(self, run_id: str) -> ApifyRunState:

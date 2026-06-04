@@ -162,15 +162,15 @@ def create_container(config: Config) -> Container:
         )
 
     factories = {
-        ApifyGateway: create_apify_gateway,
-        LocalObjectStorageService: create_object_storage,
+        ApifyGateway: create_apify_gateway_singleton,
+        LocalObjectStorageService: create_object_storage_singleton,
         NormalizationService: create_normalization_service,
         SnapshotService: create_snapshot_service,
-        DiffService: create_diff_service,
+        DiffService: create_diff_service_singleton,
         TrackerManagementService: create_tracker_management,
         DashboardQueryService: create_dashboard_query,
         DigestService: create_digest_service,
-        RunOrchestrator: create_run_orchestrator,
+        RunOrchestrator: create_run_orchestrator_singleton,
         EventEngine: create_event_engine,
         JobService: create_job_service,
         ResultImporterService: create_result_importer,

@@ -158,7 +158,7 @@ class CategoryScope(ApiModel):
 
 
 class CategoryTrackingConfig(ApiModel):
-    top_n: int = Field(default=50)
+    top_n: int = Field(default=100)
     top10_alert_enabled: bool
 
 
@@ -256,7 +256,7 @@ class CategorySnapshot(ApiModel):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 50
+    top_n: int = 100
     products: list[CategorySnapshotProduct]
     summary: CategorySnapshotSummary
     source_refs: dict[str, Any] | None = None
@@ -492,6 +492,7 @@ class JobSummary(ApiModel):
 class JobRunStrategy(ApiModel):
     provider: Provider
     binding_code: str | None = None
+    pool_code: str | None = None
 
 
 class ExternalRunSummary(ApiModel):
