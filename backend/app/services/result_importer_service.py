@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -37,7 +36,6 @@ from app.services.normalization_service import (
     NormalizedProductRecord,
     NormalizationResult,
     RawImportedItem,
-    normalize_junglee_item,
 )
 from app.services.object_storage_service import LocalObjectStorageService
 from app.services.run_orchestrator import coerce_datetime
@@ -46,9 +44,6 @@ from app.services.snapshot_service import SnapshotService
 logger = get_logger(__name__)
 metrics = get_metrics()
 MAX_CATEGORY_SEARCH_PAGES = 10
-ENRICHMENT_MAX_ASINS_PER_BATCH = 200
-ENRICHMENT_POLL_INTERVAL_SECS = 5
-ENRICHMENT_POLL_MAX_ATTEMPTS = 24
 
 
 @dataclass(frozen=True)
@@ -703,9 +698,9 @@ class ResultImporterService:
                 workspace_id=job_document.workspace_id,
                 tracking_job_code=job_document.job_code,
                 provider=job_document.run_strategy.provider,
-                binding_code=launch.binding.binding_code,
-                actor_ref=launch.binding.actor_id,
-                task_ref=launch.binding.task_id,
+                binding_code=f"{pool_code}:{next_index}",
+                actor_ref=entry.actor_id,
+                task_ref=entry.task_id,
                 apify_run_id=launch.provider_run_id,
                 default_dataset_id=launch.default_dataset_id,
                 run_input=launch.run_input,
@@ -804,14 +799,14 @@ class ResultImporterService:
         current_unique_count: int,
         next_max_pages: int,
     ) -> JobStatus:
-        binding_code = job_document.run_strategy.binding_code
-        if not binding_code:
+        pool_code = job_document.pool_code
+        if not pool_code:
             await self._mark_failed(
                 job_document,
-                code="MISSING_BINDING_CODE",
+                code="MISSING_POOL_CODE",
                 message=(
                     f"Cannot expand category crawl for job `{job_document.job_code}` "
-                    "because binding_code is missing."
+                    "because pool_code is missing."
                 ),
             )
             return JobStatus.FAILED
@@ -819,6 +814,7 @@ class ResultImporterService:
         run_input = dict(run_document.run_input or {})
         run_input["max_pages"] = next_max_pages
 
+        binding_code = f"{pool_code}:{job_document.current_pool_index or 0}"
         launch = await self.gateway.start_run(
             binding_code,
             run_input,
@@ -828,7 +824,7 @@ class ResultImporterService:
             workspace_id=job_document.workspace_id,
             tracking_job_code=job_document.job_code,
             provider=job_document.run_strategy.provider,
-            binding_code=launch.binding.binding_code,
+            binding_code=binding_code,
             actor_ref=launch.binding.actor_id,
             task_ref=launch.binding.task_id,
             apify_run_id=launch.provider_run_id,
@@ -1059,7 +1055,6 @@ async def _trigger_deals_job_after_category(
 
     run_strategy = JobRunStrategy(
         provider="APIFY",
-        binding_code="bind_deals_v1",
         pool_code="deals",
     )
 
@@ -1238,10 +1233,6 @@ async def _dispatch_deals_run(
     }
 
     binding_code = "deals:0"
-    try:
-        gateway.resolve_pool("deals")
-    except Exception:
-        binding_code = "bind_deals_v1"
 
     launch = await gateway.start_run(
         binding_code,
@@ -1252,9 +1243,9 @@ async def _dispatch_deals_run(
         workspace_id=workspace_id,
         tracking_job_code=job_document.job_code,
         provider="APIFY",
-        binding_code="bind_deals_v1",
-        actor_ref=config.deals_actor_id,
-        task_ref=config.deals_task_id,
+        binding_code=binding_code,
+        actor_ref=launch.binding.actor_id,
+        task_ref=launch.binding.task_id,
         apify_run_id=launch.provider_run_id,
         default_dataset_id=launch.default_dataset_id,
         run_input=launch.run_input,
@@ -1409,74 +1400,6 @@ def _merge_records(
         else:
             merged.append(record)
     return merged
-
-
-async def _enrich_with_junglee(
-    *,
-    gateway: ApifyGateway,
-    asins: list[str],
-    marketplace: str,
-) -> list[NormalizedProductRecord]:
-    amazon_domain = _marketplace_to_amazon_domain(marketplace)
-    if amazon_domain.startswith("www."):
-        amazon_domain = amazon_domain[4:]
-
-    run_input: dict[str, object] = {
-        "asins": asins,
-        "amazonDomain": amazon_domain,
-        "language": "en",
-        "proxyCountry": "AUTO_SELECT_PROXY_COUNTRY",
-        "useCaptchaSolver": False,
-    }
-
-    try:
-        launch = await gateway.start_run(
-            "bind_category_enrichment_v1",
-            run_input,
-        )
-    except Exception:
-        logger.exception("Failed to start junglee enrichment run.")
-        return []
-
-    if launch.status != ExternalRunStatus.SUCCEEDED:
-        logger.warning(
-            "Junglee enrichment run did not start successfully.",
-            extra={"status": str(launch.status)},
-        )
-        return []
-
-    run_id = launch.provider_run_id
-    for _ in range(ENRICHMENT_POLL_MAX_ATTEMPTS):
-        await asyncio.sleep(ENRICHMENT_POLL_INTERVAL_SECS)
-        state = await gateway.get_run(run_id)
-        if state.status == ExternalRunStatus.SUCCEEDED:
-            break
-        if state.status in {
-            ExternalRunStatus.FAILED,
-            ExternalRunStatus.TIMED_OUT,
-            ExternalRunStatus.ABORTED,
-        }:
-            logger.warning(
-                "Junglee enrichment run failed.",
-                extra={"status": str(state.status)},
-            )
-            return []
-
-    dataset_id = launch.default_dataset_id
-    if not dataset_id:
-        return []
-
-    items_batch = await gateway.list_dataset_items(
-        dataset_id, limit=ENRICHMENT_MAX_ASINS_PER_BATCH
-    )
-
-    records: list[NormalizedProductRecord] = []
-    for item in items_batch.items:
-        record = normalize_junglee_item(item, marketplace)
-        if record is not None:
-            records.append(record)
-
-    return records
 
 
 def _marketplace_to_amazon_domain(marketplace: str) -> str:

@@ -11,7 +11,6 @@ from app.core.utils import utc_now
 from app.integrations.apify_gateway import (
     ApifyBindingResolutionError,
     ApifyGateway,
-    ApifyGatewayError,
 )
 from app.models.api import (
     ExternalRunStatus,
@@ -66,14 +65,12 @@ class RunOrchestrator:
             tracker_document = await self._load_tracker(workspace_id, job_document)
 
             pool_code = job_document.pool_code
-            binding_code = job_document.run_strategy.binding_code
-
-            if pool_code:
-                binding_code = f"{pool_code}:0"
-            elif not binding_code:
+            if not pool_code:
                 raise ApifyBindingResolutionError(
-                    f"Job `{job_document.job_code}` is missing an Apify binding_code or pool_code."
+                    f"Job `{job_document.job_code}` is missing a pool_code."
                 )
+
+            binding_code = f"{pool_code}:0"
 
             job_document.status = JobStatus.DISPATCHING
             job_document.started_at = job_document.started_at or utc_now()
@@ -103,7 +100,7 @@ class RunOrchestrator:
                 workspace_id=workspace_id,
                 tracking_job_code=job_document.job_code,
                 provider=job_document.run_strategy.provider,
-                binding_code=launch.binding.binding_code,
+                binding_code=binding_code,
                 actor_ref=launch.binding.actor_id,
                 task_ref=launch.binding.task_id,
                 apify_run_id=launch.provider_run_id,
@@ -179,7 +176,7 @@ class RunOrchestrator:
                 tracker_type=job_document.tracker_type,
                 binding_code=binding_code,
             )
-        except (ApifyGatewayError, NotFoundError, ValueError) as exc:
+        except Exception as exc:
             job_document.status = JobStatus.FAILED
             job_document.error = JobError(code=type(exc).__name__, message=str(exc))
             job_document.finished_at = utc_now()
@@ -238,28 +235,31 @@ class RunOrchestrator:
 
         if job.tracker_type == TrackerType.CATEGORY:
             top_n = max(1, tracker_document.tracking_config.top_n)
-            search_url = tracker_document.scope.browse_node_url
-            if not search_url and tracker_document.scope.browse_node_id:
-                amazon_domain = _marketplace_to_amazon_domain(
-                    tracker_document.marketplace
-                )
-                search_url = (
-                    f"https://{amazon_domain}/s"
-                    f"?i=specialty-aps&rh=n%3A{tracker_document.scope.browse_node_id}"
-                )
+            browse_node_url = tracker_document.scope.browse_node_url
+            browse_node_id = tracker_document.scope.browse_node_id
+            amazon_domain = _marketplace_to_amazon_domain(
+                tracker_document.marketplace
+            )
+
+            if browse_node_url:
+                search_url = browse_node_url
+            elif browse_node_id:
+                search_url = f"https://{amazon_domain}/s?i=specialty-aps&rh=n%3A{browse_node_id}"
+            else:
+                search_url = ""
 
             base_input.update(
                 {
                     "marketplace": tracker_document.marketplace,
-                    "browse_node_id": tracker_document.scope.browse_node_id,
-                    "browse_node_url": tracker_document.scope.browse_node_url,
+                    "marketplace_code": tracker_document.marketplace.split(".")[-1]
+                    if "." in tracker_document.marketplace
+                    else tracker_document.marketplace,
+                    "browse_node_id": browse_node_id,
+                    "browse_node_url": browse_node_url,
                     "top_n": top_n,
-                    # Keep actor-compatible keys while preserving native keys.
                     "search_url": search_url,
                     "max_pages": _category_search_max_pages(top_n),
-                    "amazon_domain": _marketplace_to_amazon_domain(
-                        tracker_document.marketplace
-                    ),
+                    "amazon_domain": amazon_domain,
                 }
             )
             return base_input
