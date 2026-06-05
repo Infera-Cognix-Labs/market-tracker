@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef, useReducer, Suspense } from "react"
+import { useSearchParams, useRouter, usePathname } from "next/navigation"
 import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, CheckCircle, AlertCircle } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
@@ -137,7 +138,7 @@ const eventToProduct = (event: Event): CategorySnapshotProduct => {
     rank_delta: rankDelta,
     rank_trend: rankTrend,
     title: prev?.title || event.title || "",
-    brand: prev?.brand || "",
+    brand: extractBrandName(prev?.brand || ""),
     product_url: prev?.price_current != null ? `https://www.${event.marketplace.replace("amazon_", "amazon.")}/dp/${event.asin}` : "",
     price_current: prev?.price_current ?? 0,
     price_original: prev?.price_original ?? null,
@@ -147,6 +148,8 @@ const eventToProduct = (event: Event): CategorySnapshotProduct => {
     image_url: prev?.main_image_url || "",
     availability_status: prev?.availability_status ?? "UNKNOWN",
     buy_box_status: prev?.buy_box_status ?? "UNKNOWN",
+    coupon_text: prev?.coupon_text ?? null,
+    deal_info: prev?.deal_info ?? null,
   }
 }
 
@@ -386,23 +389,66 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
   )
 }
 
-export const CategoryPage = () => {
+type EventsState = { events: Event[]; loading: boolean; error: string | null }
+type EventsAction =
+  | { type: "FETCH_START" }
+  | { type: "FETCH_OK"; events: Event[] }
+  | { type: "FETCH_ERR"; error: string }
+  | { type: "RESET" }
+
+function eventsReducer(state: EventsState, action: EventsAction): EventsState {
+  switch (action.type) {
+    case "FETCH_START": return { ...state, loading: true, error: null }
+    case "FETCH_OK": return { events: action.events, loading: false, error: null }
+    case "FETCH_ERR": return { events: [], loading: false, error: action.error }
+    case "RESET": return { events: [], loading: false, error: null }
+  }
+}
+
+export const CategoryPageInner = () => {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [trackers, setTrackers] = useState<CategoryTracker[]>([])
-  const [selectedCode, setSelectedCode] = useState<string>("")
+  const [selectedCode, setSelectedCode] = useState<string>(searchParams.get("tracker") ?? "")
   const [snapshot, setSnapshot] = useState<CategorySnapshot | null>(null)
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = useState(searchParams.get("search") ?? "")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
-  const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
+  const [rankTimeframe, setRankTimeframe] = useState<Timeframe>((searchParams.get("timeframe") as Timeframe) || "WEEKLY")
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
-  const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>("ALL")
-  const [movementEvents, setMovementEvents] = useState<Event[]>([])
-  const [justAdded, setJustAdded] = useState<string | null>(null)
+  const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>((searchParams.get("filter") as CategoryKpiFilter) || "ALL")
+  const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
+
+  const initialUrlTracker = useRef(searchParams.get("tracker"))
+
+  const updateUrlParams = useCallback((updates: Record<string, string>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === "" || v === null) params.delete(k)
+      else params.set(k, v)
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  }, [searchParams, router, pathname])
+
+  // Sync state to URL
+  useEffect(() => {
+    if (selectedCode) updateUrlParams({ tracker: selectedCode })
+  }, [selectedCode, updateUrlParams])
+  useEffect(() => {
+    updateUrlParams({ filter: activeKpiFilter === "ALL" ? "" : activeKpiFilter })
+  }, [activeKpiFilter, updateUrlParams])
+  useEffect(() => {
+    updateUrlParams({ search: search || "" })
+  }, [search, updateUrlParams])
+  useEffect(() => {
+    updateUrlParams({ timeframe: rankTimeframe === "WEEKLY" ? "" : rankTimeframe })
+  }, [rankTimeframe, updateUrlParams])
 
   // Load trackers
   useEffect(() => {
@@ -410,7 +456,9 @@ export const CategoryPage = () => {
       .then(res => {
         setTrackers(res.items)
         if (res.items.length > 0) {
-          const firstActive = res.items.find(t => t.status === "ACTIVE") ?? res.items[0]
+          const urlTracker = initialUrlTracker.current
+          const fromUrl = urlTracker ? res.items.find(t => t.tracker_code === urlTracker) : null
+          const firstActive = fromUrl ?? res.items.find(t => t.status === "ACTIVE") ?? res.items[0]
           setSelectedCode(firstActive.tracker_code)
         }
       })
@@ -431,9 +479,15 @@ export const CategoryPage = () => {
     return () => { cancelled = true }
   }, [selectedCode, rankTimeframe, refreshKey])
 
+  // Reset events when filter changes to ALL — handled by events useEffect returning early
+
   useEffect(() => {
-    if (!selectedCode || !snapshot?.snapshot_date) return
+    if (!selectedCode || !snapshot?.snapshot_date || activeKpiFilter === "ALL") {
+      dispatchEvents({ type: "RESET" })
+      return
+    }
     let cancelled = false
+    dispatchEvents({ type: "FETCH_START" })
     apiListEvents({
       tracker_type: "CATEGORY",
       tracker_code: selectedCode,
@@ -443,19 +497,20 @@ export const CategoryPage = () => {
     })
       .then(res => {
         if (cancelled) return
-        setMovementEvents(
-          res.items.filter(event => Object.values(CATEGORY_FILTER_TO_EVENT).includes(event.event_type))
-        )
+        dispatchEvents({
+          type: "FETCH_OK",
+          events: res.items.filter(event => Object.values(CATEGORY_FILTER_TO_EVENT).includes(event.event_type)),
+        })
       })
       .catch(() => {
         if (cancelled) return
-        setMovementEvents([])
+        dispatchEvents({ type: "FETCH_ERR", error: "Failed to load events" })
       })
 
     return () => {
       cancelled = true
     }
-  }, [selectedCode, snapshot?.snapshot_date])
+  }, [selectedCode, snapshot?.snapshot_date, activeKpiFilter])
 
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
@@ -477,7 +532,7 @@ export const CategoryPage = () => {
     }
 
     const eventType = CATEGORY_FILTER_TO_EVENT[activeKpiFilter]
-    const relevantEvents = movementEvents.filter(event => event.event_type === eventType)
+    const relevantEvents = eventsState.events.filter(event => event.event_type === eventType)
 
     if (activeKpiFilter === "EXITS") {
       return relevantEvents
@@ -504,20 +559,20 @@ export const CategoryPage = () => {
     return filteredProducts
       .filter(product => eventAsins.has(product.asin))
       .map(product => ({ kind: "product", key: `${product.asin}-${product.rank_position}`, product }))
-  }, [snapshot, activeKpiFilter, filteredProducts, movementEvents, search])
+  }, [snapshot, activeKpiFilter, filteredProducts, eventsState.events, search])
 
   const totalFilteredCount = useMemo(() => {
     if (!snapshot) return 0
     if (activeKpiFilter === "ALL") return snapshot.products.length
     const eventType = CATEGORY_FILTER_TO_EVENT[activeKpiFilter]
     if (activeKpiFilter === "EXITS" || activeKpiFilter === "EXIT_TOP10") {
-      return movementEvents.filter(event => event.event_type === eventType).length
+      return eventsState.events.filter(event => event.event_type === eventType).length
     }
     const eventAsins = new Set(
-      movementEvents.filter(event => event.event_type === eventType).map(event => event.asin)
+      eventsState.events.filter(event => event.event_type === eventType).map(event => event.asin)
     )
     return snapshot.products.filter(product => eventAsins.has(product.asin)).length
-  }, [snapshot, activeKpiFilter, movementEvents])
+  }, [snapshot, activeKpiFilter, eventsState.events])
 
 
   if (trackers.length === 0) return (
@@ -700,6 +755,20 @@ export const CategoryPage = () => {
         </div>
       )}
 
+      {/* Events loading/error banner */}
+      {eventsState.loading && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 8, borderRadius: 8, background: `${T.blue}12`, border: `1px solid ${T.blue}30`, fontSize: 12, color: T.blue }}>
+          <span className="dot-live" style={{ background: T.blue, animation: "pulse 1.5s infinite" }} />
+          Loading events...
+        </div>
+      )}
+      {eventsState.error && !eventsState.loading && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 8, borderRadius: 8, background: `${T.red}12`, border: `1px solid ${T.red}30`, fontSize: 12, color: T.red }}>
+          {eventsState.error}
+          <button onClick={() => setActiveKpiFilter(prev => prev)} style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 4, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 11, cursor: "pointer" }}>Retry</button>
+        </div>
+      )}
+
       {/* Products table */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
@@ -733,7 +802,7 @@ export const CategoryPage = () => {
             <table style={{ width: "100%", minWidth: 1260, borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Buy Box", "Deal", "Coupon"].map(h => (
+                  {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Deal", "Coupon"].map(h => (
                     <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -802,7 +871,11 @@ export const CategoryPage = () => {
                     {isExitFilter ? "—" : String(p.rank_position).padStart(2, "0")}
                   </td>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>
-                    {(() => {
+                    {isExitFilter ? (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: T.text3, fontStyle: "italic" }}>
+                        Historical
+                      </span>
+                    ) : (() => {
                       const meta = rankTrendMeta(p)
                       return (
                         <span title={p.comparison_snapshot_date ? `Previous: ${p.previous_rank_position ?? "not ranked"} on ${p.comparison_snapshot_date}` : "No comparison snapshot"}
@@ -854,9 +927,6 @@ export const CategoryPage = () => {
                   </td>
                   <td style={{ padding: "9px 10px" }}>
                     <Badge type={p.availability_status === "IN_STOCK" ? "listing" : "stock"} text={p.availability_status === "IN_STOCK" ? "In Stock" : p.availability_status === "OUT_OF_STOCK" ? "OOS" : p.availability_status} />
-                  </td>
-                  <td style={{ padding: "9px 10px" }}>
-                    <Badge type={p.buy_box_status === "HAS_BUY_BOX" ? "listing" : p.buy_box_status === "NO_BUY_BOX" ? "stock" : "info"} text={p.buy_box_status === "HAS_BUY_BOX" ? "Has BB" : p.buy_box_status === "NO_BUY_BOX" ? "No BB" : "—"} />
                   </td>
                   <td style={{ padding: "9px 10px", fontSize: 11, color: T.blue }}>
                     {(() => {
@@ -980,3 +1050,9 @@ export const CategoryPage = () => {
     </>
   )
 }
+
+export const CategoryPage = () => (
+  <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading...</div>}>
+    <CategoryPageInner />
+  </Suspense>
+)

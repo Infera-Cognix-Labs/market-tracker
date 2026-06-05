@@ -313,6 +313,21 @@ class SnapshotService:
         new_entrants = current_asins - previous_asins
         exits = previous_asins - current_asins
 
+        # Distinguish truly new ASINs from returning ones by checking historical snapshots.
+        returning_asins = set()
+        if new_entrants:
+            history_snapshots = await CategorySnapshotDocument.find(
+                CategorySnapshotDocument.workspace_id == workspace_id,
+                CategorySnapshotDocument.tracker_code == tracker_code,
+                CategorySnapshotDocument.snapshot_date < snapshot_date,
+            ).to_list()
+            historical_asins: set[str] = set()
+            for snap in history_snapshots:
+                for p in snap.products:
+                    historical_asins.add(p.asin)
+            returning_asins = new_entrants & historical_asins
+            new_entrants = new_entrants - returning_asins
+
         enter_top10 = current_top10_asins - previous_top10_asins
         exit_top10 = previous_top10_asins - current_top10_asins
 
@@ -331,7 +346,7 @@ class SnapshotService:
             "summary": CategorySnapshotSummary(
                 asin_count=len(products),
                 new_entrant_count=len(new_entrants),
-                returning_count=0,
+                returning_count=len(returning_asins),
                 exit_count=len(exits),
                 enter_top10_count=len(enter_top10),
                 exit_top10_count=len(exit_top10),

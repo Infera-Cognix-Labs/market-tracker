@@ -1,7 +1,0 @@
-{
-  "status": "PAUSED",
-  "schedule": {
-    "frequency": "DAILY",
-    "hour_utc": 8
-  }
-}

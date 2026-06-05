@@ -4,8 +4,6 @@ import json
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
-
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
@@ -164,56 +162,6 @@ def _config_bool(
     return default
 
 
-def _binding_config(binding_key: str) -> dict[str, object]:
-    file_config = _load_app_file_config()
-    apify_config = file_config.get("apify")
-    if isinstance(apify_config, dict):
-        bindings = apify_config.get("bindings")
-        if isinstance(bindings, dict):
-            section = bindings.get(binding_key)
-            if isinstance(section, dict):
-                return section
-
-    bindings = file_config.get("bindings")
-    if isinstance(bindings, dict):
-        section = bindings.get(binding_key)
-        if isinstance(section, dict):
-            return section
-
-    direct = file_config.get(binding_key)
-    if isinstance(direct, dict):
-        return direct
-    return {}
-
-
-def _binding_str(
-    binding_key: str, field: str, fallback_env: str | None = None
-) -> str | None:
-    section = _binding_config(binding_key)
-    value = section.get(field)
-    if isinstance(value, str) and value.strip() != "":
-        return value.strip()
-    if fallback_env:
-        env_value = os.getenv(fallback_env)
-        if env_value is not None and env_value.strip() != "":
-            return env_value.strip()
-    return None
-
-
-def _binding_int(
-    binding_key: str, field: str, fallback_env: str | None = None
-) -> int | None:
-    section = _binding_config(binding_key)
-    value: Any = section.get(field)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value.strip() != "":
-        return int(value)
-    if fallback_env:
-        return _env_int(fallback_env)
-    return None
-
-
 class MongoDBConfig(BaseModel):
     uri: str | None = Field(default_factory=lambda: os.getenv("MONGO_URI"))
     host: str = Field(default_factory=lambda: os.getenv("MONGO_HOST") or "localhost")
@@ -237,11 +185,6 @@ class MongoDBConfig(BaseModel):
 
 class ApifyConfig(BaseModel):
     token: str | None = _read_secret(env_name="APIFY_TOKEN")
-    dispatch_timeout_secs: int = _config_int(
-        ("apify", "dispatch_timeout_secs"),
-        300,
-        "APIFY_DISPATCH_TIMEOUT_SECS",
-    )
     webhook_url: str | None = _config_str(
         ("apify", "webhook_url"),
         None,
@@ -272,67 +215,89 @@ class ApifyConfig(BaseModel):
         30,
         "APIFY_IMPORT_WORKER_INTERVAL_SECS",
     )
-    category_actor_name: str | None = _binding_str("category", "name")
-    category_actor_id: str | None = _binding_str(
-        "category", "actor_id", "APIFY_CATEGORY_ACTOR_ID"
-    )
-    category_task_id: str | None = _binding_str(
-        "category", "task_id", "APIFY_CATEGORY_TASK_ID"
-    )
-    category_build: str | None = _binding_str(
-        "category", "build", "APIFY_CATEGORY_BUILD"
-    )
-    category_memory_mbytes: int | None = _binding_int(
-        "category", "memory_mbytes", "APIFY_CATEGORY_MEMORY_MBYTES"
-    )
-    competitor_actor_name: str | None = _binding_str("competitor", "name")
-    competitor_actor_id: str | None = _binding_str(
-        "competitor", "actor_id", "APIFY_COMPETITOR_ACTOR_ID"
-    )
-    competitor_task_id: str | None = _binding_str(
-        "competitor", "task_id", "APIFY_COMPETITOR_TASK_ID"
-    )
-    competitor_build: str | None = _binding_str(
-        "competitor", "build", "APIFY_COMPETITOR_BUILD"
-    )
-    competitor_memory_mbytes: int | None = _binding_int(
-        "competitor", "memory_mbytes", "APIFY_COMPETITOR_MEMORY_MBYTES"
-    )
-    deals_actor_name: str | None = _binding_str("deals", "name")
-    deals_actor_id: str | None = _binding_str("deals", "actor_id", "APIFY_DEALS_ACTOR_ID")
-    deals_task_id: str | None = _binding_str("deals", "task_id", "APIFY_DEALS_TASK_ID")
-    deals_build: str | None = _binding_str("deals", "build", "APIFY_DEALS_BUILD")
-    deals_memory_mbytes: int | None = _binding_int(
-        "deals", "memory_mbytes", "APIFY_DEALS_MEMORY_MBYTES"
-    )
     deals_max_results: int = _config_int(
         ("apify", "deals_max_results"),
         100,
         "APIFY_DEALS_MAX_RESULTS",
     )
-    category_enrichment_actor_name: str | None = _binding_str(
-        "category_enrichment", "name"
-    )
-    category_enrichment_actor_id: str | None = _binding_str(
-        "category_enrichment",
-        "actor_id",
-        "APIFY_CATEGORY_ENRICHMENT_ACTOR_ID",
-    )
-    category_enrichment_task_id: str | None = _binding_str(
-        "category_enrichment",
-        "task_id",
-        "APIFY_CATEGORY_ENRICHMENT_TASK_ID",
-    )
-    category_enrichment_build: str | None = _binding_str(
-        "category_enrichment",
-        "build",
-        "APIFY_CATEGORY_ENRICHMENT_BUILD",
-    )
-    category_enrichment_memory_mbytes: int | None = _binding_int(
-        "category_enrichment",
-        "memory_mbytes",
-        "APIFY_CATEGORY_ENRICHMENT_MEMORY_MBYTES",
-    )
+
+    @property
+    def actor_pools(self) -> dict[str, list[ActorPoolEntryConfig]]:
+        return _actor_pools_config()
+
+
+class InputAdapterConfig(BaseModel):
+    field_map: dict[str, str] = Field(default_factory=dict)
+    wrap_array: list[str] = Field(default_factory=list)
+    asin_to_url: str | None = None
+    static_fields: dict[str, object] = Field(default_factory=dict)
+
+
+class ActorPoolEntryConfig(BaseModel):
+    actor_id: str | None = None
+    task_id: str | None = None
+    name: str | None = None
+    adapter: str | None = None
+    build: str | None = "latest"
+    memory_mbytes: int | None = 4096
+    enabled: bool = True
+    priority: int = 0
+    input_adapter: InputAdapterConfig | None = None
+
+
+def _actor_pools_config() -> dict[str, list[ActorPoolEntryConfig]]:
+    file_config = _load_app_file_config()
+    apify_config = file_config.get("apify")
+    if not isinstance(apify_config, dict):
+        return {}
+
+    pools_raw = apify_config.get("actor_pools")
+    if not isinstance(pools_raw, dict):
+        return {}
+
+    result: dict[str, list[ActorPoolEntryConfig]] = {}
+    for pool_code, entries_raw in pools_raw.items():
+        if not isinstance(entries_raw, dict):
+            continue
+        entries: list[ActorPoolEntryConfig] = []
+        for entry_name, entry_raw in entries_raw.items():
+            if not isinstance(entry_raw, dict):
+                continue
+            input_adapter_raw = entry_raw.get("input_adapter")
+            input_adapter = None
+            if isinstance(input_adapter_raw, dict):
+                field_map = input_adapter_raw.get("field_map")
+                raw_wrap = input_adapter_raw.get("wrap_array")
+                wrap_array: list[str] = []
+                if isinstance(raw_wrap, str) and raw_wrap.strip():
+                    wrap_array = [f.strip() for f in raw_wrap.split(",") if f.strip()]
+                elif isinstance(raw_wrap, list):
+                    wrap_array = [str(f) for f in raw_wrap]
+                asin_to_url = input_adapter_raw.get("asin_to_url")
+                static_fields_raw = input_adapter_raw.get("static_fields")
+                input_adapter = InputAdapterConfig(
+                    field_map=field_map if isinstance(field_map, dict) else {},
+                    wrap_array=wrap_array,
+                    asin_to_url=asin_to_url if isinstance(asin_to_url, str) else None,
+                    static_fields=static_fields_raw
+                    if isinstance(static_fields_raw, dict)
+                    else {},
+                )
+            entries.append(
+                ActorPoolEntryConfig(
+                    actor_id=entry_raw.get("actor_id"),
+                    task_id=entry_raw.get("task_id"),
+                    name=entry_raw.get("name") or entry_name,
+                    adapter=entry_raw.get("adapter"),
+                    build=entry_raw.get("build", "latest"),
+                    memory_mbytes=entry_raw.get("memory_mbytes", 4096),
+                    enabled=entry_raw.get("enabled", True),
+                    priority=entry_raw.get("priority", 0),
+                    input_adapter=input_adapter,
+                )
+            )
+        result[pool_code] = sorted(entries, key=lambda e: e.priority)
+    return result
 
 
 class StorageConfig(BaseModel):
