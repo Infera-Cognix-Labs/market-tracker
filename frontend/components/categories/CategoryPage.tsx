@@ -424,6 +424,7 @@ export const CategoryPageInner = () => {
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
   const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>((searchParams.get("filter") as CategoryKpiFilter) || "ALL")
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
+  const [justAdded, setJustAdded] = useState<string | null>(null)
 
   const initialUrlTracker = useRef(searchParams.get("tracker"))
 
