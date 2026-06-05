@@ -424,6 +424,7 @@ export const CategoryPageInner = () => {
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
   const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>((searchParams.get("filter") as CategoryKpiFilter) || "ALL")
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
+  const [justAdded, setJustAdded] = useState<string | null>(null)
 
   const initialUrlTracker = useRef(searchParams.get("tracker"))
 
@@ -580,7 +581,13 @@ export const CategoryPageInner = () => {
       {showCreate && (
         <CreateCategoryTrackerModal
           onClose={() => setShowCreate(false)}
-          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedCode(t.tracker_code); setShowCreate(false) }}
+          onCreate={t => {
+            setTrackers(prev => [t, ...prev])
+            setSelectedCode(t.tracker_code)
+            setJustAdded(t.tracker_code)
+            setTimeout(() => setJustAdded(null), 5000)
+            setShowCreate(false)
+          }}
         />
       )}
       <div className="anim-fade">
@@ -616,7 +623,13 @@ export const CategoryPageInner = () => {
       {showCreate && (
         <CreateCategoryTrackerModal
           onClose={() => setShowCreate(false)}
-          onCreate={t => { setTrackers(prev => [t, ...prev]); setSelectedCode(t.tracker_code); setShowCreate(false) }}
+          onCreate={t => {
+            setTrackers(prev => [t, ...prev])
+            setSelectedCode(t.tracker_code)
+            setJustAdded(t.tracker_code)
+            setTimeout(() => setJustAdded(null), 5000)
+            setShowCreate(false)
+          }}
         />
       )}
       {showEdit && selectedTracker && (
@@ -776,6 +789,12 @@ export const CategoryPageInner = () => {
             {allVisibleRows.length} of {totalFilteredCount} {activeKpiFilter === "ALL" ? "products" : "matched rows"}
           </span>
         </div>
+
+        {justAdded && (
+          <div style={{ background: `${T.blue}15`, border: `1px solid ${T.blue}40`, borderRadius: 8, padding: "12px 14px", marginBottom: 16, color: T.blue, fontSize: 12 }}>
+            Data will be collected and displayed in a few minutes.
+          </div>
+        )}
 
         {loading ? (
           <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading snapshot...</div>
