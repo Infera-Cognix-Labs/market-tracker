@@ -116,11 +116,6 @@ class JobService:
             status=JobStatus.QUEUED,
             run_strategy=JobRunStrategy(
                 provider=Provider.APIFY,
-                binding_code=(
-                    "bind_category_top50_v1"
-                    if payload.tracker_type == TrackerType.CATEGORY
-                    else "bind_competitor_tracking_v1"
-                ),
                 pool_code=pool_code,
             ),
             summary=JobSummary(expected_items=0, imported_items=0, events_emitted=0),

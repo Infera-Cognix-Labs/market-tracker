@@ -491,8 +491,8 @@ class JobSummary(ApiModel):
 
 class JobRunStrategy(ApiModel):
     provider: Provider
-    binding_code: str | None = None
     pool_code: str | None = None
+    binding_code: str | None = None
 
 
 class ExternalRunSummary(ApiModel):

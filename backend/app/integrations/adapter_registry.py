@@ -4,6 +4,7 @@ from app.integrations.adapters import (
     ActorAdapter,
     CrawlerBrosCategoryAdapter,
     DealsScraperAdapter,
+    GetLeadsCategoryAdapter,
     JungleeAsinsAdapter,
     JungleeCategoryAdapter,
     JungleeProductAdapter,
@@ -19,6 +20,7 @@ _ADAPTER_REGISTRY: dict[str, ActorAdapter] = {
     "saswave_competitor": SaswaveCompetitorAdapter(),
     "deals_scraper": DealsScraperAdapter(),
     "crawlerbros_category": CrawlerBrosCategoryAdapter(),
+    "get_leads_category": GetLeadsCategoryAdapter(),
 }
 
 
