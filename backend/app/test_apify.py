@@ -115,12 +115,6 @@ def parse_args() -> argparse.Namespace:
         help="Directory to save JSON results",
     )
     parser.add_argument(
-        "--timeout-secs",
-        type=int,
-        default=300,
-        help="Timeout waiting for actor to complete",
-    )
-    parser.add_argument(
         "--memory-mbytes",
         type=int,
         default=None,
@@ -147,7 +141,6 @@ def run_actor(
     client: ApifyClient,
     spec: ActorSpec,
     output_dir: Path,
-    timeout_secs: int,
     memory_mbytes: int | None,
     build: str | None,
 ) -> None:
@@ -161,7 +154,6 @@ def run_actor(
 
     call_kwargs: Dict[str, Any] = {
         "run_input": spec.sample_input,
-        "timeout_secs": timeout_secs,
     }
     if memory_mbytes is not None:
         call_kwargs["memory_mbytes"] = memory_mbytes
@@ -227,7 +219,6 @@ def main() -> None:
             client=client,
             spec=spec,
             output_dir=output_dir,
-            timeout_secs=args.timeout_secs,
             memory_mbytes=args.memory_mbytes,
             build=args.build,
         )

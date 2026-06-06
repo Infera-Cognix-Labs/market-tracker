@@ -8,11 +8,28 @@ import type {
   TrackedAsinInput,
   CompetitorTrackerUpdateRequest,
   CategoryTrackerUpdateRequest,
+  CategoryInsights,
+  CompetitorInsights,
+  CompetitorAlertCounts,
 } from "./types"
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/market-tracker/api"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_BASE_PATH || "/market-tracker"}/api`
 const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID || "ws_demo_us"
 const API_PREFIX = `${BASE_URL}/v1/workspaces/${WORKSPACE_ID}`
+
+export class ApiError extends Error {
+  status: number
+  code?: string
+  details?: { field?: string | null; reason?: string | null }
+
+  constructor(status: number, message: string, code?: string, details?: { field?: string | null; reason?: string | null }) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+    this.details = details
+  }
+}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_PREFIX}${path}`, {
@@ -20,8 +37,13 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json", ...init?.headers },
   })
   if (!res.ok) {
-    const body = await res.text().catch(() => "")
-    throw new Error(`API ${res.status}: ${body}`)
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(
+      res.status,
+      body.message || `API ${res.status}`,
+      body.code,
+      body.details,
+    )
   }
   return res.json() as Promise<T>
 }
@@ -237,4 +259,18 @@ export const apiDownloadWeeklyDigest = async (
   link.download = `weekly_digest_${digestCode}.${ext}`
   link.click()
   URL.revokeObjectURL(link.href)
+}
+
+// ── Summaries ─────────────────────────────────────────────────────────────────
+
+export const apiGetCategoryInsights = async (timeframe: Timeframe = "WEEKLY"): Promise<CategoryInsights> => {
+  return apiFetch<CategoryInsights>(`/summaries/category-insights${qs({ timeframe })}`)
+}
+
+export const apiGetCompetitorInsights = async (timeframe: Timeframe = "WEEKLY"): Promise<CompetitorInsights> => {
+  return apiFetch<CompetitorInsights>(`/summaries/competitor-insights${qs({ timeframe })}`)
+}
+
+export const apiGetCompetitorAlerts = async (): Promise<CompetitorAlertCounts> => {
+  return apiFetch<CompetitorAlertCounts>(`/summaries/competitor-alerts`)
 }

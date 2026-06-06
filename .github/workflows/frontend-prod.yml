@@ -1,9 +1,9 @@
-name: Frontend CI
+name: Frontend — Deploy Production
 
 on:
   pull_request:
     branches:
-      - develop
+      - main
     paths:
       - "frontend/**"
 
@@ -83,12 +83,10 @@ jobs:
           context: ./frontend
           push: true
           tags: ${{ secrets.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
-          build-args: |
-            NEXT_PUBLIC_BASE_PATH=/market-tracker-test
-            BACKEND_URL=http://217.216.34.228:8001
+          # NEXT_PUBLIC_BASE_PATH defaults to /market-tracker in Dockerfile
 
   # ── 3. SSH deploy to server & verify ────────────────────────────────────────
-  deploy-test:
+  deploy-prod:
     name: Deploy & Health check
     runs-on: ubuntu-latest
     needs: publish
@@ -102,7 +100,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd ${{ secrets.SANDBOX_DEPLOY_PATH }}
+            cd ${{ secrets.DEPLOY_PATH }}
 
             # Kéo code mới nhất (bao gồm docker-compose.staging.yml)
             git fetch origin
@@ -111,11 +109,6 @@ jobs:
             # Cập nhật image tag trong .env.staging
             IMAGE_TAG="${{ secrets.REGISTRY }}/market-tracker/frontend:${{ needs.publish.outputs.image_tag }}"
             sed -i "s|^FRONTEND_IMAGE=.*|FRONTEND_IMAGE=${IMAGE_TAG}|" .env.staging
-
-            # Đặt BASE_PATH khớp với basePath đã bake vào image (test env)
-            grep -q "^BASE_PATH=" .env.staging \
-              && sed -i "s|^BASE_PATH=.*|BASE_PATH=/market-tracker-test|" .env.staging \
-              || echo "BASE_PATH=/market-tracker-test" >> .env.staging
 
             # Login registry, pull image mới
             echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login ${{ secrets.REGISTRY }} -u ${{ secrets.REGISTRY_USERNAME }} --password-stdin

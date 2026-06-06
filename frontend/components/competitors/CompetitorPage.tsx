@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2 } from "lucide-react"
+import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2, Package } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents } from "../shared/api"
+import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents, ApiError } from "../shared/api"
 import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus, DealInfo } from "../shared/types"
 
 const MARKETPLACES = [
@@ -356,8 +356,18 @@ const CreateTrackerModal = ({
     try {
       const tracker = await apiCreateCompetitorTracker(payload)
       onCreate(tracker)
-    } catch {
-      setError("Failed to create tracker. Please try again.")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setError("A tracker for this marketplace and ASINs already exists.")
+        } else if (err.status === 400 && err.details?.reason) {
+          setError(err.details.reason)
+        } else {
+          setError(err.message || "Failed to create tracker. Please try again.")
+        }
+      } else {
+        setError("Failed to create tracker. Please try again.")
+      }
       setSubmitting(false)
     }
   }
@@ -488,7 +498,8 @@ export const CompetitorPage = () => {
   const [timeline, setTimeline] = useState<ProductTimelineResponse | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [loadingDetail, setLoadingDetail] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [showManageAsins, setShowManageAsins] = useState(false)
@@ -502,11 +513,18 @@ export const CompetitorPage = () => {
 
   // Load tracker list only
   useEffect(() => {
-    apiListCompetitorTrackers().then(res => {
-      setTrackers(res.items as CompetitorTrackerDetail[])
-      if (res.items.length > 0) setSelectedCode(res.items[0].tracker_code)
-      setLoading(false)
-    })
+    apiListCompetitorTrackers()
+      .then(res => {
+        setTrackers(res.items as CompetitorTrackerDetail[])
+        const firstActive = (res.items as CompetitorTrackerDetail[]).find(t => (t.status ?? "ACTIVE") === "ACTIVE")
+        const first = firstActive ?? res.items[0]
+        if (first) setSelectedCode(first.tracker_code)
+      })
+      .catch(() => {
+        setTrackers([])
+        setError("Failed to load competitor trackers")
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   // Fetch detail (tracked_products) for selected tracker
@@ -560,16 +578,27 @@ export const CompetitorPage = () => {
 
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
-  if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading competitor trackers...</div>
   if (trackers.length === 0) return (
     <>
       {showCreate && <CreateTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { setTrackers([t]); setSelectedCode(t.tracker_code); setShowCreate(false) }} />}
       <div className="anim-fade">
         <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
           actions={<button className="btn-primary" onClick={() => setShowCreate(true)}><Plus size={14} /> New Tracker</button>} />
-        <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>
-          No competitor trackers configured.{" "}
-          <button onClick={() => setShowCreate(true)} style={{ background: "none", border: "none", color: T.blue, cursor: "pointer", fontSize: 13 }}>Create one &rarr;</button>
+        <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+          {loading
+            ? <div style={{ fontSize: 13 }}>Loading trackers…</div>
+            : <>
+                <Package size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No competitor trackers yet</div>
+                <div style={{ fontSize: 12, color: error ? T.red : T.text3, marginBottom: 24 }}>
+                  {error ?? "Add ASINs you want to track for price, availability, and listing changes."}
+                </div>
+                <button className="btn-primary" onClick={() => setShowCreate(true)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <Plus size={14} /> New Tracker
+                </button>
+              </>
+          }
         </div>
       </div>
     </>

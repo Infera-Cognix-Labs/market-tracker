@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { FileText, AlertTriangle, ChevronRight } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { FileText, AlertTriangle, ChevronRight, Filter, ChevronLeft } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
@@ -9,34 +9,127 @@ import { AlertTypeMeta } from "../shared/AlertTypeMeta"
 import { apiListWeeklyDigests, apiGetWeeklyDigest, apiDownloadWeeklyDigest } from "../shared/api"
 import type { WeeklyDigest } from "../shared/types"
 
+type DatePreset = "all" | "4weeks" | "12weeks" | "custom"
+
+const toISODate = (d: Date) => d.toISOString().slice(0, 10)
+
+const presetRange = (preset: DatePreset): { from: string } | null => {
+  if (preset === "all" || preset === "custom") return null
+  const now = new Date()
+  const from = new Date(now)
+  if (preset === "4weeks") {
+    from.setDate(from.getDate() - 28)
+  } else if (preset === "12weeks") {
+    from.setDate(from.getDate() - 84)
+  }
+  return { from: toISODate(from) }
+}
+
+const PAGE_SIZE = 10
+
 export const ReportsPage = () => {
   const [digests, setDigests] = useState<WeeklyDigest[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<WeeklyDigest | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pageNum, setPageNum] = useState(1)
+  const [datePreset, setDatePreset] = useState<DatePreset>("all")
+  const [customFrom, setCustomFrom] = useState("")
+
+  const loadDigests = useCallback(async (p: number) => {
+    setLoading(true)
+    setError(null)
+    try {
+      let weekStart: string | undefined
+      if (datePreset === "custom") {
+        weekStart = customFrom || undefined
+      } else {
+        const range = presetRange(datePreset)
+        weekStart = range?.from
+      }
+      const res = await apiListWeeklyDigests({
+        week_start: weekStart,
+        page: p,
+        page_size: PAGE_SIZE,
+      })
+      setDigests(res.items)
+      setTotal(res.total)
+      setPageNum(p)
+    } catch {
+      setDigests([])
+      setError("Failed to load reports")
+    } finally {
+      setLoading(false)
+    }
+  }, [datePreset, customFrom])
 
   useEffect(() => {
-    apiListWeeklyDigests().then(res => {
-      setDigests(res.items)
-      setLoading(false)
-    })
-  }, [])
+    void loadDigests(1)
+  }, [loadDigests])
 
   const handleSelect = async (code: string) => {
-    const d = await apiGetWeeklyDigest(code)
-    setSelected(d)
+    setError(null)
+    try {
+      const d = await apiGetWeeklyDigest(code)
+      setSelected(d)
+    } catch {
+      setSelected(null)
+      setError("Failed to load digest detail")
+    }
   }
 
-  if (loading) return <div style={{ textAlign: "center", padding: 60, color: T.text3 }}>Loading reports...</div>
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: 60, color: T.text3, fontSize: 13 }}>Loading reports…</div>
+  )
+
+  if (digests.length === 0) return (
+    <div className="anim-fade">
+      <PageHeader title="Reports" sub="Weekly digest & threat analysis" />
+      <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+        <FileText size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No reports yet</div>
+        <div style={{ fontSize: 12, color: T.text3 }}>
+          {error ?? "Weekly digests are generated automatically once your trackers have collected data."}
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="anim-fade">
       <PageHeader title="Reports" sub="Weekly digest & threat analysis" />
 
+      {/* Date range filter */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <Filter size={13} style={{ color: T.text3 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {(["all", "4weeks", "12weeks", "custom"] as DatePreset[]).map(p => (
+            <button key={p} onClick={() => setDatePreset(p)}
+              style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${datePreset === p ? T.blue : T.border}`, background: datePreset === p ? T.bg4 : T.bg2, color: datePreset === p ? T.blue : T.text2, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+              {p === "all" ? "All time" : p === "4weeks" ? "Last 4 weeks" : p === "12weeks" ? "Last 12 weeks" : "Custom"}
+            </button>
+          ))}
+          {datePreset === "custom" && (
+            <>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: "monospace", cursor: "pointer" }} />
+              <span style={{ color: T.text3, fontSize: 11 }}>from</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ marginBottom: 12, color: T.red, fontSize: 12 }}>{error}</div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16 }}>
         {/* Digest list */}
         <div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px" }}>
-            {digests.length} Weekly Digests
+          <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px", display: "flex", justifyContent: "space-between" }}>
+            <span>{digests.length} of {total} Digests</span>
+            {loading && <span style={{ fontSize: 9, color: T.text3 }}>Loading…</span>}
           </div>
           {digests.map(d => (
             <div key={d.digest_code} className="row-hover" onClick={() => handleSelect(d.digest_code)}
@@ -57,6 +150,21 @@ export const ReportsPage = () => {
           ))}
           {digests.length === 0 && (
             <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 12 }}>No digests available</div>
+          )}
+
+          {/* Pagination */}
+          {total > PAGE_SIZE && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 16, padding: "8px 0" }}>
+              <button onClick={() => loadDigests(pageNum - 1)} disabled={pageNum === 1}
+                style={{ padding: "4px 8px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg2, color: T.text2, fontSize: 11, cursor: pageNum === 1 ? "default" : "pointer", opacity: pageNum === 1 ? 0.5 : 1 }}>
+                <ChevronLeft size={12} />
+              </button>
+              <span style={{ fontSize: 10, color: T.text3 }}>{pageNum} / {Math.ceil(total / PAGE_SIZE)}</span>
+              <button onClick={() => loadDigests(pageNum + 1)} disabled={pageNum >= Math.ceil(total / PAGE_SIZE)}
+                style={{ padding: "4px 8px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg2, color: T.text2, fontSize: 11, cursor: pageNum >= Math.ceil(total / PAGE_SIZE) ? "default" : "pointer", opacity: pageNum >= Math.ceil(total / PAGE_SIZE) ? 0.5 : 1 }}>
+                <ChevronRight size={12} />
+              </button>
+            </div>
           )}
         </div>
 

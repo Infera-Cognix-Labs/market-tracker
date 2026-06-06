@@ -12,11 +12,14 @@ from app.models.api import (
     ApifyRunPollResult,
     ApifyWebhookAck,
     ApifyWebhookEnvelope,
+    CategoryInsights,
     CategorySnapshot,
     CategoryTracker,
     CategoryTrackerCreateRequest,
     CategoryTrackerListResponse,
     CategoryTrackerUpdateRequest,
+    CompetitorAlertCounts,
+    CompetitorInsights,
     CompetitorTrackerCreateRequest,
     CompetitorTrackerDetail,
     CompetitorTrackerListResponse,
@@ -52,6 +55,7 @@ from app.services.run_orchestrator import RunOrchestrator
 from app.services.snapshot_service import SnapshotService
 from app.services.tracker_management_service import TrackerManagementService
 from app.services.dashboard_query_service import DashboardQueryService
+from app.services.insights_query_service import InsightsQueryService
 from app.services.shared import (
     aggregate_timeline_points,
     build_dashboard_overview,
@@ -72,7 +76,6 @@ LISTING_EVENT_TYPES = {
     EventType.TITLE_CHANGED,
     EventType.MAIN_IMAGE_CHANGED,
     EventType.VARIATIONS_ADDED,
-    EventType.CONTENT_CHANGED,
 }
 
 
@@ -285,6 +288,31 @@ class BaseStore:
     ) -> WeeklyDigest:
         raise NotImplementedError
 
+    async def get_category_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> CategoryInsights:
+        raise NotImplementedError
+
+    async def get_competitor_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> CompetitorInsights:
+        raise NotImplementedError
+
+    async def get_competitor_alerts(
+        self, workspace_id: str
+    ) -> CompetitorAlertCounts:
+        raise NotImplementedError
+
+    async def delete_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        raise NotImplementedError
+
+    async def delete_competitor_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        raise NotImplementedError
+
 
 class MongoStore(BaseStore):
     def __init__(
@@ -306,6 +334,7 @@ class MongoStore(BaseStore):
 
         self._trackers = tracker_module or TrackerModule(TrackerManagementService())
         self._query = query_module or QueryModule(DashboardQueryService())
+        self._insights = InsightsQueryService()
 
         self._init_worker_dependencies(worker_module)
 
@@ -570,6 +599,31 @@ class MongoStore(BaseStore):
         self, workspace_id: str, digest_code: str
     ) -> WeeklyDigest:
         return await self._query.get_weekly_digest(workspace_id, digest_code)
+
+    async def get_category_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> CategoryInsights:
+        return await self._insights.get_category_insights(workspace_id, timeframe)
+
+    async def get_competitor_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> CompetitorInsights:
+        return await self._insights.get_competitor_insights(workspace_id, timeframe)
+
+    async def get_competitor_alerts(
+        self, workspace_id: str
+    ) -> CompetitorAlertCounts:
+        return await self._insights.get_competitor_alerts(workspace_id)
+
+    async def delete_category_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._trackers.delete_category_tracker(workspace_id, tracker_code)
+
+    async def delete_competitor_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._trackers.delete_competitor_tracker(workspace_id, tracker_code)
 
 
 async def build_store(settings: Config) -> BaseStore:

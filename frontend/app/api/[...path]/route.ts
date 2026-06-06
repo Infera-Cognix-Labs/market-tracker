@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 
-const BACKEND = "http://217.216.34.228:8000";
+const BACKEND = process.env.BACKEND_URL || "http://localhost:8000";
 
 async function handler(
   req: NextRequest,

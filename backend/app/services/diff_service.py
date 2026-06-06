@@ -65,6 +65,16 @@ class DiffService:
         if current_snapshot is None:
             return []
 
+        # Get the most recent previous snapshot (single query instead of loading all)
+        previous_snapshot = await CategorySnapshotDocument.find_one(
+            {
+                "workspace_id": workspace_id,
+                "tracker_code": tracker_code,
+                "snapshot_date": {"$lt": snapshot_date},
+            },
+            sort=[("snapshot_date", -1)],
+        )
+        # Get all older snapshots for historical_last_seen tracking
         history_snapshots = await CategorySnapshotDocument.find(
             {
                 "workspace_id": workspace_id,
@@ -72,11 +82,6 @@ class DiffService:
                 "snapshot_date": {"$lt": snapshot_date},
             }
         ).to_list()
-        previous_snapshot = (
-            max(history_snapshots, key=lambda item: item.snapshot_date)
-            if history_snapshots
-            else None
-        )
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
@@ -87,11 +92,17 @@ class DiffService:
         current_rank_map = {
             product.asin: product.rank_position for product in current_products
         }
+        current_product_map = {
+            product.asin: product for product in current_products
+        }
         previous_rank_map = (
             {product.asin: product.rank_position for product in previous_products}
             if previous_snapshot is not None
             else {}
         )
+        previous_product_map = {
+            product.asin: product for product in previous_products
+        }
 
         # Keep the most recent observed date for each ASIN in historical snapshots.
         historical_last_seen: dict[str, date] = {}
@@ -163,6 +174,8 @@ class DiffService:
                     )
                 )
             if previous_rank is not None and previous_rank <= 10 and current_rank > 10:
+                prev_product = previous_product_map.get(asin)
+                cur_product = current_product_map.get(asin)
                 candidates.append(
                     DiffCandidate(
                         tracker_type=TrackerType.CATEGORY,
@@ -175,6 +188,28 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": current_rank,
+                            "previous_title": prev_product.title if prev_product else None,
+                            "previous_brand": prev_product.brand if prev_product else None,
+                            "previous_image_url": prev_product.image_url if prev_product else None,
+                            "previous_price_current": prev_product.price_current if prev_product else None,
+                            "previous_price_original": prev_product.price_original if prev_product else None,
+                            "previous_currency": prev_product.currency if prev_product else None,
+                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
+                            "previous_rating_value": prev_product.rating_value if prev_product else None,
+                            "previous_review_count": prev_product.review_count if prev_product else None,
+                            "previous_product_url": prev_product.product_url if prev_product else None,
+                            "previous_availability_status": prev_product.availability_status if prev_product else None,
+                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                            "current_title": cur_product.title if cur_product else None,
+                            "current_brand": cur_product.brand if cur_product else None,
+                            "current_image_url": cur_product.image_url if cur_product else None,
+                            "current_price_current": cur_product.price_current if cur_product else None,
+                            "current_price_original": cur_product.price_original if cur_product else None,
+                            "current_coupon_text": cur_product.coupon_text if cur_product else None,
+                            "current_deal_info": cur_product.deal_info.model_dump() if cur_product and cur_product.deal_info else None,
+                            "current_availability_status": cur_product.availability_status if cur_product else None,
+                            "current_buy_box_status": cur_product.buy_box_status if cur_product else None,
                         },
                     )
                 )
@@ -183,6 +218,7 @@ class DiffService:
             if asin in current_rank_map:
                 continue
 
+            prev_product = previous_product_map.get(asin)
             candidates.append(
                 DiffCandidate(
                     tracker_type=TrackerType.CATEGORY,
@@ -195,6 +231,19 @@ class DiffService:
                     metadata={
                         "previous_rank": previous_rank,
                         "present_today": False,
+                        "previous_title": prev_product.title if prev_product else None,
+                        "previous_brand": prev_product.brand if prev_product else None,
+                        "previous_image_url": prev_product.image_url if prev_product else None,
+                        "previous_price_current": prev_product.price_current if prev_product else None,
+                        "previous_price_original": prev_product.price_original if prev_product else None,
+                        "previous_currency": prev_product.currency if prev_product else None,
+                        "previous_coupon_text": prev_product.coupon_text if prev_product else None,
+                        "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
+                        "previous_rating_value": prev_product.rating_value if prev_product else None,
+                        "previous_review_count": prev_product.review_count if prev_product else None,
+                        "previous_product_url": prev_product.product_url if prev_product else None,
+                        "previous_availability_status": prev_product.availability_status if prev_product else None,
+                        "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
                     },
                 )
             )
@@ -211,6 +260,17 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": None,
+                            "previous_title": prev_product.title if prev_product else None,
+                            "previous_brand": prev_product.brand if prev_product else None,
+                            "previous_image_url": prev_product.image_url if prev_product else None,
+                            "previous_price_current": prev_product.price_current if prev_product else None,
+                            "previous_price_original": prev_product.price_original if prev_product else None,
+                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
+                            "previous_rating_value": prev_product.rating_value if prev_product else None,
+                            "previous_review_count": prev_product.review_count if prev_product else None,
+                            "previous_availability_status": prev_product.availability_status if prev_product else None,
+                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
                         },
                     )
                 )
@@ -232,23 +292,38 @@ class DiffService:
                 "tracker_refs.tracker_code": tracker_code,
             }
         ).to_list()
+        if not current_snapshots:
+            return []
+
+        # Batch query: find all previous snapshots for these products in one query
+        asin_pairs = [
+            {"marketplace": cs.marketplace, "asin": cs.asin}
+            for cs in current_snapshots
+        ]
+        previous_docs = await ProductSnapshotDocument.find(
+            {
+                "workspace_id": workspace_id,
+                "$or": asin_pairs,
+                "snapshot_date": {"$lt": snapshot_date},
+            }
+        ).to_list()
+
+        # Group by (marketplace, asin) and keep only the most recent
+        previous_map: dict[tuple[str, str], ProductSnapshotDocument] = {}
+        for doc in previous_docs:
+            key = (doc.marketplace, doc.asin)
+            existing = previous_map.get(key)
+            if existing is None or doc.snapshot_date > existing.snapshot_date:
+                previous_map[key] = doc
+
         candidates: list[DiffCandidate] = []
         for current_snapshot in current_snapshots:
-            previous_snapshots = await ProductSnapshotDocument.find(
-                {
-                    "workspace_id": workspace_id,
-                    "marketplace": current_snapshot.marketplace,
-                    "asin": current_snapshot.asin,
-                    "snapshot_date": {"$lt": snapshot_date},
-                }
-            ).to_list()
-            if not previous_snapshots:
+            previous_snapshot = previous_map.get(
+                (current_snapshot.marketplace, current_snapshot.asin)
+            )
+            if previous_snapshot is None:
                 continue
 
-            previous_snapshot = max(
-                previous_snapshots,
-                key=lambda item: item.snapshot_date,
-            )
             event_time = current_snapshot.captured_at
 
             price_changed = (

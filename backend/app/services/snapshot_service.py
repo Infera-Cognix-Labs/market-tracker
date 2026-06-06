@@ -54,6 +54,7 @@ class SnapshotService:
         )
 
         product_snapshots_written = 0
+        tracker_created_date = tracker_document.created_at.date()
         for record in records:
             source_refs = {
                 "provider": "APIFY",
@@ -68,6 +69,7 @@ class SnapshotService:
                 tracker_ref=tracker_ref,
                 record=record,
                 source_refs=source_refs,
+                tracker_created_date=tracker_created_date,
             )
             if inserted_snapshot:
                 product_snapshots_written += 1
@@ -88,6 +90,7 @@ class SnapshotService:
                 records=records,
                 apify_run_id=apify_run_id,
                 dataset_id=dataset_id,
+                tracker_created_date=tracker_created_date,
             )
 
         return SnapshotPersistResult(
@@ -127,6 +130,7 @@ class SnapshotService:
         tracker_ref: TrackerRef,
         record: NormalizedProductRecord,
         source_refs: dict[str, object],
+        tracker_created_date,
     ) -> bool:
         existing = await ProductSnapshotDocument.find_one(
             ProductSnapshotDocument.workspace_id == workspace_id,
@@ -139,6 +143,12 @@ class SnapshotService:
             _merge_tracker_refs(existing.tracker_refs, tracker_ref)
             if existing is not None
             else [tracker_ref]
+        )
+
+        bsr_position = (
+            record.bsr_position
+            if snapshot_date >= tracker_created_date
+            else None
         )
 
         payload = {
@@ -154,7 +164,7 @@ class SnapshotService:
             "product_url": record.product_url,
             "main_image_url": record.main_image_url,
             "main_image_hash": record.main_image_hash,
-            "bsr_position": record.bsr_position,
+            "bsr_position": bsr_position,
             "price_current": record.price_current,
             "price_original": record.price_original,
             "currency": record.currency,
@@ -247,8 +257,12 @@ class SnapshotService:
         records: list[NormalizedProductRecord],
         apify_run_id: str,
         dataset_id: str,
+        tracker_created_date,
     ) -> bool:
         if not isinstance(tracker_document, CategoryTrackerDocument):
+            return False
+
+        if snapshot_date < tracker_created_date:
             return False
 
         sorted_records = sorted(
@@ -299,6 +313,21 @@ class SnapshotService:
         new_entrants = current_asins - previous_asins
         exits = previous_asins - current_asins
 
+        # Distinguish truly new ASINs from returning ones by checking historical snapshots.
+        returning_asins = set()
+        if new_entrants:
+            history_snapshots = await CategorySnapshotDocument.find(
+                CategorySnapshotDocument.workspace_id == workspace_id,
+                CategorySnapshotDocument.tracker_code == tracker_code,
+                CategorySnapshotDocument.snapshot_date < snapshot_date,
+            ).to_list()
+            historical_asins: set[str] = set()
+            for snap in history_snapshots:
+                for p in snap.products:
+                    historical_asins.add(p.asin)
+            returning_asins = new_entrants & historical_asins
+            new_entrants = new_entrants - returning_asins
+
         enter_top10 = current_top10_asins - previous_top10_asins
         exit_top10 = previous_top10_asins - current_top10_asins
 
@@ -317,7 +346,7 @@ class SnapshotService:
             "summary": CategorySnapshotSummary(
                 asin_count=len(products),
                 new_entrant_count=len(new_entrants),
-                returning_count=0,
+                returning_count=len(returning_asins),
                 exit_count=len(exits),
                 enter_top10_count=len(enter_top10),
                 exit_top10_count=len(exit_top10),
@@ -349,6 +378,58 @@ class SnapshotService:
             return True
 
         return False
+
+    async def enrich_snapshot_nulls(
+        self,
+        *,
+        workspace_id: str,
+        marketplace: str,
+        snapshot_date,
+        records: list[NormalizedProductRecord],
+    ) -> int:
+        updated_count = 0
+        for record in records:
+            existing = await ProductSnapshotDocument.find_one(
+                ProductSnapshotDocument.workspace_id == workspace_id,
+                ProductSnapshotDocument.marketplace == marketplace,
+                ProductSnapshotDocument.asin == record.asin,
+                ProductSnapshotDocument.snapshot_date == snapshot_date,
+            )
+            if existing is None:
+                continue
+
+            update_dict: dict[str, object] = {}
+            if existing.price_current is None and record.price_current is not None:
+                update_dict["price_current"] = record.price_current
+            if existing.price_original is None and record.price_original is not None:
+                update_dict["price_original"] = record.price_original
+            if existing.currency is None and record.currency is not None:
+                update_dict["currency"] = record.currency
+            if existing.rating_value is None and record.rating_value is not None:
+                update_dict["rating_value"] = record.rating_value
+            if existing.review_count is None and record.review_count is not None:
+                update_dict["review_count"] = record.review_count
+            if existing.bsr_position is None and record.bsr_position is not None:
+                update_dict["bsr_position"] = record.bsr_position
+            if existing.variation_count is None and record.variation_count is not None:
+                update_dict["variation_count"] = record.variation_count
+            if (
+                existing.buy_box_seller_name is None
+                and record.buy_box_seller_name is not None
+            ):
+                update_dict["buy_box_seller_name"] = record.buy_box_seller_name
+
+            if update_dict:
+                update_dict["captured_at"] = record.captured_at
+                await ProductSnapshotDocument.find_one(
+                    ProductSnapshotDocument.workspace_id == workspace_id,
+                    ProductSnapshotDocument.marketplace == marketplace,
+                    ProductSnapshotDocument.asin == record.asin,
+                    ProductSnapshotDocument.snapshot_date == snapshot_date,
+                ).update({"$set": update_dict})
+                updated_count += 1
+
+        return updated_count
 
 
 def _merge_tracker_refs(existing_refs, new_ref: TrackerRef) -> list[TrackerRef]:

@@ -81,3 +81,12 @@ async def replace_tracked_asins(
     store: Annotated[BaseStore, Depends(get_store)],
 ) -> CompetitorTrackerDetail:
     return await store.replace_tracked_asins(workspace_id, tracker_code, payload)
+
+
+@router.delete("/{tracker_code}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_competitor_tracker(
+    workspace_id: str,
+    tracker_code: str,
+    store: Annotated[BaseStore, Depends(get_store)],
+) -> None:
+    await store.delete_competitor_tracker(workspace_id, tracker_code)

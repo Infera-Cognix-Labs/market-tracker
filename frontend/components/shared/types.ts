@@ -97,6 +97,110 @@ export interface Threat {
   tracker_refs: TrackerRef[]
 }
 
+// ── Summary Insights ──────────────────────────────────────────────────────────
+
+export interface CategoryEntrantItem {
+  asin: string
+  title: string
+  brand: string
+  image_url: string
+  current_rank: number
+  previous_rank?: number | null
+  entered_at: string
+  is_first_time_entrant: boolean
+  tracker_code: string
+  tracker_name: string
+}
+
+export interface ReturningEntrantItem {
+  asin: string
+  title: string
+  brand: string
+  image_url: string
+  current_rank: number
+  previous_rank?: number | null
+  entered_at: string
+  days_absent: number
+  tracker_code: string
+  tracker_name: string
+}
+
+export interface CategoryInsights {
+  timeframe: Timeframe
+  generated_at: string
+  new_top10_entrants: CategoryEntrantItem[]
+  first_time_entrants: CategoryEntrantItem[]
+  returning_entrants: ReturningEntrantItem[]
+}
+
+export interface PriceChangeItem {
+  asin: string
+  title: string
+  brand: string
+  image_url: string
+  previous_price?: number | null
+  current_price?: number | null
+  currency?: string | null
+  delta_abs?: number | null
+  delta_pct?: number | null
+  changed_at: string
+  tracker_code: string
+  tracker_name: string
+}
+
+export interface PromotionItem {
+  asin: string
+  title: string
+  brand: string
+  image_url: string
+  coupon_text?: string | null
+  deal_info?: DealInfo | null
+  changed_at: string
+  tracker_code: string
+  tracker_name: string
+}
+
+export interface AvailabilityChangeItem {
+  asin: string
+  title: string
+  brand: string
+  image_url: string
+  previous_status: AvailabilityStatus
+  current_status: AvailabilityStatus
+  changed_at: string
+  tracker_code: string
+  tracker_name: string
+}
+
+export interface VariationChangeItem {
+  asin: string
+  title: string
+  brand: string
+  image_url: string
+  previous_variation_count?: number | null
+  current_variation_count?: number | null
+  changed_at: string
+  tracker_code: string
+  tracker_name: string
+}
+
+export interface CompetitorInsights {
+  timeframe: Timeframe
+  generated_at: string
+  price_changes: PriceChangeItem[]
+  promotions: PromotionItem[]
+  availability_changes: AvailabilityChangeItem[]
+  variation_changes: VariationChangeItem[]
+}
+
+export interface CompetitorAlertCounts {
+  oos_count: number
+  price_drop_count: number
+  price_increase_count: number
+  new_promotion_count: number
+  new_variation_count: number
+}
+
 // ── Category Tracker ──────────────────────────────────────────────────────────
 
 export interface CategoryTracker {
@@ -352,8 +456,12 @@ export interface EventChangeState {
   price_current?: number | null
   price_original?: number | null
   coupon_text?: string | null
+  deal_info?: DealInfo | null
   title?: string
+  brand?: string
   main_image_url?: string
+  rating_value?: number | null
+  review_count?: number | null
   variation_count?: number
   content_signature_hash?: string
   a_plus_signature_hash?: string

@@ -73,7 +73,6 @@ class EventType(str, Enum):
     TITLE_CHANGED = "TITLE_CHANGED"
     MAIN_IMAGE_CHANGED = "MAIN_IMAGE_CHANGED"
     VARIATIONS_ADDED = "VARIATIONS_ADDED"
-    CONTENT_CHANGED = "CONTENT_CHANGED"
     AVAILABILITY_CHANGED = "AVAILABILITY_CHANGED"
     BUY_BOX_CHANGED = "BUY_BOX_CHANGED"
 
@@ -158,7 +157,7 @@ class CategoryScope(ApiModel):
 
 
 class CategoryTrackingConfig(ApiModel):
-    top_n: int = Field(default=50)
+    top_n: int = Field(default=100)
     top10_alert_enabled: bool
 
 
@@ -256,7 +255,7 @@ class CategorySnapshot(ApiModel):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 50
+    top_n: int = 100
     products: list[CategorySnapshotProduct]
     summary: CategorySnapshotSummary
     source_refs: dict[str, Any] | None = None
@@ -341,8 +340,12 @@ class EventChangeState(FlexibleApiModel):
     price_current: float | None = None
     price_original: float | None = None
     coupon_text: str | None = None
+    deal_info: DealInfo | None = None
     title: str | None = None
+    brand: str | None = None
     main_image_url: str | None = None
+    rating_value: float | None = None
+    review_count: int | None = None
     variation_count: int | None = None
     content_signature_hash: str | None = None
     a_plus_signature_hash: str | None = None
@@ -488,6 +491,7 @@ class JobSummary(ApiModel):
 
 class JobRunStrategy(ApiModel):
     provider: Provider
+    pool_code: str | None = None
     binding_code: str | None = None
 
 
@@ -678,3 +682,105 @@ class WeeklyDigestListResponse(ApiModel):
     page: int
     page_size: int
     total: int
+
+
+class CategoryEntrantItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    current_rank: int
+    previous_rank: int | None = None
+    entered_at: date
+    is_first_time_entrant: bool
+    tracker_code: str
+    tracker_name: str
+
+
+class ReturningEntrantItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    current_rank: int
+    previous_rank: int | None = None
+    entered_at: date
+    days_absent: int
+    tracker_code: str
+    tracker_name: str
+
+
+class CategoryInsights(ApiModel):
+    timeframe: Timeframe
+    generated_at: datetime
+    new_top10_entrants: list[CategoryEntrantItem]
+    first_time_entrants: list[CategoryEntrantItem]
+    returning_entrants: list[ReturningEntrantItem]
+
+
+class PriceChangeItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    previous_price: float | None = None
+    current_price: float | None = None
+    currency: str | None = None
+    delta_abs: float | None = None
+    delta_pct: float | None = None
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class PromotionItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    coupon_text: str | None = None
+    deal_info: DealInfo | None = None
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class AvailabilityChangeItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    previous_status: AvailabilityStatus
+    current_status: AvailabilityStatus
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class VariationChangeItem(ApiModel):
+    asin: AsinCode
+    title: str
+    brand: str
+    image_url: str
+    previous_variation_count: int | None = None
+    current_variation_count: int | None = None
+    changed_at: date
+    tracker_code: str
+    tracker_name: str
+
+
+class CompetitorInsights(ApiModel):
+    timeframe: Timeframe
+    generated_at: datetime
+    price_changes: list[PriceChangeItem]
+    promotions: list[PromotionItem]
+    availability_changes: list[AvailabilityChangeItem]
+    variation_changes: list[VariationChangeItem]
+
+
+class CompetitorAlertCounts(ApiModel):
+    oos_count: int
+    price_drop_count: int
+    price_increase_count: int
+    new_promotion_count: int
+    new_variation_count: int
