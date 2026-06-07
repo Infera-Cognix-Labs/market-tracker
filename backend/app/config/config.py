@@ -229,7 +229,9 @@ class ApifyConfig(BaseModel):
 class InputAdapterConfig(BaseModel):
     field_map: dict[str, str] = Field(default_factory=dict)
     wrap_array: list[str] = Field(default_factory=list)
+    wrap_object: dict[str, str] = Field(default_factory=dict)
     asin_to_url: str | None = None
+    marketplace_map: dict[str, str] = Field(default_factory=dict)
     static_fields: dict[str, object] = Field(default_factory=dict)
 
 
@@ -273,12 +275,22 @@ def _actor_pools_config() -> dict[str, list[ActorPoolEntryConfig]]:
                     wrap_array = [f.strip() for f in raw_wrap.split(",") if f.strip()]
                 elif isinstance(raw_wrap, list):
                     wrap_array = [str(f) for f in raw_wrap]
+                raw_wrap_object = input_adapter_raw.get("wrap_object")
+                wrap_object: dict[str, str] = {}
+                if isinstance(raw_wrap_object, dict):
+                    wrap_object = {str(k): str(v) for k, v in raw_wrap_object.items()}
                 asin_to_url = input_adapter_raw.get("asin_to_url")
+                raw_marketplace_map = input_adapter_raw.get("marketplace_map")
+                marketplace_map: dict[str, str] = {}
+                if isinstance(raw_marketplace_map, dict):
+                    marketplace_map = {str(k): str(v) for k, v in raw_marketplace_map.items()}
                 static_fields_raw = input_adapter_raw.get("static_fields")
                 input_adapter = InputAdapterConfig(
                     field_map=field_map if isinstance(field_map, dict) else {},
                     wrap_array=wrap_array,
+                    wrap_object=wrap_object,
                     asin_to_url=asin_to_url if isinstance(asin_to_url, str) else None,
+                    marketplace_map=marketplace_map,
                     static_fields=static_fields_raw
                     if isinstance(static_fields_raw, dict)
                     else {},

@@ -2,25 +2,19 @@ from __future__ import annotations
 
 from app.integrations.adapters import (
     ActorAdapter,
-    CrawlerBrosCategoryAdapter,
     DealsScraperAdapter,
-    GetLeadsCategoryAdapter,
     JungleeAsinsAdapter,
-    JungleeCategoryAdapter,
-    JungleeProductAdapter,
+    ProdigerCategoryAdapter,
     SaswaveCategoryAdapter,
     SaswaveCompetitorAdapter,
 )
 
 _ADAPTER_REGISTRY: dict[str, ActorAdapter] = {
     "saswave_category": SaswaveCategoryAdapter(),
-    "junglee_category": JungleeCategoryAdapter(),
-    "junglee_product": JungleeProductAdapter(),
+    "prodiger_category": ProdigerCategoryAdapter(),
     "junglee_asins": JungleeAsinsAdapter(),
     "saswave_competitor": SaswaveCompetitorAdapter(),
     "deals_scraper": DealsScraperAdapter(),
-    "crawlerbros_category": CrawlerBrosCategoryAdapter(),
-    "get_leads_category": GetLeadsCategoryAdapter(),
 }
 
 

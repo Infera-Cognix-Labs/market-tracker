@@ -21,52 +21,34 @@ apify:
         memory_mbytes: 4096
         enabled: true
         priority: 1
-      junglee:
-        actor_id: "junglee/amazon-bestsellers"
+      prodiger:
+        actor_id: "prodiger/amazon-product-scraper"
         task_id: ""
-        name: "Junglee Bestsellers"
-        adapter: "junglee_category"
-        build: "latest"
-        memory_mbytes: 4096
-        enabled: false
-        priority: 2
-        input_adapter:
-          field_map:
-            search_url: "categoryUrls"
-            max_pages: "maxItemsPerStartUrl"
-          wrap_array: "categoryUrls"
-      crawlerbros:
-        actor_id: "crawlerbros/amazon-bestseller-scraper"
-        task_id: ""
-        name: "CrawlerBros Bestseller Scraper"
-        adapter: "crawlerbros_category"
-        build: "latest"
-        memory_mbytes: 4096
-        enabled: false
-        priority: 3
-        input_adapter:
-          field_map:
-            search_url: "categoryUrls"
-            max_pages: "maxItems"
-          wrap_array: "categoryUrls"
-      get_leads:
-        actor_id: "get-leads/all-in-one-amazon-scraper"
-        task_id: ""
-        name: "GetLeads Amazon Scraper"
-        adapter: "get_leads_category"
+        name: "Prodiger Amazon Scraper (Pay-Per-Event)"
+        adapter: "prodiger_category"
         build: "latest"
         memory_mbytes: 4096
         enabled: true
         priority: 2
         input_adapter:
           field_map:
-            search_url: "urls"
-            marketplace_code: "marketplace"
-            top_n: "maxProducts"
-            max_pages: "pages"
-          wrap_array: "urls"
-          static_fields:
-            detailLevel: "basic"
+            search_url: "startUrls"
+            top_n: "maxProductsPerSearch"
+            max_pages: "maxSearchPages"
+          wrap_object:
+            startUrls: "url"
+          marketplace_map:
+            amazon_us: "US"
+            amazon_uk: "UK"
+            amazon_de: "DE"
+            amazon_fr: "FR"
+            amazon_it: "IT"
+            amazon_es: "ES"
+            amazon_ca: "CA"
+            amazon_jp: "JP"
+            amazon_in: "IN"
+            amazon_au: "AU"
+            amazon_mx: "MX"
     competitor:
       saswave:
         actor_id: "saswave/amazon-product-scraper"
@@ -77,19 +59,6 @@ apify:
         memory_mbytes: 4096
         enabled: false
         priority: 1
-      junglee_crawler:
-        actor_id: "junglee/amazon-crawler"
-        task_id: ""
-        name: "Junglee Product Crawler"
-        adapter: "junglee_product"
-        build: "latest"
-        memory_mbytes: 4096
-        enabled: false
-        priority: 2
-        input_adapter:
-          field_map:
-            asins: "categoryOrProductUrls"
-            max_pages: "maxSearchPagesPerStartUrl"
       junglee_asins:
         actor_id: "junglee/amazon-asins-scraper"
         task_id: ""
