@@ -90,50 +90,48 @@ class ApifyDatasetBatch:
     items: list[dict[str, object]]
 
 
+def _normalize_run(run: dict[str, object] | object | None) -> dict[str, object] | None:
+    """Normalize an Apify run response to a dict with consistent camelCase keys.
+
+    apify-client 2.x returns plain dicts; 3.x returns Pydantic models with
+    snake_case attributes. This helper extracts the fields our codebase needs
+    into a plain dict so callers can keep using ``run["id"]`` and
+    ``run.get("defaultDatasetId")``.
+    """
+    if run is None:
+        return None
+    if isinstance(run, dict):
+        return run
+    return {
+        "id": getattr(run, "id", None),
+        "defaultDatasetId": getattr(run, "default_dataset_id", None),
+        "status": getattr(run, "status", None),
+        "startedAt": getattr(run, "started_at", None),
+        "finishedAt": getattr(run, "finished_at", None),
+    }
+
+
+def _normalize_dataset_response(
+    response: dict[str, object] | object,
+) -> dict[str, object]:
+    """Normalize a dataset list_items response to a dict.
+
+    apify-client 2.x returns a dict; 3.x returns a ``DatasetItemsPage``
+    Pydantic model. This extracts ``items``, ``count``, and ``total`` into a
+    plain dict.
+    """
+    if isinstance(response, dict):
+        return response
+    return {
+        "items": list(getattr(response, "items", []) or []),
+        "count": getattr(response, "count", None),
+        "total": getattr(response, "total", None),
+    }
+
+
 class ApifyGateway:
     def __init__(self, config: ApifyConfig) -> None:
         self.config = config
-
-    def resolve_binding(self, binding_code: str) -> ApifyBindingTarget:
-        if binding_code == "bind_category_top50_v1":
-            return ApifyBindingTarget(
-                binding_code=binding_code,
-                actor_name=self.config.category_actor_name,
-                actor_id=self.config.category_actor_id,
-                task_id=self.config.category_task_id,
-                build=self.config.category_build,
-                memory_mbytes=self.config.category_memory_mbytes,
-            )
-        if binding_code == "bind_competitor_tracking_v1":
-            return ApifyBindingTarget(
-                binding_code=binding_code,
-                actor_name=self.config.competitor_actor_name,
-                actor_id=self.config.competitor_actor_id,
-                task_id=self.config.competitor_task_id,
-                build=self.config.competitor_build,
-                memory_mbytes=self.config.competitor_memory_mbytes,
-            )
-        if binding_code == "bind_deals_v1":
-            return ApifyBindingTarget(
-                binding_code=binding_code,
-                actor_name=self.config.deals_actor_name,
-                actor_id=self.config.deals_actor_id,
-                task_id=self.config.deals_task_id,
-                build=self.config.deals_build,
-                memory_mbytes=self.config.deals_memory_mbytes,
-            )
-        if binding_code == "bind_category_enrichment_v1":
-            return ApifyBindingTarget(
-                binding_code=binding_code,
-                actor_name=self.config.category_enrichment_actor_name,
-                actor_id=self.config.category_enrichment_actor_id,
-                task_id=self.config.category_enrichment_task_id,
-                build=self.config.category_enrichment_build,
-                memory_mbytes=self.config.category_enrichment_memory_mbytes,
-            )
-        raise ApifyBindingResolutionError(
-            f"Unsupported Apify binding_code `{binding_code}`."
-        )
 
     def resolve_pool(self, pool_code: str) -> list[ActorPoolEntry]:
         pools = self.config.actor_pools
@@ -163,27 +161,46 @@ class ApifyGateway:
     def _apply_adapter(
         self, entry: ActorPoolEntry, run_input: dict[str, object]
     ) -> dict[str, object]:
-        if not entry.input_adapter or not entry.input_adapter.field_map:
+        if not entry.input_adapter:
             return dict(run_input)
         adapted = dict(run_input)
+
         for source_key, target_key in entry.input_adapter.field_map.items():
             if source_key in adapted:
                 adapted[target_key] = adapted.pop(source_key)
+
+        for field in entry.input_adapter.wrap_array:
+            if field in adapted and not isinstance(adapted[field], list):
+                adapted[field] = [adapted[field]]
+
+        if entry.input_adapter.asin_to_url:
+            target_field = entry.input_adapter.asin_to_url
+            if target_field in adapted:
+                asins = adapted[target_field]
+                if isinstance(asins, list):
+                    amazon_domain = adapted.get("amazon_domain", "www.amazon.com")
+                    adapted[target_field] = [
+                        f"https://{amazon_domain}/dp/{asin}" for asin in asins
+                    ]
+
+        for key, value in entry.input_adapter.static_fields.items():
+            adapted[key] = value
+
         return adapted
 
     @staticmethod
-    def _parse_binding(binding_code: str) -> tuple[str, int]:
-        if ":" in binding_code:
-            pool_code, index_str = binding_code.rsplit(":", 1)
+    def _parse_pool_code(pool_code: str) -> tuple[str, int]:
+        if ":" in pool_code:
+            pool, index_str = pool_code.rsplit(":", 1)
             try:
-                return pool_code, int(index_str)
+                return pool, int(index_str)
             except ValueError:
                 pass
-        return binding_code, 0
+        return pool_code, 0
 
     async def start_run(
         self,
-        binding_code: str,
+        pool_code: str,
         run_input: dict[str, object],
         *,
         webhooks: list[dict[str, object]] | None = None,
@@ -191,42 +208,27 @@ class ApifyGateway:
         if not self.config.token:
             raise ApifyBindingResolutionError("Missing APIFY_TOKEN for Apify dispatch.")
 
-        pool_index: int | None = None
-        pool_actor_id: str | None = None
-        pool_actor_name: str | None = None
-
-        if ":" in binding_code and not binding_code.startswith("bind_"):
-            pool_code, idx = self._parse_binding(binding_code)
-            pool = self.resolve_pool(pool_code)
-            if idx >= len(pool):
-                raise ApifyBindingResolutionError(
-                    f"Pool index {idx} out of range for pool `{pool_code}` "
-                    f"(size={len(pool)})."
-                )
-            entry = pool[idx]
-            pool_index = idx
-            pool_actor_id = entry.actor_id
-            pool_actor_name = entry.name
-            adapted_input = self._apply_adapter(entry, run_input)
-            binding = ApifyBindingTarget(
-                binding_code=binding_code,
-                actor_name=entry.name,
-                actor_id=entry.actor_id,
-                task_id=entry.task_id,
-                build=entry.build,
-                memory_mbytes=entry.memory_mbytes,
+        pool, idx = self._parse_pool_code(pool_code)
+        entries = self.resolve_pool(pool)
+        if idx >= len(entries):
+            raise ApifyBindingResolutionError(
+                f"Pool index {idx} out of range for pool `{pool}` "
+                f"(size={len(entries)})."
             )
-            if not binding.actor_id and not binding.task_id:
-                raise ApifyBindingResolutionError(
-                    f"Missing actor/task configuration for pool entry `{pool_code}:{idx}`."
-                )
-        else:
-            binding = self.resolve_binding(binding_code)
-            if not binding.actor_id and not binding.task_id:
-                raise ApifyBindingResolutionError(
-                    f"Missing actor/task configuration for binding `{binding_code}`."
-                )
-            adapted_input = dict(run_input)
+        entry = entries[idx]
+        adapted_input = self._apply_adapter(entry, run_input)
+        binding = ApifyBindingTarget(
+            binding_code=pool_code,
+            actor_name=entry.name,
+            actor_id=entry.actor_id,
+            task_id=entry.task_id,
+            build=entry.build,
+            memory_mbytes=entry.memory_mbytes,
+        )
+        if not binding.actor_id and not binding.task_id:
+            raise ApifyBindingResolutionError(
+                f"Missing actor/task configuration for pool entry `{pool}:{idx}`."
+            )
 
         input_hash = hashlib.sha256(
             json.dumps(adapted_input, sort_keys=True, default=str).encode("utf-8")
@@ -250,9 +252,9 @@ class ApifyGateway:
             input_hash=input_hash,
             binding=binding,
             run_input=adapted_input,
-            pool_actor_id=pool_actor_id,
-            pool_actor_name=pool_actor_name,
-            pool_index=pool_index,
+            pool_actor_id=entry.actor_id,
+            pool_actor_name=entry.name,
+            pool_index=idx,
         )
 
     async def get_run(self, run_id: str) -> ApifyRunState:
@@ -319,6 +321,7 @@ class ApifyGateway:
         webhooks: list[dict[str, object]] | None,
     ) -> dict[str, object]:
         client = ApifyClient(self.config.token)
+        raw: dict[str, object] | object | None = None
         if binding.task_id:
             task_kwargs: dict[str, object] = {
                 "task_input": run_input,
@@ -329,8 +332,8 @@ class ApifyGateway:
                 task_kwargs["memory_mbytes"] = binding.memory_mbytes
             if binding.build is not None:
                 task_kwargs["build"] = binding.build
-            return client.task(binding.task_id).call(**task_kwargs)
-        if binding.actor_id:
+            raw = client.task(binding.task_id).call(**task_kwargs)
+        elif binding.actor_id:
             actor_kwargs: dict[str, object] = {
                 "run_input": run_input,
             }
@@ -340,14 +343,21 @@ class ApifyGateway:
                 actor_kwargs["memory_mbytes"] = binding.memory_mbytes
             if binding.build is not None:
                 actor_kwargs["build"] = binding.build
-            return client.actor(binding.actor_id).call(**actor_kwargs)
-        raise ApifyBindingResolutionError(
-            f"Missing actor/task configuration for binding `{binding.binding_code}`."
-        )
+            raw = client.actor(binding.actor_id).call(**actor_kwargs)
+        else:
+            raise ApifyBindingResolutionError(
+                f"Missing actor/task configuration for `{binding.binding_code}`."
+            )
+        normalized = _normalize_run(raw)
+        if normalized is None:
+            raise ApifyRunStartError(
+                "Apify call() returned None — the run may have failed to start."
+            )
+        return normalized
 
     def _get_run_sync(self, run_id: str) -> dict[str, object] | None:
         client = ApifyClient(self.config.token)
-        return client.run(run_id).get()
+        return _normalize_run(client.run(run_id).get())
 
     def _list_dataset_items_sync(
         self,
@@ -357,11 +367,7 @@ class ApifyGateway:
     ) -> dict[str, object]:
         client = ApifyClient(self.config.token)
         response = client.dataset(dataset_id).list_items(limit=limit, offset=offset)
-        return {
-            "count": response.count,
-            "total": response.total,
-            "items": list(response.items),
-        }
+        return _normalize_dataset_response(response)
 
 
 def map_apify_status(raw_status: str | None) -> ExternalRunStatus | None:

@@ -173,7 +173,10 @@ def run_actor(
         print(f"[FAIL] Run failed with actor {spec.actor_id}: {exc}")
         return
 
-    dataset_id = run.get("defaultDatasetId")
+    if run is None:
+        print(f"[WARN] Actor {spec.actor_id} returned None")
+        return
+    dataset_id = run.get("defaultDatasetId") if isinstance(run, dict) else getattr(run, "default_dataset_id", None)
     if not dataset_id:
         print(f"[WARN] Actor {spec.actor_id} did not return a defaultDatasetId")
         print("Run metadata:")
