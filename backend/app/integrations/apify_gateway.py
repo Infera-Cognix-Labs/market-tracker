@@ -90,6 +90,45 @@ class ApifyDatasetBatch:
     items: list[dict[str, object]]
 
 
+def _normalize_run(run: dict[str, object] | object | None) -> dict[str, object] | None:
+    """Normalize an Apify run response to a dict with consistent camelCase keys.
+
+    apify-client 2.x returns plain dicts; 3.x returns Pydantic models with
+    snake_case attributes. This helper extracts the fields our codebase needs
+    into a plain dict so callers can keep using ``run["id"]`` and
+    ``run.get("defaultDatasetId")``.
+    """
+    if run is None:
+        return None
+    if isinstance(run, dict):
+        return run
+    return {
+        "id": getattr(run, "id", None),
+        "defaultDatasetId": getattr(run, "default_dataset_id", None),
+        "status": getattr(run, "status", None),
+        "startedAt": getattr(run, "started_at", None),
+        "finishedAt": getattr(run, "finished_at", None),
+    }
+
+
+def _normalize_dataset_response(
+    response: dict[str, object] | object,
+) -> dict[str, object]:
+    """Normalize a dataset list_items response to a dict.
+
+    apify-client 2.x returns a dict; 3.x returns a ``DatasetItemsPage``
+    Pydantic model. This extracts ``items``, ``count``, and ``total`` into a
+    plain dict.
+    """
+    if isinstance(response, dict):
+        return response
+    return {
+        "items": list(getattr(response, "items", []) or []),
+        "count": getattr(response, "count", None),
+        "total": getattr(response, "total", None),
+    }
+
+
 class ApifyGateway:
     def __init__(self, config: ApifyConfig) -> None:
         self.config = config
@@ -282,6 +321,7 @@ class ApifyGateway:
         webhooks: list[dict[str, object]] | None,
     ) -> dict[str, object]:
         client = ApifyClient(self.config.token)
+        raw: dict[str, object] | object | None = None
         if binding.task_id:
             task_kwargs: dict[str, object] = {
                 "task_input": run_input,
@@ -292,8 +332,8 @@ class ApifyGateway:
                 task_kwargs["memory_mbytes"] = binding.memory_mbytes
             if binding.build is not None:
                 task_kwargs["build"] = binding.build
-            return client.task(binding.task_id).call(**task_kwargs)
-        if binding.actor_id:
+            raw = client.task(binding.task_id).call(**task_kwargs)
+        elif binding.actor_id:
             actor_kwargs: dict[str, object] = {
                 "run_input": run_input,
             }
@@ -303,14 +343,21 @@ class ApifyGateway:
                 actor_kwargs["memory_mbytes"] = binding.memory_mbytes
             if binding.build is not None:
                 actor_kwargs["build"] = binding.build
-            return client.actor(binding.actor_id).call(**actor_kwargs)
-        raise ApifyBindingResolutionError(
-            f"Missing actor/task configuration for `{binding.binding_code}`."
-        )
+            raw = client.actor(binding.actor_id).call(**actor_kwargs)
+        else:
+            raise ApifyBindingResolutionError(
+                f"Missing actor/task configuration for `{binding.binding_code}`."
+            )
+        normalized = _normalize_run(raw)
+        if normalized is None:
+            raise ApifyRunStartError(
+                "Apify call() returned None — the run may have failed to start."
+            )
+        return normalized
 
     def _get_run_sync(self, run_id: str) -> dict[str, object] | None:
         client = ApifyClient(self.config.token)
-        return client.run(run_id).get()
+        return _normalize_run(client.run(run_id).get())
 
     def _list_dataset_items_sync(
         self,
@@ -320,11 +367,7 @@ class ApifyGateway:
     ) -> dict[str, object]:
         client = ApifyClient(self.config.token)
         response = client.dataset(dataset_id).list_items(limit=limit, offset=offset)
-        return {
-            "count": response.count,
-            "total": response.total,
-            "items": list(response.items),
-        }
+        return _normalize_dataset_response(response)
 
 
 def map_apify_status(raw_status: str | None) -> ExternalRunStatus | None:
