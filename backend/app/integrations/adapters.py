@@ -174,93 +174,7 @@ class SaswaveCategoryAdapter:
         )
 
 
-class JungleeCategoryAdapter:
-    actor_id = "junglee/amazon-bestsellers"
 
-    def to_standard_contract(
-        self,
-        raw_payload: dict[str, object],
-        marketplace: str,
-    ) -> CategoryProductRecord | None:
-        asin = _coerce_asin(_pick(raw_payload, "asin"))
-        if not asin:
-            return None
-        price_value = _extract_nested_price(raw_payload, "price")
-        currency = _coerce_string(
-            _pick_nested(raw_payload, "price", "currency")
-            or _pick(raw_payload, "currency")
-        )
-        return CategoryProductRecord(
-            asin=asin,
-            rank_position=_coerce_int(
-                _pick(raw_payload, "position", "rank_position")
-            ),
-            title=_coerce_string(_pick(raw_payload, "name", "title")),
-            brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
-            product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(
-                _pick(raw_payload, "thumbnailUrl", "thumbnail")
-            ),
-            price_current=price_value,
-            currency=currency,
-            rating_value=_coerce_float(_pick(raw_payload, "stars", "rating")),
-            review_count=_coerce_int(_pick(raw_payload, "reviewsCount")),
-        )
-
-
-class JungleeProductAdapter:
-    actor_id = "junglee/amazon-crawler"
-
-    def to_standard_contract(
-        self,
-        raw_payload: dict[str, object],
-        marketplace: str,
-    ) -> CategoryProductRecord | None:
-        asin = _coerce_asin(_pick(raw_payload, "asin", "originalAsin"))
-        if not asin:
-            return None
-        price_value = _extract_nested_price(raw_payload, "price")
-        list_price_value = _extract_nested_price(raw_payload, "listPrice")
-        currency = _coerce_string(
-            _pick_nested(raw_payload, "price", "currency")
-            or _pick_nested(raw_payload, "listPrice", "currency")
-        )
-        bsr_position = None
-        bestseller_ranks = raw_payload.get("bestsellerRanks")
-        if isinstance(bestseller_ranks, list) and bestseller_ranks:
-            last_rank = bestseller_ranks[-1]
-            if isinstance(last_rank, dict):
-                bsr_position = _coerce_int(last_rank.get("rank"))
-
-        return CategoryProductRecord(
-            asin=asin,
-            rank_position=bsr_position,
-            title=_coerce_string(_pick(raw_payload, "title")),
-            brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
-            product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(
-                _pick(raw_payload, "thumbnailImage")
-            ),
-            price_current=price_value,
-            price_original=list_price_value,
-            currency=currency,
-            rating_value=_coerce_float(
-                _pick(raw_payload, "stars", "rating")
-            ),
-            review_count=_coerce_int(_pick(raw_payload, "reviewsCount")),
-            availability_status="IN_STOCK"
-            if raw_payload.get("inStock") is True
-            else "OUT_OF_STOCK"
-            if raw_payload.get("inStock") is False
-            else None,
-            buy_box_seller_name=_coerce_string(
-                _pick_nested(raw_payload, "seller", "name")
-            ),
-            bsr_position=bsr_position,
-            variation_count=_coerce_int(
-                _pick(raw_payload, "variation_count")
-            ),
-        )
 
 
 class SaswaveCompetitorAdapter:
@@ -314,8 +228,11 @@ class SaswaveCompetitorAdapter:
         )
 
 
-class CrawlerBrosCategoryAdapter:
-    actor_id = "crawlerbros/amazon-bestseller-scraper"
+
+
+
+class ProdigerCategoryAdapter:
+    actor_id = "prodiger/amazon-product-scraper"
 
     def to_standard_contract(
         self,
@@ -328,20 +245,20 @@ class CrawlerBrosCategoryAdapter:
         return CategoryProductRecord(
             asin=asin,
             rank_position=_coerce_int(
-                _pick(raw_payload, "position", "rank_position")
+                _pick(raw_payload, "pageNumber", "searchResultPosition")
             ),
-            title=_coerce_string(_pick(raw_payload, "name", "title")),
+            title=_coerce_string(_pick(raw_payload, "title")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(
-                _pick(raw_payload, "thumbnail", "thumbnailUrl")
-            ),
+            main_image_url=_coerce_string(_pick(raw_payload, "thumbnail")),
             price_current=_coerce_float(_pick(raw_payload, "price")),
+            price_original=_coerce_float(_pick(raw_payload, "listPriceValue")),
             currency=_coerce_string(_pick(raw_payload, "currency")),
-            rating_value=_coerce_float(
-                _pick(raw_payload, "rating", "stars")
-            ),
-            review_count=_coerce_int(_pick(raw_payload, "reviewsCount")),
+            rating_value=_coerce_float(_pick(raw_payload, "rating")),
+            review_count=_coerce_int(_pick(raw_payload, "reviewCount")),
+            availability_status="IN_STOCK"
+            if raw_payload.get("isPrime") is True
+            else None,
         )
 
 
@@ -398,61 +315,6 @@ class JungleeAsinsAdapter:
                 _pick(raw_payload, "variation_count")
             ),
         )
-
-
-class GetLeadsCategoryAdapter:
-    actor_id = "get-leads/all-in-one-amazon-scraper"
-
-    def to_standard_contract(
-        self,
-        raw_payload: dict[str, object],
-        marketplace: str,
-    ) -> CategoryProductRecord | None:
-        asin = _coerce_asin(_pick(raw_payload, "asin"))
-        if not asin:
-            return None
-        return CategoryProductRecord(
-            asin=asin,
-            rank_position=_coerce_int(_pick(raw_payload, "position")),
-            title=_coerce_string(_pick(raw_payload, "title")),
-            brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
-            product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(_pick(raw_payload, "image_url")),
-            price_current=_coerce_float(_pick(raw_payload, "price")),
-            price_original=_coerce_float(
-                _pick(raw_payload, "was_price", "detail_was_price")
-            ),
-            currency=_coerce_string(_pick(raw_payload, "currency")),
-            coupon_text=_coerce_string(_pick(raw_payload, "coupon_text", "coupon")),
-            rating_value=_coerce_float(_pick(raw_payload, "rating")),
-            review_count=_coerce_int(
-                _pick(raw_payload, "review_count", "total_ratings")
-            ),
-            availability_status="IN_STOCK"
-            if raw_payload.get("in_stock") is True
-            else "OUT_OF_STOCK"
-            if raw_payload.get("in_stock") is False
-            else None,
-            buy_box_seller_name=_coerce_string(
-                _pick(raw_payload, "seller_name", "sold_by")
-            ),
-            bsr_position=_coerce_int(
-                _pick(raw_payload, "bestseller_rank")
-            )
-            or self._extract_bsr(raw_payload),
-            variation_count=_coerce_int(
-                _pick(raw_payload, "variation_count")
-            ),
-        )
-
-    @staticmethod
-    def _extract_bsr(payload: dict[str, object]) -> int | None:
-        bsr_rankings = payload.get("bsr_rankings")
-        if isinstance(bsr_rankings, list) and bsr_rankings:
-            first = bsr_rankings[0]
-            if isinstance(first, dict):
-                return _coerce_int(first.get("rank"))
-        return None
 
 
 class DealsScraperAdapter:

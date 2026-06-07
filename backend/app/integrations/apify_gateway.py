@@ -173,6 +173,10 @@ class ApifyGateway:
             if field in adapted and not isinstance(adapted[field], list):
                 adapted[field] = [adapted[field]]
 
+        for field, url_key in entry.input_adapter.wrap_object.items():
+            if field in adapted and isinstance(adapted[field], str):
+                adapted[field] = [{url_key: adapted[field]}]
+
         if entry.input_adapter.asin_to_url:
             target_field = entry.input_adapter.asin_to_url
             if target_field in adapted:
@@ -185,6 +189,11 @@ class ApifyGateway:
 
         for key, value in entry.input_adapter.static_fields.items():
             adapted[key] = value
+
+        if entry.input_adapter.marketplace_map and "marketplace" in adapted:
+            marketplace = adapted["marketplace"]
+            if marketplace in entry.input_adapter.marketplace_map:
+                adapted["marketplace"] = entry.input_adapter.marketplace_map[marketplace]
 
         return adapted
 
