@@ -10,25 +10,6 @@ apify:
   import_batch_size: 200
   import_worker_batch_size: 10
   import_worker_interval_secs: 30
-  bindings:
-    category:
-      name: "Category Top 50 Tracker"
-      actor_id: "saswave/amazon-product-scraper"
-      task_id: ""
-      build: "latest"
-      memory_mbytes: 4096
-    competitor:
-      name: "Competitor ASIN Tracker"
-      actor_id: "saswave/amazon-product-scraper"
-      task_id: ""
-      build: "latest"
-      memory_mbytes: 4096
-    deals:
-      name: "Deals Scraper"
-      actor_id: "hJNp8X1wuz14Wc5wU"
-      task_id: ""
-      build: "latest"
-      memory_mbytes: 4096
   actor_pools:
     category:
       saswave:
@@ -47,12 +28,13 @@ apify:
         adapter: "junglee_category"
         build: "latest"
         memory_mbytes: 4096
-        enabled: true
+        enabled: false
         priority: 2
         input_adapter:
           field_map:
             search_url: "categoryUrls"
             max_pages: "maxItemsPerStartUrl"
+          wrap_array: "categoryUrls"
       crawlerbros:
         actor_id: "crawlerbros/amazon-bestseller-scraper"
         task_id: ""
@@ -60,12 +42,31 @@ apify:
         adapter: "crawlerbros_category"
         build: "latest"
         memory_mbytes: 4096
-        enabled: true
+        enabled: false
         priority: 3
         input_adapter:
           field_map:
             search_url: "categoryUrls"
             max_pages: "maxItems"
+          wrap_array: "categoryUrls"
+      get_leads:
+        actor_id: "get-leads/all-in-one-amazon-scraper"
+        task_id: ""
+        name: "GetLeads Amazon Scraper"
+        adapter: "get_leads_category"
+        build: "latest"
+        memory_mbytes: 4096
+        enabled: true
+        priority: 2
+        input_adapter:
+          field_map:
+            search_url: "urls"
+            marketplace_code: "marketplace"
+            top_n: "maxProducts"
+            max_pages: "pages"
+          wrap_array: "urls"
+          static_fields:
+            detailLevel: "basic"
     competitor:
       saswave:
         actor_id: "saswave/amazon-product-scraper"
@@ -74,7 +75,7 @@ apify:
         adapter: "saswave_competitor"
         build: "latest"
         memory_mbytes: 4096
-        enabled: true
+        enabled: false
         priority: 1
       junglee_crawler:
         actor_id: "junglee/amazon-crawler"
@@ -83,7 +84,7 @@ apify:
         adapter: "junglee_product"
         build: "latest"
         memory_mbytes: 4096
-        enabled: true
+        enabled: false
         priority: 2
         input_adapter:
           field_map:
@@ -97,7 +98,7 @@ apify:
         build: "latest"
         memory_mbytes: 4096
         enabled: true
-        priority: 3
+        priority: 1
     deals:
       deals_scraper:
         actor_id: "hJNp8X1wuz14Wc5wU"

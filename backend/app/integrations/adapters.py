@@ -400,6 +400,61 @@ class JungleeAsinsAdapter:
         )
 
 
+class GetLeadsCategoryAdapter:
+    actor_id = "get-leads/all-in-one-amazon-scraper"
+
+    def to_standard_contract(
+        self,
+        raw_payload: dict[str, object],
+        marketplace: str,
+    ) -> CategoryProductRecord | None:
+        asin = _coerce_asin(_pick(raw_payload, "asin"))
+        if not asin:
+            return None
+        return CategoryProductRecord(
+            asin=asin,
+            rank_position=_coerce_int(_pick(raw_payload, "position")),
+            title=_coerce_string(_pick(raw_payload, "title")),
+            brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
+            product_url=_coerce_string(_pick(raw_payload, "url")),
+            main_image_url=_coerce_string(_pick(raw_payload, "image_url")),
+            price_current=_coerce_float(_pick(raw_payload, "price")),
+            price_original=_coerce_float(
+                _pick(raw_payload, "was_price", "detail_was_price")
+            ),
+            currency=_coerce_string(_pick(raw_payload, "currency")),
+            coupon_text=_coerce_string(_pick(raw_payload, "coupon_text", "coupon")),
+            rating_value=_coerce_float(_pick(raw_payload, "rating")),
+            review_count=_coerce_int(
+                _pick(raw_payload, "review_count", "total_ratings")
+            ),
+            availability_status="IN_STOCK"
+            if raw_payload.get("in_stock") is True
+            else "OUT_OF_STOCK"
+            if raw_payload.get("in_stock") is False
+            else None,
+            buy_box_seller_name=_coerce_string(
+                _pick(raw_payload, "seller_name", "sold_by")
+            ),
+            bsr_position=_coerce_int(
+                _pick(raw_payload, "bestseller_rank")
+            )
+            or self._extract_bsr(raw_payload),
+            variation_count=_coerce_int(
+                _pick(raw_payload, "variation_count")
+            ),
+        )
+
+    @staticmethod
+    def _extract_bsr(payload: dict[str, object]) -> int | None:
+        bsr_rankings = payload.get("bsr_rankings")
+        if isinstance(bsr_rankings, list) and bsr_rankings:
+            first = bsr_rankings[0]
+            if isinstance(first, dict):
+                return _coerce_int(first.get("rank"))
+        return None
+
+
 class DealsScraperAdapter:
     actor_id = "hJNp8X1wuz14Wc5wU"
 
