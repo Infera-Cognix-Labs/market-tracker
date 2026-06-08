@@ -100,6 +100,17 @@ def run_importer_batch_task() -> dict[str, Any]:
     return asyncio.run(run_importer_batch())
 
 
+async def run_notification_batch() -> dict[str, Any]:
+    return await _run_batch(
+        batch_name="market_tracker_notifications",
+        runner=lambda store: store.process_notifications(),
+    )
+
+
+def run_notification_batch_task() -> dict[str, Any]:
+    return asyncio.run(run_notification_batch())
+
+
 async def run_weekly_digest_batch(
     *,
     reference_date: date | None = None,

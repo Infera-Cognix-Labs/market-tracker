@@ -33,6 +33,11 @@ from app.models.api import (
     JobCreateRequest,
     JobListResponse,
     JobStatus,
+    NotificationRule,
+    NotificationRuleCreateRequest,
+    NotificationRuleListResponse,
+    NotificationRuleUpdateRequest,
+    NotificationWorkerResult,
     ProductDetail,
     ProductTimelineResponse,
     SchedulerWorkerResult,
@@ -49,6 +54,7 @@ from app.services.diff_service import DiffService
 from app.services.event_engine import EventEngine
 from app.services.job_service import JobService
 from app.services.normalization_service import NormalizationService
+from app.services.notification_service import NotificationService
 from app.services.object_storage_service import LocalObjectStorageService
 from app.services.result_importer_service import ResultImporterService
 from app.services.run_orchestrator import RunOrchestrator
@@ -271,6 +277,32 @@ class BaseStore:
     ) -> DigestWorkerResult:
         raise NotImplementedError
 
+    async def process_notifications(self) -> NotificationWorkerResult:
+        raise NotImplementedError
+
+    async def list_notification_rules(
+        self, workspace_id: str
+    ) -> NotificationRuleListResponse:
+        raise NotImplementedError
+
+    async def create_notification_rule(
+        self, workspace_id: str, payload: NotificationRuleCreateRequest
+    ) -> NotificationRule:
+        raise NotImplementedError
+
+    async def update_notification_rule(
+        self,
+        workspace_id: str,
+        rule_code: str,
+        payload: NotificationRuleUpdateRequest,
+    ) -> NotificationRule:
+        raise NotImplementedError
+
+    async def delete_notification_rule(
+        self, workspace_id: str, rule_code: str
+    ) -> None:
+        raise NotImplementedError
+
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
         raise NotImplementedError
 
@@ -359,6 +391,7 @@ class MongoStore(BaseStore):
         from app.services.digest_service import DigestService
         from app.services.scheduler_service import SchedulerService
 
+        self.notification_service = NotificationService()
         self.job_service = JobService(self.run_orchestrator)
         self.scheduler_service = SchedulerService(self.job_service)
 
@@ -387,6 +420,7 @@ class MongoStore(BaseStore):
                 result_importer=self.result_importer,
                 apify_lifecycle=self.apify_lifecycle,
                 digest_service=self.digest_service,
+                notification_service=self.notification_service,
             )
 
         self._seed = SeedModule()
@@ -583,6 +617,34 @@ class MongoStore(BaseStore):
         self, reference_date: date | None = None
     ) -> DigestWorkerResult:
         return await self._workers.process_digest_jobs(reference_date)
+
+    async def process_notifications(self) -> NotificationWorkerResult:
+        return await self._workers.process_notifications()
+
+    async def list_notification_rules(
+        self, workspace_id: str
+    ) -> NotificationRuleListResponse:
+        return await self.notification_service.list_rules(workspace_id)
+
+    async def create_notification_rule(
+        self, workspace_id: str, payload: NotificationRuleCreateRequest
+    ) -> NotificationRule:
+        return await self.notification_service.create_rule(workspace_id, payload)
+
+    async def update_notification_rule(
+        self,
+        workspace_id: str,
+        rule_code: str,
+        payload: NotificationRuleUpdateRequest,
+    ) -> NotificationRule:
+        return await self.notification_service.update_rule(
+            workspace_id, rule_code, payload
+        )
+
+    async def delete_notification_rule(
+        self, workspace_id: str, rule_code: str
+    ) -> None:
+        await self.notification_service.delete_rule(workspace_id, rule_code)
 
     async def list_weekly_digests(
         self,

@@ -11,6 +11,8 @@ import type {
   CategoryInsights,
   CompetitorInsights,
   CompetitorAlertCounts,
+  NotificationRule,
+  NotificationRuleRequest,
 } from "./types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_BASE_PATH || "/market-tracker"}/api`
@@ -45,6 +47,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
       body.details,
     )
   }
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
@@ -189,6 +192,32 @@ export const apiListEvents = async (params?: {
 }
 
 // ── Jobs ─────────────────────────────────────────────────────────────────────
+
+export const apiListNotificationRules = async (): Promise<NotificationRule[]> => {
+  const res = await apiFetch<{ items: NotificationRule[] }>("/notification-rules")
+  return res.items
+}
+
+export const apiCreateNotificationRule = async (payload: NotificationRuleRequest): Promise<NotificationRule> => {
+  return apiFetch<NotificationRule>("/notification-rules", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export const apiUpdateNotificationRule = async (
+  ruleCode: string,
+  payload: Partial<NotificationRuleRequest>
+): Promise<NotificationRule> => {
+  return apiFetch<NotificationRule>(`/notification-rules/${ruleCode}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}
+
+export const apiDeleteNotificationRule = async (ruleCode: string): Promise<void> => {
+  await apiFetch<void>(`/notification-rules/${ruleCode}`, { method: "DELETE" })
+}
 
 export const apiListJobs = async (params?: {
   tracker_type?: TrackerType

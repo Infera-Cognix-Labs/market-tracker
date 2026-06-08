@@ -8,10 +8,12 @@ from app.models.api import (
     ApifyWebhookEnvelope,
     DigestWorkerResult,
     ImportWorkerResult,
+    NotificationWorkerResult,
     SchedulerWorkerResult,
 )
 from app.services.apify_run_lifecycle_service import ApifyRunLifecycleService
 from app.services.digest_service import DigestService
+from app.services.notification_service import NotificationService
 from app.services.result_importer_service import ResultImporterService
 from app.services.scheduler_service import SchedulerService
 
@@ -23,11 +25,13 @@ class WorkerModule:
         result_importer: ResultImporterService,
         apify_lifecycle: ApifyRunLifecycleService,
         digest_service: DigestService,
+        notification_service: NotificationService,
     ) -> None:
         self._scheduler_service = scheduler_service
         self._result_importer = result_importer
         self._apify_lifecycle = apify_lifecycle
         self._digest_service = digest_service
+        self._notification_service = notification_service
 
     async def handle_apify_webhook(
         self,
@@ -54,3 +58,6 @@ class WorkerModule:
         return await self._digest_service.generate_weekly_digests(
             reference_date=reference_date
         )
+
+    async def process_notifications(self) -> NotificationWorkerResult:
+        return await self._notification_service.process_pending_notifications()

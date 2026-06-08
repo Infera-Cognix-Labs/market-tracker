@@ -9,7 +9,7 @@ from app.store import BaseStore, build_store
 
 logger = get_logger(__name__)
 
-_WORKER_NAMES = {"scheduler", "poller", "importer", "digest"}
+_WORKER_NAMES = {"scheduler", "poller", "importer", "digest", "notifications"}
 
 
 async def _run_scheduler_loop(store: BaseStore, settings: Config) -> None:
@@ -52,6 +52,16 @@ async def _run_digest_loop(store: BaseStore, settings: Config) -> None:
         await asyncio.sleep(settings.worker_config.digest_interval_secs)
 
 
+async def _run_notification_loop(store: BaseStore, settings: Config) -> None:
+    while True:
+        result = await store.process_notifications()
+        logger.info(
+            "Completed notification worker batch from pool.",
+            extra={"context": result.model_dump()},
+        )
+        await asyncio.sleep(settings.worker_config.notification_interval_secs)
+
+
 async def _run_once(store: BaseStore, workers: set[str]) -> None:
     if "scheduler" in workers:
         result = await store.schedule_jobs()
@@ -81,6 +91,13 @@ async def _run_once(store: BaseStore, workers: set[str]) -> None:
             extra={"context": result.model_dump()},
         )
 
+    if "notifications" in workers:
+        result = await store.process_notifications()
+        logger.info(
+            "Completed notification worker batch from pool.",
+            extra={"context": result.model_dump()},
+        )
+
 
 async def run_pool(*, workers: set[str], once: bool) -> None:
     settings = get_settings()
@@ -99,6 +116,8 @@ async def run_pool(*, workers: set[str], once: bool) -> None:
             tasks.append(asyncio.create_task(_run_importer_loop(store, settings)))
         if "digest" in workers:
             tasks.append(asyncio.create_task(_run_digest_loop(store, settings)))
+        if "notifications" in workers:
+            tasks.append(asyncio.create_task(_run_notification_loop(store, settings)))
 
         await asyncio.gather(*tasks)
     finally:
@@ -123,8 +142,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--workers",
-        default="scheduler,poller,importer,digest",
-        help="Comma-separated worker names: scheduler,poller,importer,digest.",
+        default="scheduler,poller,importer,digest,notifications",
+        help="Comma-separated worker names: scheduler,poller,importer,digest,notifications.",
     )
     parser.add_argument(
         "--once",
