@@ -178,7 +178,7 @@ class NormalizationService:
 
         rating_value = _coerce_float(_pick(payload, "rating", "stars", "rating_value"))
         review_count = _coerce_int(
-            _pick(payload, "reviewCount", "reviewsCount", "n_reviews", "review_count")
+            _pick(payload, "reviewCount", "reviewsCount", "reviews_count", "n_reviews", "review_count")
         )
 
         variation_count = _coerce_int(
@@ -306,7 +306,7 @@ def _normalize_availability_status(payload: dict[str, object]) -> AvailabilitySt
         )
 
     status_text = _coerce_string(
-        _pick(payload, "availability_status", "availability_text", "availabilityStatus")
+        _pick(payload, "availability_status", "availability_text", "availabilityStatus", "availability")
     )
     if not status_text:
         return AvailabilityStatus.UNKNOWN
@@ -459,7 +459,7 @@ def normalize_junglee_item(
 
     rating_value = _coerce_float(_pick(payload, "stars", "rating", "rating_value"))
     review_count = _coerce_int(
-        _pick(payload, "reviewsCount", "review_count", "n_reviews")
+        _pick(payload, "reviewsCount", "reviews_count", "review_count", "n_reviews")
     )
 
     bsr_position = _extract_rank_from_payload(payload)
