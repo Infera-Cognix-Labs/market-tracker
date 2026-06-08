@@ -234,7 +234,7 @@ class KeywordScope(ApiModel):
 
 
 class KeywordTrackingConfig(ApiModel):
-    top_n: int = Field(default=20)
+    top_n: int = Field(default=100)
     top10_alert_enabled: bool
 
 
@@ -300,7 +300,7 @@ class KeywordSnapshot(ApiModel):
     keyword: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 20
+    top_n: int = 100
     products: list[CategorySnapshotProduct]
     summary: KeywordSnapshotSummary
     source_refs: dict[str, Any] | None = None
