@@ -26,6 +26,8 @@ class AirflowDagSettings:
     apify_poller_cron: str
     importer_enabled: bool
     importer_cron: str
+    notifications_enabled: bool
+    notifications_cron: str
     weekly_digest_enabled: bool
     weekly_digest_cron: str
 
@@ -54,6 +56,14 @@ def get_airflow_dag_settings() -> AirflowDagSettings:
         ),
         importer_cron=_env_str(
             "AIRFLOW_MARKET_TRACKER_IMPORTER_CRON",
+            "* * * * *",
+        ),
+        notifications_enabled=_env_bool(
+            "AIRFLOW_MARKET_TRACKER_NOTIFICATIONS_ENABLED",
+            True,
+        ),
+        notifications_cron=_env_str(
+            "AIRFLOW_MARKET_TRACKER_NOTIFICATIONS_CRON",
             "* * * * *",
         ),
         weekly_digest_enabled=_env_bool(

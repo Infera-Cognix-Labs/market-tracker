@@ -1,19 +1,28 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { ChevronLeft, ChevronRight, Filter, Send } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { ChevronLeft, ChevronRight, Filter, Settings, Plus, Trash2, ChevronDown, X } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListEvents, apiGetProductDetail, apiListCategoryTrackers, apiListCompetitorTrackers } from "../shared/api"
-import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker } from "../shared/types"
+import {
+  apiCreateNotificationRule,
+  apiDeleteNotificationRule,
+  apiGetProductDetail,
+  apiListCategoryTrackers,
+  apiListCompetitorTrackers,
+  apiListEvents,
+  apiListNotificationRules,
+  apiUpdateNotificationRule,
+} from "../shared/api"
+import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker, NotificationRule, NotificationRuleRequest } from "../shared/types"
 
 const EVENT_TYPES: EventType[] = [
   "NEW_ENTRANT_TOP50", "RETURNING_TOP50", "EXIT_TOP50",
   "ENTER_TOP10", "EXIT_TOP10",
   "PRICE_CHANGED", "PROMOTION_CHANGED",
-  "TITLE_CHANGED", "MAIN_IMAGE_CHANGED", "VARIATIONS_ADDED", "CONTENT_CHANGED",
+  "TITLE_CHANGED", "MAIN_IMAGE_CHANGED", "VARIATIONS_ADDED",
   "AVAILABILITY_CHANGED", "BUY_BOX_CHANGED",
 ]
 const SEVERITIES: Severity[] = ["HIGH", "MEDIUM", "LOW"]
@@ -32,6 +41,351 @@ const presetRange = (preset: DatePreset): { from: string; to: string } | null =>
   return { from: toISODate(from), to }
 }
 
+// Notification Rules
+
+type EditableNotificationRule = {
+  rule_code: string
+  name: string
+  enabled: boolean
+  severities: Severity[]
+  event_types: EventType[]
+  tracker_type: "" | "CATEGORY" | "COMPETITOR"
+  tracker_code: string
+  webhook_url: string
+}
+
+const makeNewRule = (): EditableNotificationRule => ({
+  rule_code: "new",
+  name: "New Rule",
+  enabled: true,
+  severities: ["HIGH"],
+  event_types: [],
+  tracker_type: "",
+  tracker_code: "",
+  webhook_url: "",
+})
+
+const toEditableRule = (rule: NotificationRule): EditableNotificationRule => ({
+  rule_code: rule.rule_code,
+  name: rule.name,
+  enabled: rule.enabled,
+  severities: rule.severities,
+  event_types: rule.event_types,
+  tracker_type: rule.tracker_type || "",
+  tracker_code: rule.tracker_code || "",
+  webhook_url: rule.webhook_url,
+})
+
+const toRuleRequest = (rule: EditableNotificationRule): NotificationRuleRequest => {
+  return {
+    name: rule.name,
+    enabled: rule.enabled,
+    webhook_url: rule.webhook_url,
+    severities: rule.severities,
+    event_types: rule.event_types,
+    tracker_type: rule.tracker_type || null,
+    tracker_code: rule.tracker_code || null,
+  }
+}
+
+// TrackerDropdown
+
+interface TrackerDropdownProps {
+  label: string
+  options: { code: string; name: string }[]
+  selectedCode: string
+  onSelect: (code: string) => void
+}
+
+const TrackerDropdown = ({ label, options, selectedCode, onSelect }: TrackerDropdownProps) => {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  const selected = selectedCode ? options.find(o => o.code === selectedCode) : null
+  const filtered = search ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase())) : options
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          padding: "5px 10px", borderRadius: 6,
+          border: `1px solid ${selected ? T.blue : T.border}`,
+          background: selected ? T.bg4 : T.bg2,
+          color: selected ? T.blue : T.text2,
+          fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s",
+          maxWidth: 170, whiteSpace: "nowrap", overflow: "hidden",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>
+          {selected ? selected.name : label}
+        </span>
+        {selected ? (
+          <X
+            size={10}
+            onClick={e => { e.stopPropagation(); onSelect(""); setOpen(false); setSearch("") }}
+            style={{ flexShrink: 0, opacity: 0.7 }}
+          />
+        ) : (
+          <ChevronDown size={10} style={{ flexShrink: 0 }} />
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 200,
+          background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 8,
+          minWidth: 220, maxHeight: 260, display: "flex", flexDirection: "column",
+          boxShadow: `0 6px 20px ${T.bg0}CC`,
+        }}>
+          <div style={{ padding: "6px 8px", borderBottom: `1px solid ${T.border}` }}>
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+              style={{
+                width: "100%", padding: "5px 8px", borderRadius: 4,
+                border: `1px solid ${T.border}`, background: T.bg3,
+                color: T.text0, fontSize: 11, outline: "none",
+              }}
+            />
+          </div>
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            <button
+              onClick={() => { onSelect(""); setOpen(false); setSearch("") }}
+              style={{
+                width: "100%", padding: "8px 12px", background: !selectedCode ? `${T.blue}20` : "transparent",
+                color: !selectedCode ? T.blue : T.text3, border: "none", textAlign: "left",
+                fontSize: 11, cursor: "pointer", borderBottom: `1px solid ${T.border}`, transition: "all .15s",
+              }}
+            >
+              All
+            </button>
+            {filtered.length === 0 && (
+              <div style={{ padding: "10px 12px", fontSize: 11, color: T.text3 }}>No results</div>
+            )}
+            {filtered.map(o => (
+              <button
+                key={o.code}
+                onClick={() => { onSelect(o.code); setOpen(false); setSearch("") }}
+                style={{
+                  width: "100%", padding: "8px 12px",
+                  background: selectedCode === o.code ? `${T.blue}20` : "transparent",
+                  color: selectedCode === o.code ? T.blue : T.text2,
+                  border: "none", textAlign: "left", fontSize: 11, cursor: "pointer",
+                  transition: "all .15s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}
+              >
+                {o.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// RuleEditor
+
+interface RuleEditorProps {
+  rule: EditableNotificationRule
+  onChange: (patch: Partial<EditableNotificationRule>) => void
+  onSave: () => void
+  onCancel: () => void
+  categoryTrackers: CategoryTracker[]
+  competitorTrackers: CompetitorTracker[]
+}
+
+const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, competitorTrackers }: RuleEditorProps) => {
+  const toggleSeverity = (s: Severity) => {
+    const next = rule.severities.includes(s)
+      ? rule.severities.filter(x => x !== s)
+      : [...rule.severities, s]
+    onChange({ severities: next })
+  }
+
+  const toggleEventType = (et: EventType) => {
+    const next = rule.event_types.includes(et)
+      ? rule.event_types.filter(x => x !== et)
+      : [...rule.event_types, et]
+    onChange({ event_types: next })
+  }
+
+  const trackerOptions =
+    rule.tracker_type === "CATEGORY"
+      ? categoryTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
+      : rule.tracker_type === "COMPETITOR"
+        ? competitorTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
+        : []
+
+  return (
+    <div style={{
+      padding: "14px 16px", background: T.bg3, borderTop: `1px solid ${T.border}`,
+      display: "flex", flexDirection: "column", gap: 12,
+    }}>
+      {/* Name + Webhook */}
+      <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ flex: "0 0 180px" }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 4 }}>RULE NAME</div>
+          <input
+            value={rule.name}
+            onChange={e => onChange({ name: e.target.value })}
+            style={{
+              width: "100%", padding: "6px 10px", borderRadius: 4,
+              border: `1px solid ${T.border}`, background: T.bg4,
+              color: T.text0, fontSize: 12, outline: "none",
+            }}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 4 }}>SLACK WEBHOOK URL</div>
+          <input
+            value={rule.webhook_url}
+            onChange={e => onChange({ webhook_url: e.target.value })}
+            placeholder="https://hooks.slack.com/services/..."
+            style={{
+              width: "100%", padding: "6px 10px", borderRadius: 4,
+              border: `1px solid ${rule.webhook_url ? T.green : T.border}`,
+              background: T.bg4, color: T.text0, fontSize: 11, fontFamily: T.mono, outline: "none",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Severity */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
+          SEVERITY - leave empty to match all
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {SEVERITIES.map(s => {
+            const active = rule.severities.includes(s)
+            const col = s === "HIGH" ? T.red : s === "MEDIUM" ? T.amber : T.green
+            return (
+              <button
+                key={s}
+                onClick={() => toggleSeverity(s)}
+                style={{
+                  padding: "4px 10px", borderRadius: 5,
+                  border: `1px solid ${active ? col : T.border}`,
+                  background: active ? `${col}22` : "transparent",
+                  color: active ? col : T.text3,
+                  fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s",
+                }}
+              >
+                {s}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Event types */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
+          EVENT TYPES - leave empty to match all
+        </div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {EVENT_TYPES.map(et => {
+            const meta = AlertTypeMeta(et)
+            const active = rule.event_types.includes(et)
+            return (
+              <button
+                key={et}
+                onClick={() => toggleEventType(et)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "4px 8px", borderRadius: 5,
+                  border: `1px solid ${active ? meta.color : T.border}`,
+                  background: active ? `${meta.color}22` : "transparent",
+                  color: active ? meta.color : T.text3,
+                  fontSize: 10, cursor: "pointer", transition: "all .15s",
+                }}
+              >
+                <span style={{ display: "flex" }}>{meta.icon}</span>
+                <span style={{ fontFamily: T.mono }}>{meta.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Tracker filter */}
+      <div>
+        <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
+          TRACKER FILTER - leave empty to match all
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {([
+              { value: "" as const, label: "All" },
+              { value: "CATEGORY" as const, label: "Category" },
+              { value: "COMPETITOR" as const, label: "Competitor" },
+            ] as const).map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => onChange({ tracker_type: opt.value, tracker_code: "" })}
+                style={{
+                  padding: "4px 10px", borderRadius: 5,
+                  border: `1px solid ${rule.tracker_type === opt.value ? T.blue : T.border}`,
+                  background: rule.tracker_type === opt.value ? `${T.blue}22` : "transparent",
+                  color: rule.tracker_type === opt.value ? T.blue : T.text3,
+                  fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {rule.tracker_type && (
+            <TrackerDropdown
+              label={`${rule.tracker_type === "CATEGORY" ? "Category" : "Competitor"}: All`}
+              options={trackerOptions}
+              selectedCode={rule.tracker_code}
+              onSelect={code => onChange({ tracker_code: code })}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: "6px 14px", borderRadius: 5, border: `1px solid ${T.border}`,
+            background: "transparent", color: T.text2, fontSize: 11, cursor: "pointer",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onSave}
+          style={{
+            padding: "6px 14px", borderRadius: 5, border: `1px solid ${T.green}`,
+            background: T.green, color: T.bg0, fontSize: 11, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Save Rule
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export const EventsPage = () => {
   const [events, setEvents] = useState<Event[]>([])
   const [total, setTotal] = useState(0)
@@ -44,16 +398,26 @@ export const EventsPage = () => {
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
-  const [slackStatus, setSlackStatus] = useState<Map<string, "sending" | "done" | "error">>(new Map())
-  const [webhookUrl, setWebhookUrl] = useState("")
-  const [showWebhookInput, setShowWebhookInput] = useState(false)
   const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR">("")
-  const [selectedTrackerCode, setSelectedTrackerCode] = useState<string | "">("")
+  const [selectedTrackerCode, setSelectedTrackerCode] = useState<string>("")
   const [categoryTrackers, setCategoryTrackers] = useState<CategoryTracker[]>([])
   const [competitorTrackers, setCompetitorTrackers] = useState<CompetitorTracker[]>([])
-  const [trackerSearchQuery, setTrackerSearchQuery] = useState("")
-  const [showTrackerDropdown, setShowTrackerDropdown] = useState(false)
 
+  // Notification settings
+  const [showSettings, setShowSettings] = useState(false)
+  const [notifRules, setNotifRules] = useState<NotificationRule[]>([])
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null)
+  const [editingRules, setEditingRules] = useState<Record<string, EditableNotificationRule>>({})
+
+  const loadNotificationRules = useCallback(async () => {
+    try {
+      setNotifRules(await apiListNotificationRules())
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    void loadNotificationRules()
+  }, [loadNotificationRules])
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
@@ -115,126 +479,256 @@ export const EventsPage = () => {
     ])
   }, [])
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      const isDropdownClick = target.closest("[data-tracker-dropdown]")
-      if (!isDropdownClick && showTrackerDropdown) {
-        setShowTrackerDropdown(false)
-      }
-    }
-    if (showTrackerDropdown) {
-      document.addEventListener("click", handleClickOutside)
-      return () => document.removeEventListener("click", handleClickOutside)
-    }
-  }, [showTrackerDropdown])
+  // Active trackers for filter dropdowns (only ACTIVE status)
+  const activeCategoryOptions = categoryTrackers
+    .filter(t => t.status === "ACTIVE")
+    .map(t => ({ code: t.tracker_code, name: t.name }))
 
-  // Reset tracker selection when tracker type filter changes
-  useEffect(() => {
-    if (filterTrackerType) {
-      const isValidSelection = 
-        (filterTrackerType === "CATEGORY" && categoryTrackers.some(t => t.tracker_code === selectedTrackerCode)) ||
-        (filterTrackerType === "COMPETITOR" && competitorTrackers.some(t => t.tracker_code === selectedTrackerCode))
-      if (!isValidSelection && selectedTrackerCode) {
-        setSelectedTrackerCode("")
-      }
-    }
-  }, [filterTrackerType, selectedTrackerCode, categoryTrackers, competitorTrackers])
+  const activeCompetitorOptions = competitorTrackers
+    .filter(t => t.status === "ACTIVE")
+    .map(t => ({ code: t.tracker_code, name: t.name }))
 
-  useEffect(() => {
-    const stored = localStorage.getItem("slack_webhook_url")
-    if (stored) setWebhookUrl(stored)
-  }, [])
+  const selectCategory = (code: string) => {
+    setSelectedTrackerCode(code)
+    setFilterTrackerType(code ? "CATEGORY" : "")
+  }
 
-  const sendToSlack = useCallback(async (ev: Event) => {
-    if (!webhookUrl) {
-      alert("Please set Slack webhook URL first")
-      return
-    }
-    const status = new Map(slackStatus)
-    status.set(ev.event_code, "sending")
-    setSlackStatus(status)
-    try {
-      const color = ev.severity === "HIGH" ? "danger" : ev.severity === "MEDIUM" ? "warning" : "#36a64f"
-      const payload = {
-        text: `🔔 Event: ${ev.title}`,
-        attachments: [
-          {
-            color,
-            fields: [
-              { title: "Type", value: ev.event_type, short: true },
-              { title: "Severity", value: ev.severity, short: true },
-              { title: "ASIN", value: ev.asin, short: true },
-              { title: "Tracker", value: `${ev.tracker_code} (${ev.tracker_type})`, short: true },
-              { title: "Product", value: ev.title, short: false },
-              { title: "Summary", value: ev.summary || "N/A", short: false },
-              { title: "Time", value: new Date(ev.event_time).toLocaleString(), short: true },
-              { title: "Marketplace", value: ev.marketplace, short: true },
-            ],
-          },
-        ],
-      }
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        mode: "no-cors",
-      })
-      status.set(ev.event_code, "done")
-      setTimeout(() => {
-        const st = new Map(slackStatus)
-        st.delete(ev.event_code)
-        setSlackStatus(st)
-      }, 2000)
-    } catch {
-      status.set(ev.event_code, "error")
-      setSlackStatus(status)
-    }
-  }, [slackStatus, webhookUrl])
+  const selectCompetitor = (code: string) => {
+    setSelectedTrackerCode(code)
+    setFilterTrackerType(code ? "COMPETITOR" : "")
+  }
+
+  // Rule management helpers
+  const addRule = () => {
+    const rule = makeNewRule()
+    setExpandedRuleId(rule.rule_code)
+    setEditingRules(prev => ({ ...prev, [rule.rule_code]: rule }))
+  }
+
+  const deleteRule = async (ruleCode: string) => {
+    await apiDeleteNotificationRule(ruleCode)
+    setNotifRules(prev => prev.filter(r => r.rule_code !== ruleCode))
+    if (expandedRuleId === ruleCode) setExpandedRuleId(null)
+  }
+
+  const toggleRuleEnabled = async (rule: NotificationRule) => {
+    const updated = await apiUpdateNotificationRule(rule.rule_code, { enabled: !rule.enabled })
+    setNotifRules(prev => prev.map(r => r.rule_code === rule.rule_code ? updated : r))
+  }
+
+  const startEditing = (rule: NotificationRule) => {
+    const editable = toEditableRule(rule)
+    setEditingRules(prev => ({ ...prev, [rule.rule_code]: editable }))
+    setExpandedRuleId(prev => prev === rule.rule_code ? null : rule.rule_code)
+  }
+
+  const saveRule = async (ruleCode: string) => {
+    const editing = editingRules[ruleCode]
+    if (!editing) return
+    const saved = ruleCode === "new"
+      ? await apiCreateNotificationRule(toRuleRequest(editing))
+      : await apiUpdateNotificationRule(ruleCode, toRuleRequest(editing))
+    setNotifRules(prev => ruleCode === "new" ? [...prev, saved] : prev.map(r => r.rule_code === ruleCode ? saved : r))
+    setExpandedRuleId(null)
+    setEditingRules(prev => { const n = { ...prev }; delete n[ruleCode]; return n })
+  }
+
+  const cancelEditing = (ruleCode: string) => {
+    setExpandedRuleId(null)
+    setEditingRules(prev => { const n = { ...prev }; delete n[ruleCode]; return n })
+  }
+
+  const updateEditingRule = (ruleCode: string, patch: Partial<EditableNotificationRule>) => {
+    setEditingRules(prev => ({ ...prev, [ruleCode]: { ...prev[ruleCode], ...patch } }))
+  }
+
+  const displayedRules = expandedRuleId === "new" && editingRules.new ? [...notifRules, editingRules.new] : notifRules
+  const activeRuleCount = notifRules.filter(r => r.enabled && r.webhook_url).length
 
   return (
     <div className="anim-fade">
-      <PageHeader title="Events" sub={`${total} events detected`} />
-
-      {/* Slack Webhook Setting */}
-      <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: showWebhookInput ? 8 : 0 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>🔗 Slack Webhook:</span>
-          <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>
-            {webhookUrl ? `${webhookUrl.slice(0, 40)}...` : "Not configured"}
-          </span>
+      <PageHeader
+        title="Events"
+        sub={`${total} events detected`}
+        actions={
           <button
-            onClick={() => setShowWebhookInput(!showWebhookInput)}
-            style={{ marginLeft: "auto", padding: "4px 8px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg3, color: T.text2, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .15s" }}
+            onClick={() => setShowSettings(v => !v)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 6,
+              border: `1px solid ${showSettings ? T.blue : T.border}`,
+              background: showSettings ? `${T.blue}15` : T.bg2,
+              color: showSettings ? T.blue : T.text2,
+              fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s",
+            }}
           >
-            {showWebhookInput ? "Cancel" : "Edit"}
+            <Settings size={13} />
+            Notify Settings
+            {activeRuleCount > 0 && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                minWidth: 17, height: 17, borderRadius: 9, padding: "0 4px",
+                background: T.green, color: T.bg0, fontSize: 9, fontWeight: 700,
+              }}>
+                {activeRuleCount}
+              </span>
+            )}
           </button>
-        </div>
-        {showWebhookInput && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              type="text"
-              value={webhookUrl}
-              onChange={e => setWebhookUrl(e.target.value)}
-              placeholder="https://hooks.slack.com/services/..."
-              style={{ flex: 1, padding: "6px 10px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bg3, color: T.text0, fontSize: 11, fontFamily: T.mono, outline: "none" }}
-            />
+        }
+      />
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div style={{
+          marginBottom: 20, borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg2, overflow: "hidden",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "12px 16px",
+            borderBottom: displayedRules.length > 0 ? `1px solid ${T.border}` : undefined,
+            background: T.bg3,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Settings size={13} style={{ color: T.text3 }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>Notification Rules</span>
+              {displayedRules.length > 0 && (
+                <span style={{ fontSize: 10, color: T.text3, background: T.bg4, padding: "1px 6px", borderRadius: 4 }}>
+                  {displayedRules.length} rule{displayedRules.length > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
             <button
-              onClick={() => {
-                localStorage.setItem("slack_webhook_url", webhookUrl)
-                setShowWebhookInput(false)
+              onClick={addRule}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "5px 10px", borderRadius: 5,
+                border: `1px solid ${T.blue}`, background: `${T.blue}20`,
+                color: T.blue, fontSize: 11, fontWeight: 600, cursor: "pointer",
               }}
-              style={{ padding: "6px 12px", borderRadius: 4, border: `1px solid ${T.green}`, background: T.green, color: T.bg0, fontSize: 10, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}
             >
-              Save
+              <Plus size={11} /> Add Rule
             </button>
           </div>
-        )}
-      </div>
+
+          {displayedRules.length === 0 ? (
+            <div style={{ padding: "24px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 12, color: T.text3, marginBottom: 4 }}>No notification rules yet</div>
+              <div style={{ fontSize: 11, color: T.text3 }}>
+                Add a rule to automatically send matching events to a Slack webhook.
+              </div>
+            </div>
+          ) : (
+            displayedRules.map((rule, idx) => {
+              const ruleCode = rule.rule_code
+              const isNewRule = ruleCode === "new"
+              const isEditing = expandedRuleId === ruleCode
+              const editState = editingRules[ruleCode] || (isNewRule ? rule as EditableNotificationRule : toEditableRule(rule as NotificationRule))
+              return (
+                <div key={ruleCode} style={{ borderBottom: idx < displayedRules.length - 1 ? `1px solid ${T.border}` : undefined }}>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 10, padding: "10px 16px",
+                    background: isEditing ? T.bg3 : undefined,
+                  }}>
+                    <button
+                      onClick={() => isNewRule ? updateEditingRule("new", { enabled: !rule.enabled }) : void toggleRuleEnabled(rule as NotificationRule)}
+                      title={rule.enabled ? "Disable" : "Enable"}
+                      style={{
+                        width: 32, height: 18, borderRadius: 9, border: "none", cursor: "pointer",
+                        background: rule.enabled ? T.green : T.border2,
+                        position: "relative", flexShrink: 0, transition: "background .2s",
+                      }}
+                    >
+                      <span style={{
+                        position: "absolute", top: 2, left: rule.enabled ? 16 : 2,
+                        width: 14, height: 14, borderRadius: "50%",
+                        background: rule.enabled ? T.bg0 : T.text3, transition: "left .2s",
+                      }} />
+                    </button>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600, color: rule.enabled ? T.text1 : T.text3,
+                      flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {rule.name}
+                    </span>
+                    <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                      {(rule.severities.length > 0 ? rule.severities : ["ALL" as const]).map(s => {
+                        const col = s === "HIGH" ? T.red : s === "MEDIUM" ? T.amber : s === "LOW" ? T.green : T.text3
+                        return (
+                          <span key={s} style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3, border: `1px solid ${col}30`, color: col, background: `${col}15` }}>{s}</span>
+                        )
+                      })}
+                    </div>
+                    <span style={{ fontSize: 10, fontFamily: T.mono, color: rule.webhook_url ? T.green : T.red, flexShrink: 0 }}>
+                      {rule.webhook_url ? "Webhook" : "No webhook"}
+                    </span>
+                    {rule.tracker_code && (
+                      <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: T.bg4, color: T.text3, fontFamily: T.mono, flexShrink: 0 }}>
+                        {[...categoryTrackers, ...competitorTrackers].find(t => t.tracker_code === rule.tracker_code)?.name || rule.tracker_code}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => isNewRule ? setExpandedRuleId("new") : startEditing(rule as NotificationRule)}
+                      style={{
+                        padding: "3px 8px", borderRadius: 4,
+                        border: `1px solid ${isEditing ? T.blue : T.border}`,
+                        background: isEditing ? `${T.blue}20` : "transparent",
+                        color: isEditing ? T.blue : T.text3,
+                        fontSize: 10, cursor: "pointer", flexShrink: 0,
+                      }}
+                    >
+                      {isEditing ? "Collapse" : "Edit"}
+                    </button>
+                    <button
+                      onClick={() => isNewRule ? cancelEditing("new") : void deleteRule(ruleCode)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        width: 24, height: 24, borderRadius: 4,
+                        border: `1px solid ${T.border}`, background: "transparent",
+                        color: T.text3, cursor: "pointer", flexShrink: 0,
+                      }}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
+                  {isEditing && (
+                    <RuleEditor
+                      rule={editState}
+                      onChange={patch => updateEditingRule(ruleCode, patch)}
+                      onSave={() => void saveRule(ruleCode)}
+                      onCancel={() => cancelEditing(ruleCode)}
+                      categoryTrackers={categoryTrackers}
+                      competitorTrackers={competitorTrackers}
+                    />
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <Filter size={13} style={{ color: T.text3 }} />
+
+        {/* Category dropdown */}
+        <TrackerDropdown
+          label="Category"
+          options={activeCategoryOptions}
+          selectedCode={filterTrackerType === "CATEGORY" ? selectedTrackerCode : ""}
+          onSelect={selectCategory}
+        />
+
+        {/* Competitor dropdown */}
+        <TrackerDropdown
+          label="Competitor"
+          options={activeCompetitorOptions}
+          selectedCode={filterTrackerType === "COMPETITOR" ? selectedTrackerCode : ""}
+          onSelect={selectCompetitor}
+        />
+
+        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
 
         {/* Severity filter */}
         <div style={{ display: "flex", gap: 4 }}>
@@ -252,167 +746,6 @@ export const EventsPage = () => {
 
         <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
 
-        {/* Tracker type filter */}
-        <div style={{ display: "flex", gap: 4 }}>
-          {[
-            { type: "CATEGORY" as const, label: "Categories" },
-            { type: "COMPETITOR" as const, label: "Competitors" },
-          ].map(({ type, label }) => {
-            const active = filterTrackerType === type
-            return (
-              <button key={type} onClick={() => setFilterTrackerType(active ? "" : type)}
-                style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${active ? T.blue : T.border}`, background: active ? T.bg4 : T.bg2, color: active ? T.blue : T.text2, fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
-                {label}
-              </button>
-            )
-          })}
-        </div>
-
-        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
-
-        {/* Tracker selector dropdown */}
-        <div style={{ position: "relative" }} data-tracker-dropdown>
-          <button onClick={() => setShowTrackerDropdown(!showTrackerDropdown)}
-            style={{ 
-              padding: "5px 10px", 
-              borderRadius: 6, 
-              border: `1px solid ${selectedTrackerCode ? T.blue : T.border}`, 
-              background: selectedTrackerCode ? T.bg4 : T.bg2, 
-              color: selectedTrackerCode ? T.blue : T.text2, 
-              fontSize: 11, 
-              fontWeight: 600, 
-              cursor: "pointer", 
-              transition: "all .15s",
-              maxWidth: 150,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }}>
-            {selectedTrackerCode 
-              ? (categoryTrackers.find(t => t.tracker_code === selectedTrackerCode)?.name || 
-                 competitorTrackers.find(t => t.tracker_code === selectedTrackerCode)?.name || 
-                 selectedTrackerCode)
-              : "Tracker: All"}
-          </button>
-
-          {showTrackerDropdown && (
-            <div style={{ 
-              position: "absolute", 
-              top: "100%", 
-              left: 0, 
-              marginTop: 4, 
-              background: T.bg2, 
-              border: `1px solid ${T.border}`, 
-              borderRadius: 8, 
-              zIndex: 100,
-              minWidth: 220,
-              maxHeight: 250,
-              display: "flex",
-              flexDirection: "column",
-              boxShadow: `0 4px 12px ${T.bg1}80`
-            }}>
-              <input 
-                type="text" 
-                placeholder="Search tracker..."
-                value={trackerSearchQuery}
-                onChange={e => setTrackerSearchQuery(e.target.value)}
-                style={{
-                  padding: "8px 12px",
-                  borderBottom: `1px solid ${T.border}`,
-                  borderRadius: "8px 8px 0 0",
-                  border: "none",
-                  background: T.bg2,
-                  color: T.text0,
-                  fontSize: 11,
-                  outline: "none"
-                }}
-              />
-              <div style={{ overflowY: "auto", flexGrow: 1 }}>
-                <button
-                  onClick={() => { setSelectedTrackerCode(""); setShowTrackerDropdown(false); setTrackerSearchQuery("") }}
-                  style={{ 
-                    width: "100%", 
-                    padding: "8px 12px", 
-                    background: selectedTrackerCode === "" ? `${T.blue}20` : "transparent",
-                    color: selectedTrackerCode === "" ? T.blue : T.text2,
-                    border: "none", 
-                    textAlign: "left", 
-                    fontSize: 11, 
-                    cursor: "pointer",
-                    borderBottom: `1px solid ${T.border}`,
-                    transition: "all .15s"
-                  }}>
-                  <strong>All Trackers</strong>
-                </button>
-
-                {filterTrackerType !== "COMPETITOR" && (
-                  <>
-                    <div style={{ padding: "6px 12px", fontSize: 10, fontWeight: 600, color: T.text3, background: T.bg3 }}>
-                      CATEGORIES
-                    </div>
-                    {categoryTrackers
-                      .filter(t => !trackerSearchQuery || t.name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
-                      .map(t => (
-                        <button
-                          key={t.tracker_code}
-                          onClick={() => { setSelectedTrackerCode(t.tracker_code); setShowTrackerDropdown(false); setTrackerSearchQuery("") }}
-                          style={{ 
-                            width: "100%", 
-                            padding: "8px 12px", 
-                            background: selectedTrackerCode === t.tracker_code ? `${T.blue}20` : "transparent",
-                            color: selectedTrackerCode === t.tracker_code ? T.blue : T.text2,
-                            border: "none", 
-                            textAlign: "left", 
-                            fontSize: 11, 
-                            cursor: "pointer",
-                            transition: "all .15s",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis"
-                          }}>
-                          {t.name}
-                        </button>
-                      ))}
-                  </>
-                )}
-
-                {filterTrackerType !== "CATEGORY" && (
-                  <>
-                    <div style={{ padding: "6px 12px", fontSize: 10, fontWeight: 600, color: T.text3, background: T.bg3 }}>
-                      COMPETITORS
-                    </div>
-                    {competitorTrackers
-                      .filter(t => !trackerSearchQuery || t.name.toLowerCase().includes(trackerSearchQuery.toLowerCase()))
-                      .map(t => (
-                        <button
-                          key={t.tracker_code}
-                          onClick={() => { setSelectedTrackerCode(t.tracker_code); setShowTrackerDropdown(false); setTrackerSearchQuery("") }}
-                          style={{ 
-                            width: "100%", 
-                            padding: "8px 12px", 
-                            background: selectedTrackerCode === t.tracker_code ? `${T.blue}20` : "transparent",
-                            color: selectedTrackerCode === t.tracker_code ? T.blue : T.text2,
-                            border: "none", 
-                            textAlign: "left", 
-                            fontSize: 11, 
-                            cursor: "pointer",
-                            transition: "all .15s",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis"
-                          }}>
-                          {t.name}
-                        </button>
-                      ))}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
-
         {/* Date range filter */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           {(["all", "today", "7d", "30d", "custom"] as DatePreset[]).map(p => (
@@ -425,7 +758,7 @@ export const EventsPage = () => {
             <>
               <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
                 style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
-              <span style={{ color: T.text3, fontSize: 11 }}>→</span>
+              <span style={{ color: T.text3, fontSize: 11 }}>-&gt;</span>
               <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
                 style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
             </>
@@ -450,12 +783,12 @@ export const EventsPage = () => {
         </div>
       </div>
 
-      {/* Events list */}
+      {/*  Events list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {!loading && error && events.length === 0 && (
           <div style={{ textAlign: "center", padding: 24, color: T.red, fontSize: 12 }}>{error}</div>
         )}
-        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading events…</div>}
+        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading events...</div>}
         {!loading && events.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3 }}>
             <Filter size={32} style={{ margin: "0 auto 12px", opacity: 0.25 }} />
@@ -492,42 +825,30 @@ export const EventsPage = () => {
                   <span style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
                     {ev.tracker_type}
                   </span>
-                  {slackStatus.has(ev.event_code) && (
-                    <span style={{ fontSize: 9, fontFamily: T.mono, color: slackStatus.get(ev.event_code) === "done" ? T.green : slackStatus.get(ev.event_code) === "error" ? T.red : T.amber, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
-                      {slackStatus.get(ev.event_code) === "done" ? "Sent ✓" : slackStatus.get(ev.event_code) === "error" ? "Failed ✗" : "Sending..."}
-                    </span>
-                  )}
                 </div>
                 <div style={{ fontSize: 13, color: T.text0, fontWeight: 500 }}>{ev.title}</div>
                 <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>{ev.summary}</div>
               </div>
-              <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>{new Date(ev.event_time).toLocaleString()}</div>
-                  <div style={{ fontSize: 10, fontFamily: T.mono, color: T.amber, marginTop: 2 }}>{ev.asin}</div>
-                  <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
-                </div>
-                <button onClick={() => void sendToSlack(ev)} disabled={slackStatus.get(ev.event_code) === "sending"}
-                  style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 4, border: `1px solid ${slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.border}`, background: slackStatus.get(ev.event_code) === "error" ? T.bg4 : slackStatus.get(ev.event_code) === "done" ? T.bg4 : T.bg3, color: slackStatus.get(ev.event_code) === "error" ? T.red : slackStatus.get(ev.event_code) === "done" ? T.green : T.text3, fontSize: 10, fontWeight: 500, cursor: "pointer", transition: "all .2s" }}>
-                  <Send size={10} />
-                  {slackStatus.get(ev.event_code) === "sending" ? "..." : slackStatus.get(ev.event_code) === "done" ? "✓" : slackStatus.get(ev.event_code) === "error" ? "✗" : "Slack"}
-                </button>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>{new Date(ev.event_time).toLocaleString()}</div>
+                <div style={{ fontSize: 10, fontFamily: T.mono, color: T.amber, marginTop: 2 }}>{ev.asin}</div>
+                <div style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, marginTop: 2 }}>{ev.tracker_code}</div>
               </div>
             </div>
           )
         })}
       </div>
 
-      {/* Pagination */}
+      {/* Pagination  */}
       {total > 20 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
-          <button className="btn-ghost" disabled={page <= 1} onClick={() => loadEvents(page - 1)}>
+          <button className="btn-ghost" disabled={page <= 1} onClick={() => void loadEvents(page - 1)}>
             <ChevronLeft size={14} /> Prev
           </button>
           <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, padding: "6px 10px" }}>
             Page {page} of {Math.ceil(total / 20)}
           </span>
-          <button className="btn-ghost" disabled={page >= Math.ceil(total / 20)} onClick={() => loadEvents(page + 1)}>
+          <button className="btn-ghost" disabled={page >= Math.ceil(total / 20)} onClick={() => void loadEvents(page + 1)}>
             Next <ChevronRight size={14} />
           </button>
         </div>

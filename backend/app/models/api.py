@@ -83,6 +83,12 @@ class Severity(str, Enum):
     HIGH = "HIGH"
 
 
+class NotificationDeliveryStatus(str, Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+
+
 class AvailabilityStatus(str, Enum):
     IN_STOCK = "IN_STOCK"
     OUT_OF_STOCK = "OUT_OF_STOCK"
@@ -668,6 +674,52 @@ class EventListResponse(ApiModel):
     page: int
     page_size: int
     total: int
+
+
+class NotificationRule(ApiModel):
+    rule_code: str
+    name: str
+    enabled: bool
+    webhook_url: str
+    severities: list[Severity] = Field(default_factory=list)
+    event_types: list[EventType] = Field(default_factory=list)
+    tracker_type: TrackerType | None = None
+    tracker_code: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationRuleCreateRequest(ApiModel):
+    name: str = Field(min_length=1, max_length=120)
+    enabled: bool = True
+    webhook_url: str = Field(min_length=1, max_length=500)
+    severities: list[Severity] = Field(default_factory=list)
+    event_types: list[EventType] = Field(default_factory=list)
+    tracker_type: TrackerType | None = None
+    tracker_code: str | None = Field(default=None, max_length=120)
+
+
+class NotificationRuleUpdateRequest(ApiModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    enabled: bool | None = None
+    webhook_url: str | None = Field(default=None, min_length=1, max_length=500)
+    severities: list[Severity] | None = None
+    event_types: list[EventType] | None = None
+    tracker_type: TrackerType | None = None
+    tracker_code: str | None = Field(default=None, max_length=120)
+
+
+class NotificationRuleListResponse(ApiModel):
+    items: list[NotificationRule]
+
+
+class NotificationWorkerResult(ApiModel):
+    source: Literal["NOTIFICATION_WORKER"] = "NOTIFICATION_WORKER"
+    scanned_events: int
+    matched_deliveries: int
+    sent: int
+    failed: int
+    skipped_existing: int
 
 
 class JobListResponse(ApiModel):

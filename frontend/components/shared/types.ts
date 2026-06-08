@@ -1,5 +1,3 @@
-// ── API Type Definitions ─ Matches backend OpenAPI 3.1 schema ─────────────────
-
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
 export type TrackerStatus = "ACTIVE" | "PAUSED" | "ARCHIVED"
@@ -48,6 +46,29 @@ export interface PagedResponse<T> {
   page: number
   page_size: number
   total: number
+}
+
+export interface NotificationRule {
+  rule_code: string
+  name: string
+  enabled: boolean
+  webhook_url: string
+  severities: Severity[]
+  event_types: EventType[]
+  tracker_type?: TrackerType | null
+  tracker_code?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationRuleRequest {
+  name: string
+  enabled: boolean
+  webhook_url: string
+  severities: Severity[]
+  event_types: EventType[]
+  tracker_type?: TrackerType | null
+  tracker_code?: string | null
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────

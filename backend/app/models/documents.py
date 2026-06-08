@@ -144,6 +144,49 @@ class EventDocument(WorkspaceDocument):
         ]
 
 
+class NotificationRuleDocument(WorkspaceDocument):
+    rule_code: str
+    name: str
+    enabled: bool = True
+    webhook_url: str
+    severities: list[str] = Field(default_factory=list)
+    event_types: list[str] = Field(default_factory=list)
+    tracker_type: str | None = None
+    tracker_code: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "notification_rules"
+        indexes = [
+            IndexModel([("workspace_id", 1), ("rule_code", 1)], unique=True),
+            IndexModel([("workspace_id", 1), ("enabled", 1)]),
+        ]
+
+
+class NotificationDeliveryDocument(WorkspaceDocument):
+    delivery_code: str
+    rule_code: str
+    event_code: str
+    status: str
+    attempts: int = 0
+    error: str | None = None
+    delivered_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "notification_deliveries"
+        indexes = [
+            IndexModel([("workspace_id", 1), ("delivery_code", 1)], unique=True),
+            IndexModel(
+                [("workspace_id", 1), ("rule_code", 1), ("event_code", 1)],
+                unique=True,
+            ),
+            IndexModel([("workspace_id", 1), ("status", 1), ("updated_at", 1)]),
+        ]
+
+
 class ProductDocument(WorkspaceDocument):
     marketplace: str
     asin: str
@@ -328,6 +371,8 @@ DOCUMENT_MODELS = [
     CategorySnapshotDocument,
     CompetitorTrackerDocument,
     EventDocument,
+    NotificationRuleDocument,
+    NotificationDeliveryDocument,
     ProductDocument,
     ProductSnapshotDocument,
     JobDocument,

@@ -45,6 +45,7 @@ def create_container(config: Config) -> Container:
     from app.services.event_engine import EventEngine
     from app.services.job_service import JobService
     from app.services.normalization_service import NormalizationService
+    from app.services.notification_service import NotificationService
     from app.services.object_storage_service import LocalObjectStorageService
     from app.services.result_importer_service import ResultImporterService
     from app.services.run_orchestrator import RunOrchestrator
@@ -82,6 +83,9 @@ def create_container(config: Config) -> Container:
 
     def create_digest_service(c: Container) -> DigestService:
         return DigestService()
+
+    def create_notification_service(c: Container) -> NotificationService:
+        return NotificationService()
 
     def create_apify_gateway_singleton(c: Container) -> ApifyGateway:
         gateway = create_apify_gateway(c)
@@ -159,6 +163,7 @@ def create_container(config: Config) -> Container:
             result_importer=c.resolve(ResultImporterService),
             apify_lifecycle=c.resolve(ApifyRunLifecycleService),
             digest_service=c.resolve(DigestService),
+            notification_service=c.resolve(NotificationService),
         )
 
     factories = {
@@ -170,6 +175,7 @@ def create_container(config: Config) -> Container:
         TrackerManagementService: create_tracker_management,
         DashboardQueryService: create_dashboard_query,
         DigestService: create_digest_service,
+        NotificationService: create_notification_service,
         RunOrchestrator: create_run_orchestrator_singleton,
         EventEngine: create_event_engine,
         JobService: create_job_service,
