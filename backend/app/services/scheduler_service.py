@@ -13,7 +13,7 @@ from app.models.api import (
     TrackerType,
     TriggerMode,
 )
-from app.models.documents import CategoryTrackerDocument, CompetitorTrackerDocument
+from app.models.documents import CategoryTrackerDocument, CompetitorTrackerDocument, KeywordTrackerDocument
 from app.services.job_service import JobService
 
 logger = get_logger(__name__)
@@ -35,6 +35,9 @@ class SchedulerService:
             {"status": "ACTIVE"}
         ).to_list()
         competitor_trackers = await CompetitorTrackerDocument.find(
+            {"status": "ACTIVE"}
+        ).to_list()
+        keyword_trackers = await KeywordTrackerDocument.find(
             {"status": "ACTIVE"}
         ).to_list()
 
@@ -164,6 +167,70 @@ class SchedulerService:
                 )
                 logger.exception(
                     "Scheduler failed to process competitor tracker.",
+                    extra={
+                        "context": correlation_context(
+                            tracker_code=tracker.tracker_code,
+                            snapshot_date=now.date(),
+                            error_type=type(exc).__name__,
+                        )
+                    },
+                )
+
+        for tracker in keyword_trackers:
+            scanned_trackers += 1
+            if not self._is_due(schedule=tracker.schedule, now=now):
+                continue
+
+            due_trackers += 1
+            try:
+                created_job = await self.job_service.create_job(
+                    tracker.workspace_id,
+                    JobCreateRequest(
+                        tracker_type=TrackerType.KEYWORD,
+                        tracker_code=tracker.tracker_code,
+                        snapshot_date=now.date(),
+                        trigger_mode=TriggerMode.SCHEDULED,
+                    ),
+                )
+                created_jobs += 1
+                await self.job_service.dispatch_job(
+                    tracker.workspace_id,
+                    created_job.job_code,
+                )
+                dispatched_jobs += 1
+                logger.info(
+                    "Scheduler created and dispatched keyword tracking job.",
+                    extra={
+                        "context": correlation_context(
+                            tracker_code=tracker.tracker_code,
+                            job_code=created_job.job_code,
+                            snapshot_date=created_job.snapshot_date,
+                        )
+                    },
+                )
+            except ConflictError:
+                skipped_existing += 1
+                logger.info(
+                    "Scheduler skipped keyword tracker because a job already exists.",
+                    extra={
+                        "context": correlation_context(
+                            tracker_code=tracker.tracker_code,
+                            snapshot_date=now.date(),
+                        )
+                    },
+                )
+            except Exception as exc:  # pragma: no cover - behavior tested via results
+                failed_jobs += 1
+                metrics.increment(
+                    "scheduler_job_failures_total",
+                    1.0,
+                    workspace_id=tracker.workspace_id,
+                    tracker_code=tracker.tracker_code,
+                    tracker_type=TrackerType.KEYWORD,
+                    error_type=type(exc).__name__,
+                )
+                logger.exception(
+                    "Scheduler failed to process keyword tracker.",
                     extra={
                         "context": correlation_context(
                             tracker_code=tracker.tracker_code,

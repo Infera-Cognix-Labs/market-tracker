@@ -24,6 +24,7 @@ from app.models.documents import (
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     JobDocument,
+    KeywordTrackerDocument,
 )
 from app.services.shared import job_doc_to_model
 
@@ -204,7 +205,7 @@ class RunOrchestrator:
         self,
         workspace_id: str,
         job_document: JobDocument,
-    ) -> CategoryTrackerDocument | CompetitorTrackerDocument:
+    ) -> CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument:
         if job_document.tracker_type == TrackerType.CATEGORY:
             tracker_document = await CategoryTrackerDocument.find_one(
                 CategoryTrackerDocument.workspace_id == workspace_id,
@@ -212,6 +213,15 @@ class RunOrchestrator:
             )
             if tracker_document is None:
                 raise NotFoundError("Category tracker not found.")
+            return tracker_document
+
+        if job_document.tracker_type == TrackerType.KEYWORD:
+            tracker_document = await KeywordTrackerDocument.find_one(
+                KeywordTrackerDocument.workspace_id == workspace_id,
+                KeywordTrackerDocument.tracker_code == job_document.tracker_code,
+            )
+            if tracker_document is None:
+                raise NotFoundError("Keyword tracker not found.")
             return tracker_document
 
         tracker_document = await CompetitorTrackerDocument.find_one(
@@ -225,7 +235,7 @@ class RunOrchestrator:
     def _build_run_input(
         self,
         job_document: JobDocument,
-        tracker_document: CategoryTrackerDocument | CompetitorTrackerDocument,
+        tracker_document: CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument,
     ) -> dict[str, object]:
         job = job_doc_to_model(job_document)
         base_input: dict[str, object] = {
@@ -259,6 +269,22 @@ class RunOrchestrator:
                     "top_n": top_n,
                     "search_url": search_url,
                     "max_pages": _category_search_max_pages(top_n),
+                    "amazon_domain": amazon_domain,
+                }
+            )
+            return base_input
+
+        if job.tracker_type == TrackerType.KEYWORD:
+            top_n = max(1, tracker_document.tracking_config.top_n)
+            amazon_domain = _marketplace_to_amazon_domain(
+                tracker_document.marketplace
+            )
+            base_input.update(
+                {
+                    "marketplace": tracker_document.marketplace,
+                    "keyword": tracker_document.scope.keyword,
+                    "sort_by": tracker_document.scope.sort_by,
+                    "top_n": top_n,
                     "amazon_domain": amazon_domain,
                 }
             )
@@ -314,17 +340,17 @@ def coerce_datetime(value: object | None) -> datetime | None:
 
 def _marketplace_to_amazon_domain(marketplace: str) -> str:
     mapping = {
-        "amazon_us": "www.amazon.com",
-        "amazon_uk": "www.amazon.co.uk",
-        "amazon_de": "www.amazon.de",
-        "amazon_fr": "www.amazon.fr",
-        "amazon_it": "www.amazon.it",
-        "amazon_es": "www.amazon.es",
-        "amazon_ca": "www.amazon.ca",
-        "amazon_mx": "www.amazon.com.mx",
-        "amazon_jp": "www.amazon.co.jp",
+        "amazon_us": "amazon.com",
+        "amazon_uk": "amazon.co.uk",
+        "amazon_de": "amazon.de",
+        "amazon_fr": "amazon.fr",
+        "amazon_it": "amazon.it",
+        "amazon_es": "amazon.es",
+        "amazon_ca": "amazon.ca",
+        "amazon_mx": "amazon.com.mx",
+        "amazon_jp": "amazon.co.jp",
     }
-    return mapping.get(marketplace.lower(), "www.amazon.com")
+    return mapping.get(marketplace.lower(), "amazon.com")
 
 
 def _category_search_max_pages(top_n: int) -> int:

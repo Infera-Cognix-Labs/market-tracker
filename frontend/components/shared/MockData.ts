@@ -13,6 +13,7 @@ export const MOCK_DASHBOARD_OVERVIEW: DashboardOverview = {
   summary: {
     active_category_tracker_count: 2,
     active_competitor_tracker_count: 1,
+    active_keyword_tracker_count: 0,
     tracked_product_count: 18,
     new_entrant_count: 4,
     returning_count: 2,
@@ -156,6 +157,7 @@ export const MOCK_DASHBOARD_OVERVIEW: DashboardOverview = {
   competitor_highlights: [
     { tracker_code: "cmp_baby_bottle_warmers_us", tracker_name: "Bottle Warmer Competitors - US", price_change_count: 9, availability_change_count: 1, listing_change_count: 5 },
   ],
+  keyword_highlights: [],
 }
 
 // ── Category Trackers List ───────────────────────────────────────────────────

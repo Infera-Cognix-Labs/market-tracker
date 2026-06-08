@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from app.models.api import EventType, TrackerType
-from app.models.documents import CategorySnapshotDocument, ProductSnapshotDocument
+from app.models.documents import CategorySnapshotDocument, KeywordSnapshotDocument, ProductSnapshotDocument
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,14 @@ class DiffService:
         if tracker_type == TrackerType.CATEGORY:
             candidates.extend(
                 await self._build_category_movement_candidates(
+                    workspace_id=workspace_id,
+                    tracker_code=tracker_code,
+                    snapshot_date=snapshot_date,
+                )
+            )
+        elif tracker_type == TrackerType.KEYWORD:
+            candidates.extend(
+                await self._build_keyword_movement_candidates(
                     workspace_id=workspace_id,
                     tracker_code=tracker_code,
                     snapshot_date=snapshot_date,
@@ -251,6 +259,232 @@ class DiffService:
                 candidates.append(
                     DiffCandidate(
                         tracker_type=TrackerType.CATEGORY,
+                        tracker_code=tracker_code,
+                        marketplace=marketplace,
+                        asin=asin,
+                        event_type=EventType.EXIT_TOP10,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_rank": previous_rank,
+                            "current_rank": None,
+                            "previous_title": prev_product.title if prev_product else None,
+                            "previous_brand": prev_product.brand if prev_product else None,
+                            "previous_image_url": prev_product.image_url if prev_product else None,
+                            "previous_price_current": prev_product.price_current if prev_product else None,
+                            "previous_price_original": prev_product.price_original if prev_product else None,
+                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
+                            "previous_rating_value": prev_product.rating_value if prev_product else None,
+                            "previous_review_count": prev_product.review_count if prev_product else None,
+                            "previous_availability_status": prev_product.availability_status if prev_product else None,
+                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                        },
+                    )
+                )
+
+        return candidates
+
+    async def _build_keyword_movement_candidates(
+        self,
+        *,
+        workspace_id: str,
+        tracker_code: str,
+        snapshot_date: date,
+    ) -> list[DiffCandidate]:
+        current_snapshot = await KeywordSnapshotDocument.find_one(
+            {
+                "workspace_id": workspace_id,
+                "tracker_code": tracker_code,
+                "snapshot_date": snapshot_date,
+            }
+        )
+        if current_snapshot is None:
+            return []
+
+        previous_snapshot = await KeywordSnapshotDocument.find_one(
+            {
+                "workspace_id": workspace_id,
+                "tracker_code": tracker_code,
+                "snapshot_date": {"$lt": snapshot_date},
+            },
+            sort=[("snapshot_date", -1)],
+        )
+        history_snapshots = await KeywordSnapshotDocument.find(
+            {
+                "workspace_id": workspace_id,
+                "tracker_code": tracker_code,
+                "snapshot_date": {"$lt": snapshot_date},
+            }
+        ).to_list()
+        current_products = _dedupe_category_snapshot_products(current_snapshot.products)
+        previous_products = (
+            _dedupe_category_snapshot_products(previous_snapshot.products)
+            if previous_snapshot is not None
+            else []
+        )
+
+        current_rank_map = {
+            product.asin: product.rank_position for product in current_products
+        }
+        current_product_map = {
+            product.asin: product for product in current_products
+        }
+        previous_rank_map = (
+            {product.asin: product.rank_position for product in previous_products}
+            if previous_snapshot is not None
+            else {}
+        )
+        previous_product_map = {
+            product.asin: product for product in previous_products
+        }
+
+        historical_last_seen: dict[str, date] = {}
+        for snapshot in history_snapshots:
+            for product in _dedupe_category_snapshot_products(snapshot.products):
+                last_seen = historical_last_seen.get(product.asin)
+                if last_seen is None or snapshot.snapshot_date > last_seen:
+                    historical_last_seen[product.asin] = snapshot.snapshot_date
+
+        candidates: list[DiffCandidate] = []
+        event_time = current_snapshot.captured_at
+        marketplace = current_snapshot.marketplace
+
+        for asin, current_rank in current_rank_map.items():
+            previous_rank = previous_rank_map.get(asin)
+            if previous_rank is None:
+                last_seen_date = historical_last_seen.get(asin)
+                if last_seen_date is None:
+                    candidates.append(
+                        DiffCandidate(
+                            tracker_type=TrackerType.KEYWORD,
+                            tracker_code=tracker_code,
+                            marketplace=marketplace,
+                            asin=asin,
+                            event_type=EventType.NEW_ENTRANT_TOP50,
+                            snapshot_date=snapshot_date,
+                            event_time=event_time,
+                            metadata={
+                                "rank_today": current_rank,
+                                "first_seen_in_tracker": True,
+                            },
+                        )
+                    )
+                else:
+                    candidates.append(
+                        DiffCandidate(
+                            tracker_type=TrackerType.KEYWORD,
+                            tracker_code=tracker_code,
+                            marketplace=marketplace,
+                            asin=asin,
+                            event_type=EventType.RETURNING_TOP50,
+                            snapshot_date=snapshot_date,
+                            event_time=event_time,
+                            metadata={
+                                "rank_today": current_rank,
+                                "last_seen_date": last_seen_date,
+                                "days_absent": max(
+                                    0,
+                                    (snapshot_date - last_seen_date).days - 1,
+                                ),
+                            },
+                        )
+                    )
+
+            if current_rank <= 10 and (previous_rank is None or previous_rank > 10):
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=TrackerType.KEYWORD,
+                        tracker_code=tracker_code,
+                        marketplace=marketplace,
+                        asin=asin,
+                        event_type=EventType.ENTER_TOP10,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_rank": previous_rank,
+                            "current_rank": current_rank,
+                        },
+                    )
+                )
+            if previous_rank is not None and previous_rank <= 10 and current_rank > 10:
+                prev_product = previous_product_map.get(asin)
+                cur_product = current_product_map.get(asin)
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=TrackerType.KEYWORD,
+                        tracker_code=tracker_code,
+                        marketplace=marketplace,
+                        asin=asin,
+                        event_type=EventType.EXIT_TOP10,
+                        snapshot_date=snapshot_date,
+                        event_time=event_time,
+                        metadata={
+                            "previous_rank": previous_rank,
+                            "current_rank": current_rank,
+                            "previous_title": prev_product.title if prev_product else None,
+                            "previous_brand": prev_product.brand if prev_product else None,
+                            "previous_image_url": prev_product.image_url if prev_product else None,
+                            "previous_price_current": prev_product.price_current if prev_product else None,
+                            "previous_price_original": prev_product.price_original if prev_product else None,
+                            "previous_currency": prev_product.currency if prev_product else None,
+                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
+                            "previous_rating_value": prev_product.rating_value if prev_product else None,
+                            "previous_review_count": prev_product.review_count if prev_product else None,
+                            "previous_product_url": prev_product.product_url if prev_product else None,
+                            "previous_availability_status": prev_product.availability_status if prev_product else None,
+                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                            "current_title": cur_product.title if cur_product else None,
+                            "current_brand": cur_product.brand if cur_product else None,
+                            "current_image_url": cur_product.image_url if cur_product else None,
+                            "current_price_current": cur_product.price_current if cur_product else None,
+                            "current_price_original": cur_product.price_original if cur_product else None,
+                            "current_coupon_text": cur_product.coupon_text if cur_product else None,
+                            "current_deal_info": cur_product.deal_info.model_dump() if cur_product and cur_product.deal_info else None,
+                            "current_availability_status": cur_product.availability_status if cur_product else None,
+                            "current_buy_box_status": cur_product.buy_box_status if cur_product else None,
+                        },
+                    )
+                )
+
+        for asin, previous_rank in previous_rank_map.items():
+            if asin in current_rank_map:
+                continue
+
+            prev_product = previous_product_map.get(asin)
+            candidates.append(
+                DiffCandidate(
+                    tracker_type=TrackerType.KEYWORD,
+                    tracker_code=tracker_code,
+                    marketplace=marketplace,
+                    asin=asin,
+                    event_type=EventType.EXIT_TOP50,
+                    snapshot_date=snapshot_date,
+                    event_time=event_time,
+                    metadata={
+                        "previous_rank": previous_rank,
+                        "present_today": False,
+                        "previous_title": prev_product.title if prev_product else None,
+                        "previous_brand": prev_product.brand if prev_product else None,
+                        "previous_image_url": prev_product.image_url if prev_product else None,
+                        "previous_price_current": prev_product.price_current if prev_product else None,
+                        "previous_price_original": prev_product.price_original if prev_product else None,
+                        "previous_currency": prev_product.currency if prev_product else None,
+                        "previous_coupon_text": prev_product.coupon_text if prev_product else None,
+                        "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
+                        "previous_rating_value": prev_product.rating_value if prev_product else None,
+                        "previous_review_count": prev_product.review_count if prev_product else None,
+                        "previous_product_url": prev_product.product_url if prev_product else None,
+                        "previous_availability_status": prev_product.availability_status if prev_product else None,
+                        "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                    },
+                )
+            )
+            if previous_rank <= 10:
+                candidates.append(
+                    DiffCandidate(
+                        tracker_type=TrackerType.KEYWORD,
                         tracker_code=tracker_code,
                         marketplace=marketplace,
                         asin=asin,

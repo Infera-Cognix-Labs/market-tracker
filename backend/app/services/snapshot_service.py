@@ -10,6 +10,8 @@ from app.models.api import (
     CategorySnapshotProduct,
     CategorySnapshotSummary,
     CategoryTrackerLatestSnapshotSummary,
+    KeywordSnapshotSummary,
+    KeywordTrackerLatestSnapshotSummary,
     ProductCurrentState,
     TrackerRef,
     TrackerType,
@@ -19,6 +21,8 @@ from app.models.documents import (
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     JobDocument,
+    KeywordSnapshotDocument,
+    KeywordTrackerDocument,
     ProductDocument,
     ProductSnapshotDocument,
 )
@@ -28,6 +32,7 @@ from app.services.normalization_service import NormalizedProductRecord
 @dataclass(frozen=True)
 class SnapshotPersistResult:
     category_snapshot_written: bool
+    keyword_snapshot_written: bool
     product_snapshots_written: int
 
 
@@ -81,8 +86,20 @@ class SnapshotService:
             )
 
         category_snapshot_written = False
+        keyword_snapshot_written = False
         if tracker_type == TrackerType.CATEGORY:
             category_snapshot_written = await self._upsert_category_snapshot(
+                workspace_id=workspace_id,
+                snapshot_date=job_document.snapshot_date,
+                tracker_code=job_document.tracker_code,
+                tracker_document=tracker_document,
+                records=records,
+                apify_run_id=apify_run_id,
+                dataset_id=dataset_id,
+                tracker_created_date=tracker_created_date,
+            )
+        elif tracker_type == TrackerType.KEYWORD:
+            keyword_snapshot_written = await self._upsert_keyword_snapshot(
                 workspace_id=workspace_id,
                 snapshot_date=job_document.snapshot_date,
                 tracker_code=job_document.tracker_code,
@@ -95,6 +112,7 @@ class SnapshotService:
 
         return SnapshotPersistResult(
             category_snapshot_written=category_snapshot_written,
+            keyword_snapshot_written=keyword_snapshot_written,
             product_snapshots_written=product_snapshots_written,
         )
 
@@ -104,7 +122,7 @@ class SnapshotService:
         workspace_id: str,
         tracker_type: TrackerType,
         tracker_code: str,
-    ) -> CategoryTrackerDocument | CompetitorTrackerDocument:
+    ) -> CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument:
         if tracker_type == TrackerType.CATEGORY:
             tracker_document = await CategoryTrackerDocument.find_one(
                 CategoryTrackerDocument.workspace_id == workspace_id,
@@ -112,6 +130,15 @@ class SnapshotService:
             )
             if tracker_document is None:
                 raise NotFoundError("Category tracker not found.")
+            return tracker_document
+
+        if tracker_type == TrackerType.KEYWORD:
+            tracker_document = await KeywordTrackerDocument.find_one(
+                KeywordTrackerDocument.workspace_id == workspace_id,
+                KeywordTrackerDocument.tracker_code == tracker_code,
+            )
+            if tracker_document is None:
+                raise NotFoundError("Keyword tracker not found.")
             return tracker_document
 
         tracker_document = await CompetitorTrackerDocument.find_one(
@@ -373,6 +400,133 @@ class SnapshotService:
         )
         if existing is None:
             await CategorySnapshotDocument(
+                workspace_id=workspace_id, **payload
+            ).insert()
+            return True
+
+        return False
+
+    async def _upsert_keyword_snapshot(
+        self,
+        *,
+        workspace_id: str,
+        snapshot_date,
+        tracker_code: str,
+        tracker_document: CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument,
+        records: list[NormalizedProductRecord],
+        apify_run_id: str,
+        dataset_id: str,
+        tracker_created_date,
+    ) -> bool:
+        if not isinstance(tracker_document, KeywordTrackerDocument):
+            return False
+
+        if snapshot_date < tracker_created_date:
+            return False
+
+        sorted_records = sorted(
+            records,
+            key=lambda item: (
+                item.rank_position if item.rank_position is not None else 10_000
+            ),
+        )
+        top_n = tracker_document.tracking_config.top_n
+        unique_top_records = _dedupe_category_records(
+            sorted_records,
+            limit=top_n,
+        )
+        products = [
+            CategorySnapshotProduct(
+                asin=record.asin,
+                rank_position=index,
+                title=record.title,
+                brand=record.brand,
+                product_url=record.product_url,
+                price_current=record.price_current or 0.0,
+                price_original=record.price_original,
+                currency=record.currency or "USD",
+                rating_value=record.rating_value or 0.0,
+                review_count=record.review_count or 0,
+                image_url=record.main_image_url,
+                availability_status=record.availability_status,
+                buy_box_status=record.buy_box_status,
+                coupon_text=record.coupon_text,
+            )
+            for index, record in enumerate(unique_top_records, start=1)
+        ]
+
+        current_asins = {p.asin for p in products}
+        current_top10_asins = {p.asin for p in products[:10]}
+
+        previous_snapshot = await KeywordSnapshotDocument.find(
+            KeywordSnapshotDocument.workspace_id == workspace_id,
+            KeywordSnapshotDocument.tracker_code == tracker_code,
+            KeywordSnapshotDocument.snapshot_date < snapshot_date,
+        ).sort((KeywordSnapshotDocument.snapshot_date, DESCENDING)).first_or_none()
+        previous_asins = set()
+        previous_top10_asins = set()
+        if previous_snapshot:
+            previous_asins = {p.asin for p in previous_snapshot.products}
+            previous_top10_asins = {p.asin for p in previous_snapshot.products[:10]}
+
+        new_entrants = current_asins - previous_asins
+        exits = previous_asins - current_asins
+
+        returning_asins = set()
+        if new_entrants:
+            history_snapshots = await KeywordSnapshotDocument.find(
+                KeywordSnapshotDocument.workspace_id == workspace_id,
+                KeywordSnapshotDocument.tracker_code == tracker_code,
+                KeywordSnapshotDocument.snapshot_date < snapshot_date,
+            ).to_list()
+            historical_asins: set[str] = set()
+            for snap in history_snapshots:
+                for p in snap.products:
+                    historical_asins.add(p.asin)
+            returning_asins = new_entrants & historical_asins
+            new_entrants = new_entrants - returning_asins
+
+        enter_top10 = current_top10_asins - previous_top10_asins
+        exit_top10 = previous_top10_asins - current_top10_asins
+
+        payload = {
+            "tracker_code": tracker_code,
+            "marketplace": tracker_document.marketplace,
+            "keyword": tracker_document.scope.keyword,
+            "snapshot_date": snapshot_date,
+            "captured_at": utc_now(),
+            "top_n": top_n,
+            "products": products,
+            "summary": KeywordSnapshotSummary(
+                asin_count=len(products),
+                new_entrant_count=len(new_entrants),
+                returning_count=len(returning_asins),
+                exit_count=len(exits),
+                enter_top10_count=len(enter_top10),
+                exit_top10_count=len(exit_top10),
+            ),
+            "source_refs": {
+                "provider": "APIFY",
+                "apify_run_id": apify_run_id,
+                "dataset_id": dataset_id,
+            },
+        }
+        latest_snapshot_summary = KeywordTrackerLatestSnapshotSummary(
+            snapshot_date=snapshot_date,
+            captured_at=payload["captured_at"],
+            top10_asins=[item.asin for item in products[:10]],
+        )
+        tracker_document.latest_snapshot_summary = latest_snapshot_summary
+        tracker_document.updated_at = utc_now()
+        await tracker_document.save()
+
+        existing = await KeywordSnapshotDocument.find_one(
+            KeywordSnapshotDocument.workspace_id == workspace_id,
+            KeywordSnapshotDocument.tracker_code == tracker_code,
+            KeywordSnapshotDocument.snapshot_date == snapshot_date,
+        )
+        if existing is None:
+            await KeywordSnapshotDocument(
                 workspace_id=workspace_id, **payload
             ).insert()
             return True

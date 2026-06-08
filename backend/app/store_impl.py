@@ -33,6 +33,12 @@ from app.models.api import (
     JobCreateRequest,
     JobListResponse,
     JobStatus,
+    KeywordInsights,
+    KeywordSnapshot,
+    KeywordTracker,
+    KeywordTrackerCreateRequest,
+    KeywordTrackerListResponse,
+    KeywordTrackerUpdateRequest,
     NotificationRule,
     NotificationRuleCreateRequest,
     NotificationRuleListResponse,
@@ -343,6 +349,47 @@ class BaseStore:
     async def delete_competitor_tracker(
         self, workspace_id: str, tracker_code: str
     ) -> None:
+        raise NotImplementedError
+
+    async def list_keyword_trackers(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordTrackerListResponse:
+        raise NotImplementedError
+
+    async def create_keyword_tracker(
+        self, workspace_id: str, payload: KeywordTrackerCreateRequest
+    ) -> KeywordTracker:
+        raise NotImplementedError
+
+    async def get_keyword_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> KeywordTracker:
+        raise NotImplementedError
+
+    async def update_keyword_tracker(
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        payload: KeywordTrackerUpdateRequest,
+    ) -> KeywordTracker:
+        raise NotImplementedError
+
+    async def get_latest_keyword_snapshot(
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        timeframe: Timeframe = Timeframe.WEEKLY,
+    ) -> KeywordSnapshot:
+        raise NotImplementedError
+
+    async def delete_keyword_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        raise NotImplementedError
+
+    async def get_keyword_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> KeywordInsights:
         raise NotImplementedError
 
 
@@ -686,6 +733,53 @@ class MongoStore(BaseStore):
         self, workspace_id: str, tracker_code: str
     ) -> None:
         await self._trackers.delete_competitor_tracker(workspace_id, tracker_code)
+
+    async def list_keyword_trackers(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordTrackerListResponse:
+        return await self._trackers.list_keyword_trackers(
+            workspace_id, page, page_size
+        )
+
+    async def create_keyword_tracker(
+        self, workspace_id: str, payload: KeywordTrackerCreateRequest
+    ) -> KeywordTracker:
+        return await self._trackers.create_keyword_tracker(workspace_id, payload)
+
+    async def get_keyword_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> KeywordTracker:
+        return await self._trackers.get_keyword_tracker(workspace_id, tracker_code)
+
+    async def update_keyword_tracker(
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        payload: KeywordTrackerUpdateRequest,
+    ) -> KeywordTracker:
+        return await self._trackers.update_keyword_tracker(
+            workspace_id, tracker_code, payload
+        )
+
+    async def get_latest_keyword_snapshot(
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        timeframe: Timeframe = Timeframe.WEEKLY,
+    ) -> KeywordSnapshot:
+        return await self._trackers.get_latest_keyword_snapshot(
+            workspace_id, tracker_code, timeframe
+        )
+
+    async def delete_keyword_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        await self._trackers.delete_keyword_tracker(workspace_id, tracker_code)
+
+    async def get_keyword_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> KeywordInsights:
+        return await self._insights.get_keyword_insights(workspace_id, timeframe)
 
 
 async def build_store(settings: Config) -> BaseStore:

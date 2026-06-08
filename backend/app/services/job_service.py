@@ -19,6 +19,7 @@ from app.models.documents import (
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     JobDocument,
+    KeywordTrackerDocument,
 )
 from app.services.run_orchestrator import RunOrchestrator
 from app.services.shared import generate_job_code, job_doc_to_model, within_range
@@ -75,6 +76,13 @@ class JobService:
             )
             if tracker_exists is None:
                 raise NotFoundError("Category tracker not found.")
+        elif payload.tracker_type == TrackerType.KEYWORD:
+            tracker_exists = await KeywordTrackerDocument.find_one(
+                KeywordTrackerDocument.workspace_id == workspace_id,
+                KeywordTrackerDocument.tracker_code == payload.tracker_code,
+            )
+            if tracker_exists is None:
+                raise NotFoundError("Keyword tracker not found.")
         else:
             tracker_exists = await CompetitorTrackerDocument.find_one(
                 CompetitorTrackerDocument.workspace_id == workspace_id,
@@ -97,11 +105,12 @@ class JobService:
                 f"A job already exists for tracker `{payload.tracker_code}` on {snapshot_date}."
             )
 
-        pool_code = (
-            "category"
-            if payload.tracker_type == TrackerType.CATEGORY
-            else "competitor"
-        )
+        pool_code_map = {
+            TrackerType.CATEGORY: "category",
+            TrackerType.COMPETITOR: "competitor",
+            TrackerType.KEYWORD: "keyword",
+        }
+        pool_code = pool_code_map[payload.tracker_type]
 
         job = Job(
             job_code=generate_job_code(

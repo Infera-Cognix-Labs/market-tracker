@@ -7,7 +7,7 @@ export type BuyBoxStatus = "HAS_BUY_BOX" | "NO_BUY_BOX" | "UNKNOWN"
 export type Severity = "LOW" | "MEDIUM" | "HIGH"
 export type Timeframe = "DAILY" | "WEEKLY" | "MONTHLY"
 export type TriggerMode = "SCHEDULED" | "MANUAL" | "RETRY"
-export type TrackerType = "CATEGORY" | "COMPETITOR"
+export type TrackerType = "CATEGORY" | "COMPETITOR" | "KEYWORD"
 
 export interface DealInfo {
   deal_id?: string | null
@@ -81,11 +81,13 @@ export interface DashboardOverview {
   top_threats: Threat[]
   category_highlights: CategoryHighlight[]
   competitor_highlights: CompetitorHighlight[]
+  keyword_highlights: KeywordHighlight[]
 }
 
 export interface DashboardOverviewSummary {
   active_category_tracker_count: number
   active_competitor_tracker_count: number
+  active_keyword_tracker_count: number
   tracked_product_count: number
   new_entrant_count: number
   returning_count: number
@@ -610,4 +612,70 @@ export interface CompetitorTrackerUpdateRequest {
 
 export interface TrackedAsinReplacementRequest {
   tracked_asins: TrackedAsinInput[]
+}
+
+// ── Keyword Tracker ─────────────────────────────────────────────────────────
+
+export interface KeywordTracker {
+  tracker_code: string
+  name: string
+  scope: KeywordScope
+  tracking_config: KeywordTrackingConfig
+  schedule: TrackerSchedule
+  status: TrackerStatus
+  stats: KeywordTrackerStats
+  latest_snapshot_summary?: KeywordTrackerLatestSnapshotSummary
+  created_at: string
+  updated_at: string
+}
+
+export interface KeywordScope {
+  keyword: string
+  sort_by?: string
+}
+
+export interface KeywordTrackingConfig {
+  top_n: number
+}
+
+export interface KeywordTrackerStats {
+  last_job_at: string | null
+  last_success_at: string | null
+  snapshot_count: number
+}
+
+export interface KeywordTrackerLatestSnapshotSummary {
+  snapshot_date: string
+  captured_at: string
+  top10_asins: string[]
+}
+
+export interface KeywordHighlight {
+  tracker_code: string
+  tracker_name: string
+  new_entrant_count: number
+  exit_count: number
+}
+
+export interface KeywordInsights {
+  timeframe: Timeframe
+  generated_at: string
+  new_top10_entrants: CategoryEntrantItem[]
+  first_time_entrants: CategoryEntrantItem[]
+  returning_entrants: ReturningEntrantItem[]
+}
+
+export interface KeywordTrackerCreateRequest {
+  name: string
+  marketplace: string
+  scope: { keyword: string; sort_by?: string }
+  tracking_config?: { top10_alert_enabled?: boolean }
+  schedule: TrackerScheduleInput
+}
+
+export interface KeywordTrackerUpdateRequest {
+  name?: string
+  tracking_config?: { top10_alert_enabled?: boolean }
+  schedule?: TrackerScheduleInput
+  status?: TrackerStatus
 }
