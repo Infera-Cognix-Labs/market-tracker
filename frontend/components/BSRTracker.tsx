@@ -7,11 +7,12 @@ import { Sidebar } from "./shared/Sidebar"
 import { DashboardPage } from "./dashboard/DashboardPage"
 import { CategoryPage } from "./categories/CategoryPage"
 import { CompetitorPage } from "./competitors/CompetitorPage"
+import { KeywordPage } from "./keywords/KeywordPage"
 import { EventsPage } from "./alerts/EventsPage"
 import { ReportsPage } from "./reports/ReportsPage"
 
-type PageKey = "dashboard" | "categories" | "competitors" | "events" | "reports"
-const PAGE_KEYS: PageKey[] = ["dashboard", "categories", "competitors", "events", "reports"]
+type PageKey = "dashboard" | "categories" | "competitors" | "keywords" | "events" | "reports"
+const PAGE_KEYS: PageKey[] = ["dashboard", "categories", "competitors", "keywords", "events", "reports"]
 const PAGE_STORAGE_KEY = "market_tracker_active_page"
 
 const toPageKey = (value: string | null): PageKey => {
@@ -34,6 +35,7 @@ export default function App() {
     dashboard: <DashboardPage setPage={setPage} />,
     categories: <CategoryPage />,
     competitors: <CompetitorPage />,
+    keywords: <KeywordPage />,
     events: <EventsPage />,
     reports: <ReportsPage />,
   }

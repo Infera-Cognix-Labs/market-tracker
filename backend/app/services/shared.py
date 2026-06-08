@@ -19,6 +19,9 @@ from app.models.api import (
     Event,
     EventType,
     Job,
+    KeywordHighlight,
+    KeywordSnapshot,
+    KeywordTracker,
     ProductDetail,
     ProductSnapshot,
     ProductTimelinePoint,
@@ -40,6 +43,8 @@ from app.models.documents import (
     CompetitorTrackerDocument,
     EventDocument,
     JobDocument,
+    KeywordSnapshotDocument,
+    KeywordTrackerDocument,
     ProductDocument,
     ProductSnapshotDocument,
     WeeklyDigestDocument,
@@ -77,6 +82,12 @@ def category_doc_to_model(document: CategoryTrackerDocument) -> CategoryTracker:
     )
 
 
+def keyword_doc_to_model(document: KeywordTrackerDocument) -> KeywordTracker:
+    return KeywordTracker.model_validate(
+        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+    )
+
+
 def snapshot_doc_to_model(document: CategorySnapshotDocument) -> CategorySnapshot:
     snapshot = CategorySnapshot.model_validate(
         document.model_dump(exclude={"id", "workspace_id"}, mode="python")
@@ -98,6 +109,70 @@ def snapshot_doc_to_model(document: CategorySnapshotDocument) -> CategorySnapsho
 def build_category_snapshot_with_rank_comparison(
     current: CategorySnapshot, comparison: CategorySnapshot | None
 ) -> CategorySnapshot:
+    if comparison is None:
+        return current
+
+    comparison_rank_map = {
+        product.asin: product.rank_position for product in comparison.products
+    }
+    products: list[CategorySnapshotProduct] = []
+    for product in current.products:
+        previous_rank = comparison_rank_map.get(product.asin)
+        if previous_rank is None:
+            products.append(
+                product.model_copy(
+                    update={
+                        "previous_rank_position": None,
+                        "rank_delta": None,
+                        "rank_trend": "NEW",
+                        "comparison_snapshot_date": comparison.snapshot_date,
+                    }
+                )
+            )
+            continue
+
+        rank_delta = previous_rank - product.rank_position
+        trend = "STABLE"
+        if rank_delta > 0:
+            trend = "UP"
+        elif rank_delta < 0:
+            trend = "DOWN"
+
+        products.append(
+            product.model_copy(
+                update={
+                    "previous_rank_position": previous_rank,
+                    "rank_delta": rank_delta,
+                    "rank_trend": trend,
+                    "comparison_snapshot_date": comparison.snapshot_date,
+                }
+            )
+        )
+
+    return current.model_copy(update={"products": products})
+
+
+def keyword_snapshot_doc_to_model(document: KeywordSnapshotDocument) -> KeywordSnapshot:
+    snapshot = KeywordSnapshot.model_validate(
+        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+    )
+    deduped_products = _dedupe_category_snapshot_products(snapshot.products)
+    if len(deduped_products) == len(snapshot.products):
+        return snapshot
+
+    return snapshot.model_copy(
+        update={
+            "products": deduped_products,
+            "summary": snapshot.summary.model_copy(
+                update={"asin_count": len(deduped_products)}
+            ),
+        }
+    )
+
+
+def build_keyword_snapshot_with_rank_comparison(
+    current: KeywordSnapshot, comparison: KeywordSnapshot | None
+) -> KeywordSnapshot:
     if comparison is None:
         return current
 
@@ -251,6 +326,7 @@ def build_timeline_summary(events: list[Event]) -> ProductTimelineSummary:
 def build_tracker_name_map(
     category_trackers: Iterable[CategoryTracker],
     competitor_trackers: Iterable[CompetitorTrackerDetail],
+    keyword_trackers: Iterable[KeywordTracker] | None = None,
 ) -> dict[str, str]:
     tracker_name_map = {
         tracker.tracker_code: tracker.name for tracker in category_trackers
@@ -258,6 +334,10 @@ def build_tracker_name_map(
     tracker_name_map.update(
         {tracker.tracker_code: tracker.name for tracker in competitor_trackers}
     )
+    if keyword_trackers:
+        tracker_name_map.update(
+            {tracker.tracker_code: tracker.name for tracker in keyword_trackers}
+        )
     return tracker_name_map
 
 
@@ -338,6 +418,7 @@ def build_dashboard_overview(
     timeframe: Timeframe,
     category_trackers: list[CategoryTracker],
     competitor_trackers: list[CompetitorTrackerDetail],
+    keyword_trackers: list[KeywordTracker] | None = None,
     events: list[Event],
 ) -> DashboardOverview:
     reference_date = max(
@@ -350,7 +431,9 @@ def build_dashboard_overview(
         if within_range(event.snapshot_date, from_date, to_date)
     ]
     sorted_events = sort_events(filtered_events)
-    tracker_name_map = build_tracker_name_map(category_trackers, competitor_trackers)
+    tracker_name_map = build_tracker_name_map(
+        category_trackers, competitor_trackers, keyword_trackers
+    )
 
     active_category_trackers = [
         tracker
@@ -360,6 +443,11 @@ def build_dashboard_overview(
     active_competitor_trackers = [
         tracker
         for tracker in competitor_trackers
+        if tracker.status == TrackerStatus.ACTIVE
+    ]
+    active_keyword_trackers = [
+        tracker
+        for tracker in (keyword_trackers or [])
         if tracker.status == TrackerStatus.ACTIVE
     ]
     tracked_product_count = len(
@@ -373,9 +461,12 @@ def build_dashboard_overview(
 
     category_event_groups: dict[str, list[Event]] = defaultdict(list)
     competitor_event_groups: dict[str, list[Event]] = defaultdict(list)
+    keyword_event_groups: dict[str, list[Event]] = defaultdict(list)
     for event in filtered_events:
         if event.tracker_type == TrackerType.CATEGORY:
             category_event_groups[event.tracker_code].append(event)
+        elif event.tracker_type == TrackerType.KEYWORD:
+            keyword_event_groups[event.tracker_code].append(event)
         else:
             competitor_event_groups[event.tracker_code].append(event)
 
@@ -425,12 +516,36 @@ def build_dashboard_overview(
         for tracker in active_competitor_trackers
     ]
 
+    keyword_highlights = [
+        KeywordHighlight(
+            tracker_code=tracker.tracker_code,
+            tracker_name=tracker.name,
+            new_entrant_count=sum(
+                1
+                for event in keyword_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.NEW_ENTRANT_TOP50
+            ),
+            exit_count=sum(
+                1
+                for event in keyword_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.EXIT_TOP50
+            ),
+            top10_enter_count=sum(
+                1
+                for event in keyword_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.ENTER_TOP10
+            ),
+        )
+        for tracker in active_keyword_trackers
+    ]
+
     return DashboardOverview(
         timeframe=timeframe,
         generated_at=utc_now(),
         summary=DashboardOverviewSummary(
             active_category_tracker_count=len(active_category_trackers),
             active_competitor_tracker_count=len(active_competitor_trackers),
+            active_keyword_tracker_count=len(active_keyword_trackers),
             tracked_product_count=tracked_product_count,
             new_entrant_count=sum(
                 1
@@ -462,6 +577,7 @@ def build_dashboard_overview(
         top_threats=build_top_threats(sorted_events, tracker_name_map),
         category_highlights=category_highlights,
         competitor_highlights=competitor_highlights,
+        keyword_highlights=keyword_highlights,
     )
 
 
@@ -478,7 +594,12 @@ def generate_tracker_code(prefix: str, name: str, existing_codes: set[str]) -> s
 def generate_job_code(
     tracker_type: TrackerType, snapshot_date: date, existing_codes: set[str]
 ) -> str:
-    tracker_prefix = "cat" if tracker_type == TrackerType.CATEGORY else "cmp"
+    prefix_map = {
+        TrackerType.CATEGORY: "cat",
+        TrackerType.COMPETITOR: "cmp",
+        TrackerType.KEYWORD: "kw",
+    }
+    tracker_prefix = prefix_map.get(tracker_type, "unk")
     base_code = f"job_{tracker_prefix}_{snapshot_date.strftime('%Y%m%d')}"
     counter = 1
     while True:
@@ -629,3 +750,5 @@ _generate_job_code = generate_job_code
 _generate_tracker_code = generate_tracker_code
 _sort_events = sort_events
 _within_range = within_range
+_keyword_doc_to_model = keyword_doc_to_model
+_keyword_snapshot_doc_to_model = keyword_snapshot_doc_to_model

@@ -49,7 +49,7 @@ type EditableNotificationRule = {
   enabled: boolean
   severities: Severity[]
   event_types: EventType[]
-  tracker_type: "" | "CATEGORY" | "COMPETITOR"
+  tracker_type: "" | "CATEGORY" | "COMPETITOR" | "KEYWORD"
   tracker_code: string
   webhook_url: string
 }
@@ -114,7 +114,7 @@ const TrackerDropdown = ({ label, options, selectedCode, onSelect }: TrackerDrop
   const filtered = search ? options.filter(o => o.name.toLowerCase().includes(search.toLowerCase())) : options
 
   return (
-    <div ref={ref} style={{ position: "relative" }}>
+    <div ref={ref} style={{ position: "relative", zIndex: open ? 1000 : "auto" }}>
       <button
         onClick={() => setOpen(v => !v)}
         style={{
@@ -143,7 +143,7 @@ const TrackerDropdown = ({ label, options, selectedCode, onSelect }: TrackerDrop
 
       {open && (
         <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 200,
+          position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 1000,
           background: T.bg2, border: `1px solid ${T.border}`, borderRadius: 8,
           minWidth: 220, maxHeight: 260, display: "flex", flexDirection: "column",
           boxShadow: `0 6px 20px ${T.bg0}CC`,
@@ -398,7 +398,7 @@ export const EventsPage = () => {
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
-  const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR">("")
+  const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR" | "KEYWORD">("")
   const [selectedTrackerCode, setSelectedTrackerCode] = useState<string>("")
   const [categoryTrackers, setCategoryTrackers] = useState<CategoryTracker[]>([])
   const [competitorTrackers, setCompetitorTrackers] = useState<CompetitorTracker[]>([])
@@ -581,7 +581,8 @@ export const EventsPage = () => {
       {showSettings && (
         <div style={{
           marginBottom: 20, borderRadius: 10,
-          border: `1px solid ${T.border}`, background: T.bg2, overflow: "hidden",
+          border: `1px solid ${T.border}`, background: T.bg2,
+          overflow: "visible", position: "relative", zIndex: 20,
         }}>
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",

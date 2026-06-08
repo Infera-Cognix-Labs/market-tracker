@@ -8,8 +8,8 @@ import { PageHeader } from "../shared/PageHeader"
 import { KPICard } from "../shared/KPICard"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiGetDashboardOverview, apiListWeeklyDigests, apiGetCategoryInsights, apiGetCompetitorInsights } from "../shared/api"
-import type { DashboardOverview, Timeframe, WeeklyDigest, CategoryInsights, CompetitorInsights } from "../shared/types"
+import { apiGetDashboardOverview, apiListWeeklyDigests, apiGetCategoryInsights, apiGetCompetitorInsights, apiGetKeywordInsights } from "../shared/api"
+import type { DashboardOverview, Timeframe, WeeklyDigest, CategoryInsights, CompetitorInsights, KeywordInsights } from "../shared/types"
 
 export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>("WEEKLY")
@@ -20,6 +20,7 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
   const [digestLoading, setDigestLoading] = useState(false)
   const [categoryInsights, setCategoryInsights] = useState<CategoryInsights | null>(null)
   const [competitorInsights, setCompetitorInsights] = useState<CompetitorInsights | null>(null)
+  const [keywordInsights, setKeywordInsights] = useState<KeywordInsights | null>(null)
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const [cardPages, setCardPages] = useState<Record<string, number>>({})
   const [expandedHighlight, setExpandedHighlight] = useState<string | null>(null)
@@ -51,6 +52,7 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
 
     apiGetCategoryInsights(timeframe).then(d => { if (!cancelled) setCategoryInsights(d) }).catch(() => {})
     apiGetCompetitorInsights(timeframe).then(d => { if (!cancelled) setCompetitorInsights(d) }).catch(() => {})
+    apiGetKeywordInsights(timeframe).then(d => { if (!cancelled) setKeywordInsights(d) }).catch(() => {})
 
     return () => {
       cancelled = true
@@ -71,6 +73,7 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
     }
     apiGetCategoryInsights(timeframe).then(setCategoryInsights).catch(() => {})
     apiGetCompetitorInsights(timeframe).then(setCompetitorInsights).catch(() => {})
+    apiGetKeywordInsights(timeframe).then(setKeywordInsights).catch(() => {})
   }
 
   const handleWeeklyDigest = async () => {
@@ -325,7 +328,7 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
       </div>
 
       {/* Highlights + Threats */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 16, marginBottom: 20 }}>
         {/* Category Highlights */}
         <div className="card">
           <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 14 }}>Category Highlights</div>
@@ -533,6 +536,85 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
           })}
           <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("competitors")}>
             View competitors <ChevronRight size={13} />
+          </button>
+        </div>
+
+        {/* Keyword Highlights */}
+        <div className="card">
+          <div style={{ fontSize: 13, fontWeight: 600, color: T.text1, marginBottom: 14 }}>Keyword Highlights</div>
+          {data.keyword_highlights.length === 0 && (
+            <div style={{ textAlign: "center", padding: "24px 0", color: T.text3, fontSize: 12 }}>No keyword data</div>
+          )}
+          {data.keyword_highlights.map(h => {
+            const key = `kw-${h.tracker_code}`
+            const isOpen = expandedHighlight === key
+            const top10 = (keywordInsights?.new_top10_entrants ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const firstTime = (keywordInsights?.first_time_entrants ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const returning = (keywordInsights?.returning_entrants ?? []).filter(i => i.tracker_code === h.tracker_code)
+            const firstTimeUnique = firstTime.filter(i => !top10.some(t => t.asin === i.asin))
+            const hasItems = top10.length + firstTimeUnique.length + returning.length > 0
+            return (
+              <div key={h.tracker_code} style={{ borderBottom: `1px solid ${T.border}` }}>
+                <div
+                  onClick={hasItems ? () => setExpandedHighlight(prev => prev === key ? null : key) : undefined}
+                  style={{ padding: "10px 0", display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: hasItems ? "pointer" : "default" }}
+                >
+                  <div>
+                    <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, marginBottom: 6 }}>{h.tracker_name}</div>
+                    <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
+                      <span style={{ color: T.green }}>+{top10.length + firstTimeUnique.length} new</span>
+                      <span style={{ color: T.red }}>−{h.exit_count} exits</span>
+                    </div>
+                  </div>
+                  {hasItems && <ChevronDown size={12} style={{ color: T.text3, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0, marginTop: 4 }} />}
+                </div>
+                {isOpen && (
+                  <div style={{ paddingBottom: 8 }}>
+                    {top10.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.amber, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>Top 10</div>
+                        {top10.slice((cardPages[`${key}-t10`]??0)*10,((cardPages[`${key}-t10`]??0)+1)*10).map(item => (
+                          <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                            <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                              <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                            </a>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {chip(`#${item.current_rank}`, T.amber)}
+                                {item.is_first_time_entrant && chip("1st time", T.green)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    {firstTimeUnique.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.green, letterSpacing: ".06em", textTransform: "uppercase", padding: "4px 0 2px" }}>First-time</div>
+                        {firstTimeUnique.slice((cardPages[`${key}-ft`]??0)*10,((cardPages[`${key}-ft`]??0)+1)*10).map(item => (
+                          <div key={item.asin} style={{ display: "flex", gap: 8, padding: "5px 0", borderTop: `1px solid ${T.border}` }}>
+                            <a href={`https://www.amazon.com/dp/${item.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                              <Image unoptimized src={item.image_url} alt="" width={26} height={26} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, display: "block" }} onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden" }} />
+                            </a>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 10, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>{item.title}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {chip(`#${item.current_rank}`, T.green)}
+                                {chip("1st time", T.green)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          <button className="btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 10, fontSize: 12 }} onClick={() => setPage("keywords")}>
+            View keywords <ChevronRight size={13} />
           </button>
         </div>
 

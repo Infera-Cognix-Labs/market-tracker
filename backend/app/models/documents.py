@@ -21,6 +21,11 @@ from app.models.api import (
     JobError,
     JobRunStrategy,
     JobSummary,
+    KeywordScope,
+    KeywordSnapshotSummary,
+    KeywordTrackerLatestSnapshotSummary,
+    KeywordTrackerStats,
+    KeywordTrackingConfig,
     ProductCurrentState,
     Threat,
     TrackedAsin,
@@ -69,6 +74,48 @@ class CategorySnapshotDocument(WorkspaceDocument):
 
     class Settings:
         name = "category_snapshots"
+        indexes = [
+            IndexModel(
+                [("workspace_id", 1), ("tracker_code", 1), ("snapshot_date", -1)],
+                unique=True,
+            ),
+        ]
+
+
+class KeywordTrackerDocument(WorkspaceDocument):
+    tracker_code: str
+    name: str
+    marketplace: str
+    scope: KeywordScope
+    tracking_config: KeywordTrackingConfig
+    schedule: TrackerSchedule
+    status: str
+    stats: KeywordTrackerStats
+    latest_snapshot_summary: KeywordTrackerLatestSnapshotSummary | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "keyword_trackers"
+        indexes = [
+            IndexModel([("workspace_id", 1), ("tracker_code", 1)], unique=True),
+            IndexModel([("workspace_id", 1), ("status", 1)]),
+        ]
+
+
+class KeywordSnapshotDocument(WorkspaceDocument):
+    tracker_code: str
+    marketplace: str
+    keyword: str
+    snapshot_date: date
+    captured_at: datetime
+    top_n: int = 50
+    products: list[CategorySnapshotProduct] = Field(default_factory=list)
+    summary: KeywordSnapshotSummary
+    source_refs: dict[str, object] | None = None
+
+    class Settings:
+        name = "keyword_snapshots"
         indexes = [
             IndexModel(
                 [("workspace_id", 1), ("tracker_code", 1), ("snapshot_date", -1)],
@@ -369,6 +416,8 @@ class WeeklyDigestDocument(WorkspaceDocument):
 DOCUMENT_MODELS = [
     CategoryTrackerDocument,
     CategorySnapshotDocument,
+    KeywordTrackerDocument,
+    KeywordSnapshotDocument,
     CompetitorTrackerDocument,
     EventDocument,
     NotificationRuleDocument,

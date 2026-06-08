@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.integrations.adapters import (
     ActorAdapter,
     DealsScraperAdapter,
+    HarvestlabKeywordAdapter,
     JungleeAsinsAdapter,
     ProdigerCategoryAdapter,
     SaswaveCategoryAdapter,
@@ -12,6 +13,7 @@ from app.integrations.adapters import (
 _ADAPTER_REGISTRY: dict[str, ActorAdapter] = {
     "saswave_category": SaswaveCategoryAdapter(),
     "prodiger_category": ProdigerCategoryAdapter(),
+    "harvestlab_keyword": HarvestlabKeywordAdapter(),
     "junglee_asins": JungleeAsinsAdapter(),
     "saswave_competitor": SaswaveCompetitorAdapter(),
     "deals_scraper": DealsScraperAdapter(),
