@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, useRef, useReducer, Suspense } from "react"
-import { useSearchParams, useRouter, usePathname } from "next/navigation"
+import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
 import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, CheckCircle, AlertCircle } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
@@ -406,50 +405,22 @@ function eventsReducer(state: EventsState, action: EventsAction): EventsState {
 }
 
 export const CategoryPageInner = () => {
-  const searchParams = useSearchParams()
-  const router = useRouter()
-  const pathname = usePathname()
   const [trackers, setTrackers] = useState<CategoryTracker[]>([])
-  const [selectedCode, setSelectedCode] = useState<string>(searchParams.get("tracker") ?? "")
+  const [selectedCode, setSelectedCode] = useState<string>("")
   const [snapshot, setSnapshot] = useState<CategorySnapshot | null>(null)
-  const [search, setSearch] = useState(searchParams.get("search") ?? "")
+  const [search, setSearch] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
-  const [rankTimeframe, setRankTimeframe] = useState<Timeframe>((searchParams.get("timeframe") as Timeframe) || "WEEKLY")
+  const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
-  const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>((searchParams.get("filter") as CategoryKpiFilter) || "ALL")
+  const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>("ALL")
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
   const [justAdded, setJustAdded] = useState<string | null>(null)
-
-  const initialUrlTracker = useRef(searchParams.get("tracker"))
-
-  const updateUrlParams = useCallback((updates: Record<string, string>) => {
-    const params = new URLSearchParams(searchParams.toString())
-    for (const [k, v] of Object.entries(updates)) {
-      if (v === "" || v === null) params.delete(k)
-      else params.set(k, v)
-    }
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [searchParams, router, pathname])
-
-  // Sync state to URL
-  useEffect(() => {
-    if (selectedCode) updateUrlParams({ tracker: selectedCode })
-  }, [selectedCode, updateUrlParams])
-  useEffect(() => {
-    updateUrlParams({ filter: activeKpiFilter === "ALL" ? "" : activeKpiFilter })
-  }, [activeKpiFilter, updateUrlParams])
-  useEffect(() => {
-    updateUrlParams({ search: search || "" })
-  }, [search, updateUrlParams])
-  useEffect(() => {
-    updateUrlParams({ timeframe: rankTimeframe === "WEEKLY" ? "" : rankTimeframe })
-  }, [rankTimeframe, updateUrlParams])
 
   // Load trackers
   useEffect(() => {
@@ -457,9 +428,7 @@ export const CategoryPageInner = () => {
       .then(res => {
         setTrackers(res.items)
         if (res.items.length > 0) {
-          const urlTracker = initialUrlTracker.current
-          const fromUrl = urlTracker ? res.items.find(t => t.tracker_code === urlTracker) : null
-          const firstActive = fromUrl ?? res.items.find(t => t.status === "ACTIVE") ?? res.items[0]
+          const firstActive = res.items.find(t => t.status === "ACTIVE") ?? res.items[0]
           setSelectedCode(firstActive.tracker_code)
         }
       })
