@@ -109,7 +109,7 @@ class KeywordSnapshotDocument(WorkspaceDocument):
     keyword: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 100
+    top_n: int = 50
     products: list[CategorySnapshotProduct] = Field(default_factory=list)
     summary: KeywordSnapshotSummary
     source_refs: dict[str, object] | None = None
