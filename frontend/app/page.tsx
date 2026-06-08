@@ -1,7 +1,12 @@
 import BSRTracker from "@/components/BSRTracker"
+import { Suspense } from "react"
 
 export default function Home() {
-  return <BSRTracker />
+  return (
+    <Suspense fallback={null}>
+      <BSRTracker />
+    </Suspense>
+  )
 }
 //           alt="Next.js logo"
 //           width={100}
