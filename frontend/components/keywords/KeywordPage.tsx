@@ -1,12 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import Image from "next/image"
-import { Search, Plus, X, AlertCircle, RefreshCw, Star, Zap } from "lucide-react"
+import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
+import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, AlertCircle, Trash2 } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { AlertTypeMeta } from "../shared/AlertTypeMeta"
 import {
   apiListKeywordTrackers,
   apiGetLatestKeywordSnapshot,
@@ -23,6 +21,7 @@ import type {
   KeywordTrackerUpdateRequest,
   CategorySnapshot,
   CategorySnapshotProduct,
+  DealInfo,
   Timeframe,
   TrackerStatus,
   Event,
@@ -83,6 +82,43 @@ const getEventImageUrl = (event: Event): string | null => {
   return event.payload.current?.main_image_url || event.payload.previous?.main_image_url || null
 }
 
+const extractBrandName = (url: string): string => {
+  if (!url) return url
+  try {
+    let match = url.match(/\/stores\/([^/]+)\//)
+    if (match?.[1]) return match[1]
+    match = url.match(/\/([^/]+)\/b\//)
+    if (match?.[1]) return match[1]
+    return url
+  } catch {
+    return url
+  }
+}
+
+const parseDealItems = (dealInfo?: DealInfo | null): string[] => {
+  if (!dealInfo) return []
+  const items: string[] = []
+  if (dealInfo.deal_badge) items.push(dealInfo.deal_badge)
+  const typeAndState = [dealInfo.deal_type, dealInfo.deal_state].filter(Boolean).join(" • ")
+  if (typeAndState) items.push(typeAndState)
+  if (dealInfo.deal_price != null) items.push(`Deal: ${formatMoney(dealInfo.deal_price, dealInfo.currency)}`)
+  if (dealInfo.list_price != null) items.push(`List: ${formatMoney(dealInfo.list_price, dealInfo.currency)}`)
+  if (dealInfo.savings_percentage != null || dealInfo.savings_amount != null) {
+    const pct = dealInfo.savings_percentage != null ? `${dealInfo.savings_percentage}%` : null
+    const amt = dealInfo.savings_amount != null ? formatMoney(dealInfo.savings_amount, dealInfo.currency) : null
+    items.push(`Savings: ${[pct, amt].filter(Boolean).join(" • ")}`)
+  }
+  return items.length > 0 ? items : ["Deal available"]
+}
+
+const parseCouponItems = (couponText?: string | null): string[] => {
+  if (!couponText) return []
+  return couponText
+    .split(/\r?\n|\s*\|\s*|\s*;\s*/)
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
 const matchesSearch = (search: string, product: CategorySnapshotProduct): boolean => {
   if (!search) return true
   const q = search.toLowerCase()
@@ -101,6 +137,44 @@ const matchesEventSearch = (search: string, event: Event): boolean => {
     event.asin.toLowerCase().includes(q) ||
     event.summary.toLowerCase().includes(q)
   )
+}
+
+const eventToProduct = (event: Event): CategorySnapshotProduct => {
+  const prev = event.payload.previous
+  const prevRank = event.payload.previous_rank ?? null
+  const curRank = event.payload.current_rank ?? null
+  const rank = prevRank ?? curRank ?? 0
+  const currency = prev?.price_current != null ? (event.marketplace === "amazon_us" ? "USD" : event.marketplace === "amazon_uk" ? "GBP" : "EUR") : "USD"
+
+  let rankDelta: number | null = null
+  let rankTrend: CategorySnapshotProduct["rank_trend"] = null
+  if (prevRank != null && curRank != null) {
+    rankDelta = curRank - prevRank
+    if (rankDelta > 0) rankTrend = "DOWN"
+    else if (rankDelta < 0) rankTrend = "UP"
+    else rankTrend = "STABLE"
+  }
+
+  return {
+    asin: event.asin,
+    rank_position: rank,
+    previous_rank_position: prevRank,
+    rank_delta: rankDelta,
+    rank_trend: rankTrend,
+    title: prev?.title || event.title || "",
+    brand: extractBrandName(prev?.brand || ""),
+    product_url: prev?.price_current != null ? `https://www.${event.marketplace.replace("amazon_", "amazon.")}/dp/${event.asin}` : "",
+    price_current: prev?.price_current ?? 0,
+    price_original: prev?.price_original ?? null,
+    currency,
+    rating_value: prev?.rating_value ?? 0,
+    review_count: prev?.review_count ?? 0,
+    image_url: prev?.main_image_url || "",
+    availability_status: prev?.availability_status ?? "UNKNOWN",
+    buy_box_status: prev?.buy_box_status ?? "UNKNOWN",
+    coupon_text: prev?.coupon_text ?? null,
+    deal_info: prev?.deal_info ?? null,
+  }
 }
 
 // ── Create Keyword Tracker Modal ─────────────────────────────────────────
@@ -189,7 +263,7 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
               <button type="submit" disabled={submitting} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Plus size={14} /> {submitting ? "Creating..." : "Create Tracker"}
+                <Plus size={14} /> {submitting ? "Creating…" : "Create Tracker"}
               </button>
             </div>
           </form>
@@ -233,7 +307,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
       <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div className="card" style={{ width: "100%", maxWidth: 480, padding: "24px 28px", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>Edit Keyword Tracker</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>Edit Tracker</span>
             <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "flex" }}><X size={18} /></button>
           </div>
           <form onSubmit={handleSubmit}>
@@ -241,7 +315,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
               <label style={labelStyle}>Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
             </div>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>Run at (UTC hour)</label>
               <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
                 {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
@@ -267,7 +341,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
               <button type="submit" disabled={submitting} className="btn-primary">
-                {submitting ? "Saving..." : "Save Changes"}
+                {submitting ? "Saving…" : "Save Changes"}
               </button>
             </div>
           </form>
@@ -277,8 +351,25 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
   )
 }
 
+// ── Events Reducer ──────────────────────────────────────────────────────
+type EventsState = { events: Event[]; loading: boolean; error: string | null }
+type EventsAction =
+  | { type: "FETCH_START" }
+  | { type: "FETCH_OK"; events: Event[] }
+  | { type: "FETCH_ERR"; error: string }
+  | { type: "RESET" }
+
+function eventsReducer(state: EventsState, action: EventsAction): EventsState {
+  switch (action.type) {
+    case "FETCH_START": return { ...state, loading: true, error: null }
+    case "FETCH_OK": return { events: action.events, loading: false, error: null }
+    case "FETCH_ERR": return { events: [], loading: false, error: action.error }
+    case "RESET": return { events: [], loading: false, error: null }
+  }
+}
+
 // ── Main KeywordPage ─────────────────────────────────────────────────────
-export const KeywordPage = () => {
+export const KeywordPageInner = () => {
   const [trackers, setTrackers] = useState<KeywordTracker[]>([])
   const [selectedCode, setSelectedCode] = useState<string>("")
   const [snapshot, setSnapshot] = useState<CategorySnapshot | null>(null)
@@ -288,10 +379,14 @@ export const KeywordPage = () => {
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("ALL")
-  const [events, setEvents] = useState<Event[]>([])
+  const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
+  const [justAdded, setJustAdded] = useState<string | null>(null)
   const [insights, setInsights] = useState<KeywordInsights | null>(null)
   const [insightsTimeframe, setInsightsTimeframe] = useState<Timeframe>("WEEKLY")
+  const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
+  const [openDealKey, setOpenDealKey] = useState<string | null>(null)
 
   // Load trackers
   useEffect(() => {
@@ -323,9 +418,11 @@ export const KeywordPage = () => {
   // Load events when filter changes
   useEffect(() => {
     if (!selectedCode || !snapshot?.snapshot_date || activeKpiFilter === "ALL") {
+      dispatchEvents({ type: "RESET" })
       return
     }
     let cancelled = false
+    dispatchEvents({ type: "FETCH_START" })
     apiListEvents({
       tracker_type: "KEYWORD",
       tracker_code: selectedCode,
@@ -335,11 +432,17 @@ export const KeywordPage = () => {
     })
       .then(res => {
         if (cancelled) return
-        setEvents(res.items.filter(event => Object.values(FILTER_TO_EVENT).includes(event.event_type)))
+        dispatchEvents({
+          type: "FETCH_OK",
+          events: res.items.filter(event => Object.values(FILTER_TO_EVENT).includes(event.event_type)),
+        })
       })
-      .catch(() => { if (!cancelled) setEvents([]) })
+      .catch(() => {
+        if (cancelled) return
+        dispatchEvents({ type: "FETCH_ERR", error: "Failed to load events" })
+      })
     return () => { cancelled = true }
-  }, [selectedCode, snapshot, activeKpiFilter])
+  }, [selectedCode, snapshot?.snapshot_date, activeKpiFilter])
 
   // Load insights
   useEffect(() => {
@@ -348,12 +451,71 @@ export const KeywordPage = () => {
       .catch(() => {})
   }, [insightsTimeframe])
 
+  const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
+
   const selectedTracker = trackers.find(t => t.tracker_code === selectedCode)
+
+  const products = useMemo(() => snapshot?.products ?? [], [snapshot])
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => matchesSearch(search, p))
+  }, [products, search])
+
+  const allVisibleRows = useMemo<TableRow[]>(() => {
+    if (!snapshot) return []
+    if (activeKpiFilter === "ALL") {
+      return filteredProducts.map(p => ({ kind: "product", key: p.asin, product: p }))
+    }
+
+    const eventType = FILTER_TO_EVENT[activeKpiFilter]
+    const relevantEvents = eventsState.events.filter(e => e.event_type === eventType)
+
+    if (activeKpiFilter === "EXITS") {
+      return relevantEvents
+        .filter(e => matchesEventSearch(search, e))
+        .map(e => {
+          const product = eventToProduct(e)
+          return { kind: "product" as const, key: `${product.asin}-exit-${e.snapshot_date}`, product }
+        })
+    }
+
+    if (activeKpiFilter === "EXIT_TOP10") {
+      const productsByAsin = new Map(products.map(p => [p.asin, p]))
+      return relevantEvents
+        .filter(e => matchesEventSearch(search, e))
+        .map(e => {
+          const product = productsByAsin.get(e.asin)
+          if (product) return { kind: "product" as const, key: `${product.asin}-${product.rank_position}`, product }
+          const fallbackProduct = eventToProduct(e)
+          return { kind: "product" as const, key: `${fallbackProduct.asin}-exit10-${e.snapshot_date}`, product: fallbackProduct }
+        })
+    }
+
+    const eventAsins = new Set(relevantEvents.map(e => e.asin))
+    return filteredProducts
+      .filter(p => eventAsins.has(p.asin))
+      .map(p => ({ kind: "product", key: p.asin, product: p }))
+  }, [snapshot, activeKpiFilter, filteredProducts, eventsState.events, search, products])
+
+  const totalFilteredCount = useMemo(() => {
+    if (!snapshot) return 0
+    if (activeKpiFilter === "ALL") return snapshot.products.length
+    const eventType = FILTER_TO_EVENT[activeKpiFilter]
+    if (activeKpiFilter === "EXITS" || activeKpiFilter === "EXIT_TOP10") {
+      return eventsState.events.filter(e => e.event_type === eventType).length
+    }
+    const eventAsins = new Set(
+      eventsState.events.filter(e => e.event_type === eventType).map(e => e.asin)
+    )
+    return snapshot.products.filter(p => eventAsins.has(p.asin)).length
+  }, [snapshot, activeKpiFilter, eventsState.events])
 
   const handleCreate = (tracker: KeywordTracker) => {
     setShowCreate(false)
-    setTrackers(prev => [...prev, tracker])
+    setTrackers(prev => [tracker, ...prev])
     setSelectedCode(tracker.tracker_code)
+    setJustAdded(tracker.tracker_code)
+    setTimeout(() => setJustAdded(null), 5000)
     setLoading(true)
     setRefreshKey(k => k + 1)
   }
@@ -378,14 +540,6 @@ export const KeywordPage = () => {
     }
   }
 
-  const products = snapshot?.products ?? []
-  const filteredProducts = products.filter(p => matchesSearch(search, p))
-  const filteredEvents = events.filter(e => matchesEventSearch(search, e))
-
-  const tableRows: TableRow[] = activeKpiFilter === "ALL"
-    ? filteredProducts.map(p => ({ kind: "product", key: p.asin, product: p }))
-    : filteredEvents.map(e => ({ kind: "event", key: e.event_code, event: e }))
-
   // KPI counts
   const newEntrantCount = snapshot?.summary.new_entrant_count ?? 0
   const returningCount = snapshot?.summary.returning_count ?? 0
@@ -393,239 +547,441 @@ export const KeywordPage = () => {
   const enterTop10Count = snapshot?.summary.enter_top10_count ?? 0
   const exitTop10Count = snapshot?.summary.exit_top10_count ?? 0
 
-  const kpiFilters: { key: KpiFilter; label: string; value: number; color: string }[] = [
-    { key: "ALL", label: "All Results", value: products.length, color: T.text0 },
-    { key: "NEW_ENTRANTS", label: "New Entrants", value: newEntrantCount, color: T.green },
-    { key: "RETURNING", label: "Returning", value: returningCount, color: T.purple },
-    { key: "EXITS", label: "Exits", value: exitCount, color: T.red },
-    { key: "ENTER_TOP10", label: "Enter Top 10", value: enterTop10Count, color: T.amber },
-    { key: "EXIT_TOP10", label: "Exit Top 10", value: exitTop10Count, color: T.red },
-  ]
+  if (trackers.length === 0) return (
+    <>
+      {showCreate && (
+        <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+      )}
+      <div className="anim-fade">
+        <PageHeader title="Keyword Tracker" sub="Monitor Amazon search results for keywords"
+          actions={
+            <button className="btn-primary" onClick={() => setShowCreate(true)}
+              style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Plus size={14} /> New Tracker
+            </button>
+          } />
+        <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+          {loading
+            ? <div style={{ fontSize: 13 }}>Loading trackers…</div>
+            : <>
+                <Search size={40} style={{ margin: "0 auto 16px", opacity: 0.3 }} />
+                <div style={{ fontSize: 15, fontWeight: 600, color: T.text1, marginBottom: 6 }}>No keyword trackers yet</div>
+                <div style={{ fontSize: 12, color: error ? T.red : T.text3, marginBottom: 24 }}>
+                  {error ?? "Create a tracker to start monitoring Amazon search results."}
+                </div>
+                <button className="btn-primary" onClick={() => setShowCreate(true)}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <Plus size={14} /> New Tracker
+                </button>
+              </>
+          }
+        </div>
+      </div>
+    </>
+  )
 
   return (
-    <div>
-      <PageHeader title="Keyword Tracker" sub="Monitor Amazon search results for keywords" />
+    <>
+      {showCreate && (
+        <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+      )}
+      {showEdit && selectedTracker && (
+        <EditKeywordTrackerModal
+          tracker={selectedTracker}
+          onClose={() => setShowEdit(false)}
+          onUpdate={handleUpdate}
+        />
+      )}
+      <div className="anim-fade">
+        <PageHeader title="Keyword Tracker" sub="Monitor Amazon search results for keywords"
+          actions={
+            <div style={{ display: "flex", gap: 8 }}>
+              {selectedTracker && (
+                <button className="btn-ghost" onClick={() => setShowEdit(true)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <Edit2 size={14} /> Edit Tracker
+                </button>
+              )}
+              <button className="btn-primary" onClick={() => setShowCreate(true)}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Plus size={14} /> New Tracker
+              </button>
+            </div>
+          } />
 
-      {/* Tracker List */}
-      <div className="card" style={{ marginBottom: 16, padding: "14px 18px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: trackers.length > 0 ? 12 : 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: T.text2, textTransform: "uppercase", letterSpacing: ".05em" }}>Trackers</span>
-          <div style={{ flex: 1 }} />
-          <button className="btn-primary" onClick={() => setShowCreate(true)} style={{ fontSize: 12, padding: "6px 12px" }}>
-            <Plus size={13} /> New Keyword
-          </button>
-        </div>
-        {trackers.length === 0 && !loading && (
-          <div style={{ textAlign: "center", padding: "24px 0", color: T.text3, fontSize: 12 }}>No keyword trackers yet</div>
-        )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {trackers.map(t => {
-            const active = t.tracker_code === selectedCode
+        {/* Status filter tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
+          {(["ACTIVE", "PAUSED", "ARCHIVED"] as const).map(s => {
+            const sc = statusColor(s)
+            const count = trackers.filter(t => (t.status ?? "ACTIVE") === s).length
+            if (count === 0) return null
             return (
-              <button key={t.tracker_code} onClick={() => { setLoading(true); setSelectedCode(t.tracker_code); setActiveKpiFilter("ALL") }}
-                style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${active ? T.amber : T.border}`, background: active ? T.bg4 : T.bg3, color: active ? T.text0 : T.text2, fontSize: 12, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, transition: "all .15s" }}>
-                <span style={{ fontWeight: 500 }}>{t.name}</span>
-                <span style={{ fontFamily: T.mono, fontSize: 10, color: T.text3 }}>{t.scope.keyword}</span>
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  <span style={{ fontSize: 9, color: t.status === "ACTIVE" ? T.green : T.text3 }}>{t.status}</span>
-                  {t.stats.snapshot_count > 0 && <span style={{ fontSize: 9, color: T.text3 }}>{t.stats.snapshot_count} snaps</span>}
-                </div>
+              <button key={s} onClick={() => setStatusFilter(s)}
+                style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${statusFilter === s ? sc : T.border}`, background: statusFilter === s ? `${sc}18` : T.bg2, color: statusFilter === s ? sc : T.text3, fontSize: 11, fontFamily: T.mono, fontWeight: 600, cursor: "pointer", transition: "all .15s" }}>
+                {s} <span style={{ opacity: .7 }}>({count})</span>
               </button>
             )
           })}
         </div>
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 14 }}>
-          <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: T.red }}>{error}</span>
+        {/* Tracker selector */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+          {trackers.filter(t => (t.status ?? "ACTIVE") === statusFilter).map(t => {
+            const sc = statusColor(t.status)
+            const isSelected = t.tracker_code === selectedCode
+            return (
+              <button key={t.tracker_code} onClick={() => { setSnapshot(null); setLoading(true); setSelectedCode(t.tracker_code); setRefreshKey(k => k + 1) }}
+                style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? sc : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? sc : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
+                {isSelected && <span className="dot-live" style={{ background: sc, boxShadow: `0 0 0 3px ${sc}30` }} />}
+                {t.name}
+              </button>
+            )
+          })}
         </div>
-      )}
 
-      {/* No tracker selected */}
-      {!selectedCode && trackers.length === 0 && !loading && (
-        <div className="card" style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 13 }}>
-          <Search size={28} style={{ marginBottom: 10, opacity: 0.4 }} />
-          <div>Create a keyword tracker to monitor Amazon search results</div>
-        </div>
-      )}
-
-      {selectedCode && (
-        <>
-          {/* Tracker Header */}
-          {selectedTracker && (
-            <div className="card" style={{ marginBottom: 16, padding: "14px 18px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text0 }}>{selectedTracker.name}</div>
-                    <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>
-                      &quot;{selectedTracker.scope.keyword}&quot; | top {selectedTracker.tracking_config.top_n} | daily @ {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn-ghost" onClick={() => setShowEdit(true)} style={{ fontSize: 12 }}>Edit</button>
-                  <button className="btn-ghost" onClick={handleDelete} style={{ fontSize: 12, color: T.red }}>Delete</button>
-                  <button className="btn-ghost" onClick={() => { setLoading(true); setRefreshKey(k => k + 1) }} style={{ fontSize: 12 }}>
-                    <RefreshCw size={13} /> Refresh
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* KPIs */}
-          {snapshot && (
-            <div className="card" style={{ marginBottom: 16, padding: "14px 18px" }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {kpiFilters.map(kpi => {
-                  const active = activeKpiFilter === kpi.key
-                  return (
-                    <button key={kpi.key} onClick={() => setActiveKpiFilter(kpi.key)}
-                      style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${active ? kpi.color : T.border}`, background: active ? `${kpi.color}18` : T.bg3, color: active ? kpi.color : T.text2, fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "all .15s" }}>
-                      <span style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono }}>{kpi.value}</span>
-                      {kpi.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Search */}
-          <div className="card" style={{ marginBottom: 16, padding: "14px 18px" }}>
-            <div style={{ position: "relative" }}>
-              <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
-              <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search by title, ASIN, or brand..."
-                style={{ ...inputStyle, paddingLeft: 32 }} />
-            </div>
+        {/* Error */}
+        {error && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 14 }}>
+            <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: T.red }}>{error}</span>
           </div>
+        )}
 
-          {/* Results */}
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>
-                {activeKpiFilter === "ALL" ? `Search Results (${filteredProducts.length})` : `Filtered Events (${filteredEvents.length})`}
-              </span>
-              {snapshot && (
-                <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>
-                  {snapshot.snapshot_date}
-                </span>
-              )}
-            </div>
-
-            {loading ? (
-              <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 12 }}>Loading...</div>
-            ) : tableRows.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 12 }}>
-                {search ? "No results match your search" : "No data for this tracker"}
-              </div>
-            ) : (
+        {/* Tracker info card */}
+        {selectedTracker && (
+          <div className="card" style={{ marginBottom: 16, padding: "14px 18px", borderLeft: `3px solid ${T.amber}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                {tableRows.slice(0, 50).map(row => {
-                  if (row.kind === "event") {
-                    const e = row.event
-                    const meta = AlertTypeMeta(e.event_type)
-                    const img = getEventImageUrl(e)
-                    return (
-                      <div key={row.key} className="row-hover" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 18px", borderBottom: `1px solid ${T.border}` }}>
-                        {img ? (
-                          <Image unoptimized src={img} alt="" width={32} height={32} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3, flexShrink: 0 }}
-                            onError={ev => { (ev.target as HTMLImageElement).style.visibility = "hidden" }} />
-                        ) : <div style={{ width: 32, height: 32, borderRadius: 4, background: T.bg3, flexShrink: 0 }} />}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
-                          <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
-                            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.amber }}>{e.asin}</span>
-                            {e.payload.current_rank && <span style={{ fontFamily: T.mono, fontSize: 10, color: T.text3 }}>#{e.payload.current_rank}</span>}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                          <Badge type={meta.badgeType} text={meta.label} />
-                          <Badge type={e.severity === "HIGH" ? "exit" : e.severity === "MEDIUM" ? "top10" : "info"} text={e.severity} />
-                        </div>
-                      </div>
-                    )
-                  }
-                  // product row
-                  const p = row.product
-                  const trend = rankTrendMeta(p)
-                  return (
-                    <div key={row.key} className="row-hover" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 18px", borderBottom: `1px solid ${T.border}` }}>
-                      {p.image_url ? (
-                        <a href={p.product_url || `https://www.amazon.com/dp/${p.asin}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
-                          <Image unoptimized src={p.image_url} alt="" width={32} height={32} style={{ objectFit: "contain", borderRadius: 4, background: T.bg3 }}
-                            onError={ev => { (ev.target as HTMLImageElement).style.visibility = "hidden" }} />
-                        </a>
-                      ) : <div style={{ width: 32, height: 32, borderRadius: 4, background: T.bg3, flexShrink: 0 }} />}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: T.text0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-                        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 2 }}>
-                          <span style={{ fontFamily: T.mono, fontSize: 10, color: T.amber }}>{p.asin}</span>
-                          {p.brand && <span style={{ fontSize: 10, color: T.text3 }}>{p.brand}</span>}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.text0 }}>
-                            {p.rank_position > 0 ? `#${p.rank_position}` : "—"}
-                          </div>
-                          <div style={{ fontSize: 10, color: trend.color, fontFamily: T.mono }}>{trend.label}</div>
-                        </div>
-                        {p.price_current > 0 && (
-                          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.text0, textAlign: "right", minWidth: 56 }}>
-                            {formatMoney(p.price_current, p.currency)}
-                          </div>
-                        )}
-                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                          <span style={{ fontSize: 10, color: T.amber }}>{p.rating_value > 0 ? p.rating_value.toFixed(1) : "—"}</span>
-                          <span style={{ fontSize: 9, color: T.text3 }}>({p.review_count})</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Keyword Insights */}
-          <div className="card" style={{ marginBottom: 16, padding: "14px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>Keyword Insights</span>
-              <select value={insightsTimeframe} onChange={e => setInsightsTimeframe(e.target.value as Timeframe)}
-                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg3, color: T.text2, fontSize: 11, cursor: "pointer" }}>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-              </select>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-              {[
-                { label: "Top 10 Entrants", value: insights?.new_top10_entrants.length ?? 0, color: T.amber, icon: <Star size={13} /> },
-                { label: "First-Time", value: insights?.first_time_entrants.length ?? 0, color: T.green, icon: <Zap size={13} /> },
-                { label: "Returning", value: insights?.returning_entrants.length ?? 0, color: T.purple, icon: <RefreshCw size={13} /> },
-              ].map(m => (
-                <div key={m.label} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 6, background: `${m.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color }}>{m.icon}</div>
-                  <div>
-                    <span style={{ fontSize: 20, fontWeight: 700, fontFamily: T.mono, color: m.color }}>{m.value}</span>
-                    <div style={{ fontSize: 10, color: T.text2 }}>{m.label}</div>
-                  </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{selectedTracker.name}</span>
+                  {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
                 </div>
-              ))}
+                <div style={{ display: "flex", gap: 16, marginTop: 6 }}>
+                  <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                    Keyword: <strong style={{ color: T.amber }}>&quot;{selectedTracker.scope.keyword}&quot;</strong>
+                  </span>
+                  {selectedTracker.scope.sort_by && (
+                    <>
+                      <span style={{ fontSize: 11, color: T.text3 }}>|</span>
+                      <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>Sort: {selectedTracker.scope.sort_by}</span>
+                    </>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 16, marginTop: 6, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  <span>Schedule: {selectedTracker.schedule.frequency} @ {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC</span>
+                  <span>Top N: {selectedTracker.tracking_config.top_n}</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>Last Success: {selectedTracker.stats.last_success_at ? new Date(selectedTracker.stats.last_success_at).toLocaleString() : "—"}</div>
+                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Snapshots: {selectedTracker.stats.snapshot_count}</div>
+                {selectedTracker.latest_snapshot_summary && (
+                  <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Latest: {selectedTracker.latest_snapshot_summary.snapshot_date}</div>
+                )}
+                <button onClick={handleDelete} style={{ marginTop: 8, padding: "4px 10px", borderRadius: 6, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
+                  <Trash2 size={11} /> Delete
+                </button>
+              </div>
             </div>
           </div>
-        </>
-      )}
+        )}
 
-      {/* Modals */}
-      {showCreate && <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />}
-      {showEdit && selectedTracker && <EditKeywordTrackerModal tracker={selectedTracker} onClose={() => setShowEdit(false)} onUpdate={handleUpdate} />}
-    </div>
+        {/* Snapshot summary KPIs */}
+        {snapshot && (
+          <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+            {[
+              { key: "ALL" as const, label: "Total ASINs", v: snapshot.summary.asin_count, color: T.text0, icon: <TrendingUp size={14} /> },
+              { key: "NEW_ENTRANTS" as const, label: "New Entrants", v: newEntrantCount, color: T.green, icon: <Zap size={14} /> },
+              { key: "RETURNING" as const, label: "Returning", v: returningCount, color: "#90EE90", icon: <RefreshCw size={14} /> },
+              { key: "EXITS" as const, label: "Exits", v: exitCount, color: T.red, icon: <TrendingDown size={14} /> },
+              { key: "ENTER_TOP10" as const, label: "Enter Top 10", v: enterTop10Count, color: T.amber, icon: <Star size={14} /> },
+              { key: "EXIT_TOP10" as const, label: "Exit Top 10", v: exitTop10Count, color: T.red, icon: <TrendingDown size={14} /> },
+            ].map(s => (
+              <button key={s.label} type="button" className="card" onClick={() => setActiveKpiFilter(s.key)} style={{ flex: 1, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", textAlign: "left", border: `1px solid ${activeKpiFilter === s.key ? s.color : T.border}`, background: activeKpiFilter === s.key ? `${s.color}10` : undefined }}>
+                <div style={{ width: 30, height: 30, borderRadius: 7, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color }}>{s.icon}</div>
+                <div>
+                  <span style={{ fontSize: 22, fontWeight: 700, fontFamily: T.mono, color: s.color }}>{s.v}</span>
+                  <div style={{ fontSize: 10, color: T.text2 }}>{s.label}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Snapshot metadata */}
+        {snapshot && (
+          <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap" }}>
+            <span>Snapshot: {snapshot.snapshot_date}</span>
+            <span>Captured: {new Date(snapshot.captured_at).toLocaleString()}</span>
+            {snapshot.source_refs?.provider && <span>Provider: {snapshot.source_refs.provider}</span>}
+            {snapshot.source_refs?.apify_run_id && <span>Run: {snapshot.source_refs.apify_run_id}</span>}
+          </div>
+        )}
+
+        {/* Events loading/error banner */}
+        {eventsState.loading && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 8, borderRadius: 8, background: `${T.blue}12`, border: `1px solid ${T.blue}30`, fontSize: 12, color: T.blue }}>
+            <span className="dot-live" style={{ background: T.blue, animation: "pulse 1.5s infinite" }} />
+            Loading events...
+          </div>
+        )}
+        {eventsState.error && !eventsState.loading && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", marginBottom: 8, borderRadius: 8, background: `${T.red}12`, border: `1px solid ${T.red}30`, fontSize: 12, color: T.red }}>
+            {eventsState.error}
+            <button onClick={() => setActiveKpiFilter(prev => prev)} style={{ marginLeft: "auto", padding: "2px 8px", borderRadius: 4, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 11, cursor: "pointer" }}>Retry</button>
+          </div>
+        )}
+
+        {/* Products table */}
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ position: "relative", flex: 1, maxWidth: 280 }}>
+              <Search size={13} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: T.text3 }} />
+              <input className="input" placeholder="Search ASIN, title, or brand..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 30 }} />
+            </div>
+            <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>
+              {allVisibleRows.length} of {totalFilteredCount} {activeKpiFilter === "ALL" ? "products" : "matched rows"}
+            </span>
+          </div>
+
+          {justAdded && (
+            <div style={{ background: `${T.blue}15`, border: `1px solid ${T.blue}40`, borderRadius: 8, padding: "12px 14px", margin: "12px 14px", color: T.blue, fontSize: 12 }}>
+              Data will be collected and displayed in a few minutes.
+            </div>
+          )}
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading snapshot...</div>
+          ) : (
+            <div style={{ width: "100%", overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 1100, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${T.border}` }}>
+                    {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Deal", "Coupon"].map(h => (
+                      <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allVisibleRows.map(row => {
+                    if (row.kind === "event") {
+                      const event = row.event
+                      const imageUrl = getEventImageUrl(event)
+                      const rankLabel = event.payload.current_rank ?? event.payload.previous_rank ?? null
+                      const prev = event.payload.previous
+                      return (
+                        <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: `${T.bg3}30` }}>
+                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, color: T.text1 }}>
+                            {rankLabel != null ? String(rankLabel).padStart(2, "0") : "--"}
+                          </td>
+                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>
+                            {event.event_type.replaceAll("_", " ")}
+                          </td>
+                          <td style={{ padding: "6px 10px" }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={imageUrl} alt={event.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                              ) : (
+                                <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>N/A</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>{event.asin}</td>
+                          <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
+                            <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prev?.title || event.title}</div>
+                          </td>
+                          <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
+                            {prev?.brand ? (
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", width: "100%" }}>{extractBrandName(prev.brand)}</span>
+                            ) : <span style={{ color: T.text3 }}>—</span>}
+                          </td>
+                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
+                            {prev?.price_current != null && prev.price_current > 0 ? (
+                              <>
+                                {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_current.toFixed(2)}
+                                {prev.price_original != null && prev.price_original > prev.price_current && (
+                                  <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
+                                    {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_original.toFixed(2)}
+                                  </span>
+                                )}
+                              </>
+                            ) : <span style={{ color: T.text3 }}>—</span>}
+                          </td>
+                          <td style={{ padding: "9px 10px", fontSize: 12, color: T.text3 }}>—</td>
+                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text3 }}>—</td>
+                          <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
+                          <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
+                          <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
+                          <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
+                        </tr>
+                      )
+                    }
+
+                    const p = row.product
+                    const isExitFilter = activeKpiFilter === "EXITS"
+                    return (
+                      <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: !isExitFilter && p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: !isExitFilter && p.rank_position <= 10 ? 700 : 400, color: !isExitFilter && p.rank_position <= 10 ? T.amber : T.text1 }}>
+                          {isExitFilter ? "—" : String(p.rank_position).padStart(2, "0")}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>
+                          {isExitFilter ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: T.text3, fontStyle: "italic" }}>
+                              Historical
+                            </span>
+                          ) : (() => {
+                            const meta = rankTrendMeta(p)
+                            return (
+                              <span title={p.comparison_snapshot_date ? `Previous: ${p.previous_rank_position ?? "not ranked"} on ${p.comparison_snapshot_date}` : "No comparison snapshot"}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 4, color: meta.color, fontWeight: p.rank_trend && p.rank_trend !== "STABLE" ? 700 : 500 }}>
+                                {p.rank_trend === "UP" && <TrendingUp size={12} />}
+                                {p.rank_trend === "DOWN" && <TrendingDown size={12} />}
+                                {meta.label}
+                              </span>
+                            )
+                          })()}
+                        </td>
+                        <td style={{ padding: "6px 10px" }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={p.image_url} alt={p.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+                          </div>
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11 }}>
+                          <a href={p.product_url || `https://www.amazon.com/dp/${p.asin}`} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                            {p.asin}<ExternalLink size={9} />
+                          </a>
+                        </td>
+                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                        </td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
+                          {p.brand ? (
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", width: "100%" }}>{extractBrandName(p.brand)}</span>
+                          ) : <span style={{ color: T.text3 }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
+                          {p.price_current > 0 ? (
+                            <>
+                              {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_current.toFixed(2)}
+                              {p.price_original && p.price_original > p.price_current && (
+                                <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
+                                  {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_original.toFixed(2)}
+                                </span>
+                              )}
+                            </>
+                          ) : <span style={{ color: T.text3 }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.green }}>
+                          {p.rating_value > 0 ? `${p.rating_value}★` : <span style={{ color: T.text3 }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>
+                          {p.review_count > 0 ? p.review_count.toLocaleString() : <span style={{ color: T.text3 }}>—</span>}
+                        </td>
+                        <td style={{ padding: "9px 10px" }}>
+                          <Badge type={p.availability_status === "IN_STOCK" ? "listing" : "stock"} text={p.availability_status === "IN_STOCK" ? "In Stock" : p.availability_status === "OUT_OF_STOCK" ? "OOS" : p.availability_status} />
+                        </td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.blue }}>
+                          {(() => {
+                            const dealItems = parseDealItems(p.deal_info)
+                            if (dealItems.length === 0) return "—"
+                            const dealKey = `${p.asin}-${p.rank_position}`
+                            const isOpen = openDealKey === dealKey
+                            return (
+                              <div style={{ minWidth: 160 }}>
+                                <button type="button" onClick={() => setOpenDealKey(prev => prev === dealKey ? null : dealKey)}
+                                  style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.blue}`, background: `${T.blue}16`, color: T.blue, fontSize: 10, fontFamily: T.mono, fontWeight: 600, cursor: "pointer" }}>
+                                  {isOpen ? "Hide" : "View"} Deal
+                                </button>
+                                {isOpen && (
+                                  <div style={{ marginTop: 6, padding: "6px 8px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, color: T.text1, lineHeight: 1.4 }}>
+                                    {dealItems.map((deal, idx) => (
+                                      <div key={`${deal}-${idx}`} style={{ marginBottom: idx < dealItems.length - 1 ? 4 : 0 }}>• {deal}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </td>
+                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.amber }}>
+                          {(() => {
+                            const couponItems = parseCouponItems(p.coupon_text)
+                            if (couponItems.length === 0) return "—"
+                            const couponKey = `${p.asin}-${p.rank_position}`
+                            const isOpen = openCouponKey === couponKey
+                            return (
+                              <div style={{ minWidth: 160 }}>
+                                <button type="button" onClick={() => setOpenCouponKey(prev => prev === couponKey ? null : couponKey)}
+                                  style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.amberD}`, background: `${T.amber}14`, color: T.amber, fontSize: 10, fontFamily: T.mono, fontWeight: 600, cursor: "pointer" }}>
+                                  {isOpen ? "Hide" : "View"} {couponItems.length} Coupon{couponItems.length > 1 ? "s" : ""}
+                                </button>
+                                {isOpen && (
+                                  <div style={{ marginTop: 6, padding: "6px 8px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, color: T.text1, lineHeight: 1.4 }}>
+                                    {couponItems.map((coupon, idx) => (
+                                      <div key={`${coupon}-${idx}`} style={{ marginBottom: idx < couponItems.length - 1 ? 4 : 0 }}>• {coupon}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!loading && !snapshot && (
+            <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 13 }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+              <div style={{ fontWeight: 600, color: T.text2, marginBottom: 6 }}>No snapshot yet</div>
+              <div style={{ fontSize: 12 }}>This tracker hasn&apos;t run yet. Trigger a job or wait for the scheduled run.</div>
+            </div>
+          )}
+          {!loading && snapshot && allVisibleRows.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
+          )}
+        </div>
+
+        {/* Keyword Insights */}
+        <div className="card" style={{ marginTop: 16, padding: "14px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>Keyword Insights</span>
+            <select value={insightsTimeframe} onChange={e => setInsightsTimeframe(e.target.value as Timeframe)}
+              style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg3, color: T.text2, fontSize: 11, cursor: "pointer" }}>
+              <option value="DAILY">Daily</option>
+              <option value="WEEKLY">Weekly</option>
+              <option value="MONTHLY">Monthly</option>
+            </select>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            {[
+              { label: "Top 10 Entrants", value: insights?.new_top10_entrants.length ?? 0, color: T.amber, icon: <Star size={13} /> },
+              { label: "First-Time", value: insights?.first_time_entrants.length ?? 0, color: T.green, icon: <Zap size={13} /> },
+              { label: "Returning", value: insights?.returning_entrants.length ?? 0, color: T.purple, icon: <RefreshCw size={13} /> },
+            ].map(m => (
+              <div key={m.label} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 6, background: `${m.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color }}>{m.icon}</div>
+                <div>
+                  <span style={{ fontSize: 20, fontWeight: 700, fontFamily: T.mono, color: m.color }}>{m.value}</span>
+                  <div style={{ fontSize: 10, color: T.text2 }}>{m.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   )
 }
+
+export const KeywordPage = () => (
+  <Suspense fallback={<div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading...</div>}>
+    <KeywordPageInner />
+  </Suspense>
+)
