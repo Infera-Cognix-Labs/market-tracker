@@ -49,7 +49,7 @@ type EditableNotificationRule = {
   enabled: boolean
   severities: Severity[]
   event_types: EventType[]
-  tracker_type: "" | "CATEGORY" | "COMPETITOR"
+  tracker_type: "" | "CATEGORY" | "COMPETITOR" | "KEYWORD"
   tracker_code: string
   webhook_url: string
 }
@@ -398,7 +398,7 @@ export const EventsPage = () => {
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
-  const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR">("")
+  const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR" | "KEYWORD">("")
   const [selectedTrackerCode, setSelectedTrackerCode] = useState<string>("")
   const [categoryTrackers, setCategoryTrackers] = useState<CategoryTracker[]>([])
   const [competitorTrackers, setCompetitorTrackers] = useState<CompetitorTracker[]>([])

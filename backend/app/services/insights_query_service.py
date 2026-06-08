@@ -14,6 +14,7 @@ from app.models.api import (
     CompetitorAlertCounts,
     CompetitorInsights,
     EventType,
+    KeywordInsights,
     PriceChangeItem,
     PromotionItem,
     ReturningEntrantItem,
@@ -25,6 +26,7 @@ from app.models.documents import (
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     EventDocument,
+    KeywordTrackerDocument,
     ProductDocument,
     ProductSnapshotDocument,
 )
@@ -430,4 +432,162 @@ class InsightsQueryService:
             price_increase_count=price_increase_count,
             new_promotion_count=new_promotion_count,
             new_variation_count=new_variation_count,
+        )
+
+    async def get_keyword_insights(
+        self, workspace_id: str, timeframe: Timeframe
+    ) -> KeywordInsights:
+        t0 = time.monotonic()
+        cutoff_date = date.today() - timedelta(days=30)
+        event_docs = await EventDocument.find(
+            EventDocument.workspace_id == workspace_id,
+            EventDocument.tracker_type == "KEYWORD",
+            In(EventDocument.event_type, list(CATEGORY_ENTRANT_EVENT_TYPES)),
+            EventDocument.snapshot_date >= cutoff_date,
+        ).to_list()
+
+        events = [event_doc_to_model(doc) for doc in event_docs]
+
+        tracker_docs = await KeywordTrackerDocument.find(
+            KeywordTrackerDocument.workspace_id == workspace_id
+        ).to_list()
+        tracker_name_map = {
+            doc.tracker_code: doc.name for doc in tracker_docs
+        }
+
+        asin_keys = list({(e.marketplace, e.asin) for e in events})
+        if asin_keys:
+            product_docs = await ProductDocument.find(
+                ProductDocument.workspace_id == workspace_id,
+                In(ProductDocument.asin, [k[1] for k in asin_keys]),
+            ).to_list()
+        else:
+            product_docs = []
+        product_map = {
+            (doc.marketplace, doc.asin): doc for doc in product_docs
+        }
+
+        if asin_keys:
+            snapshot_docs = await ProductSnapshotDocument.find(
+                ProductSnapshotDocument.workspace_id == workspace_id,
+                In(ProductSnapshotDocument.asin, [k[1] for k in asin_keys]),
+            ).to_list()
+        else:
+            snapshot_docs = []
+        t_db = (time.monotonic() - t0) * 1000
+
+        t1 = time.monotonic()
+        first_seen_map: dict[tuple[str, str], date] = {}
+        for doc in sorted(snapshot_docs, key=lambda d: d.snapshot_date):
+            key = (doc.marketplace, doc.asin)
+            if key not in first_seen_map:
+                first_seen_map[key] = doc.snapshot_date
+
+        reference_date = max(
+            (event.snapshot_date for event in events), default=utc_now().date()
+        )
+        from_date, to_date = timeframe_bounds(timeframe, reference_date)
+        filtered_events = [
+            event
+            for event in events
+            if within_range(event.snapshot_date, from_date, to_date)
+        ]
+
+        new_top10_entrants: list[CategoryEntrantItem] = []
+        first_time_entrants: list[CategoryEntrantItem] = []
+        returning_entrants: list[ReturningEntrantItem] = []
+
+        for event in filtered_events:
+            product = product_map.get((event.marketplace, event.asin))
+            if not product:
+                continue
+
+            image_url = product.main_image_url_latest or ""
+            title = product.title_latest
+            brand = product.brand
+            tracker_name = tracker_name_map.get(event.tracker_code, event.tracker_code)
+
+            current_rank = event.payload.current_rank or 0
+            previous_rank = event.payload.previous_rank
+
+            if event.event_type == EventType.ENTER_TOP10:
+                is_first_time = first_seen_map.get(
+                    (event.marketplace, event.asin)
+                ) == event.snapshot_date
+
+                item = CategoryEntrantItem(
+                    asin=event.asin,
+                    title=title,
+                    brand=brand,
+                    image_url=image_url,
+                    current_rank=current_rank,
+                    previous_rank=previous_rank,
+                    entered_at=event.snapshot_date,
+                    is_first_time_entrant=is_first_time,
+                    tracker_code=event.tracker_code,
+                    tracker_name=tracker_name,
+                )
+                new_top10_entrants.append(item)
+                if is_first_time:
+                    first_time_entrants.append(item)
+
+            elif event.event_type == EventType.NEW_ENTRANT_TOP50:
+                is_first_time = first_seen_map.get(
+                    (event.marketplace, event.asin)
+                ) == event.snapshot_date
+
+                item = CategoryEntrantItem(
+                    asin=event.asin,
+                    title=title,
+                    brand=brand,
+                    image_url=image_url,
+                    current_rank=current_rank,
+                    previous_rank=previous_rank,
+                    entered_at=event.snapshot_date,
+                    is_first_time_entrant=is_first_time,
+                    tracker_code=event.tracker_code,
+                    tracker_name=tracker_name,
+                )
+                if is_first_time:
+                    first_time_entrants.append(item)
+                if current_rank > 0 and current_rank <= 10:
+                    new_top10_entrants.append(item)
+
+            elif event.event_type == EventType.RETURNING_TOP50:
+                days_absent = event.payload.days_absent or 0
+                returning_entrants.append(
+                    ReturningEntrantItem(
+                        asin=event.asin,
+                        title=title,
+                        brand=brand,
+                        image_url=image_url,
+                        current_rank=current_rank,
+                        previous_rank=previous_rank,
+                        entered_at=event.snapshot_date,
+                        days_absent=days_absent,
+                        tracker_code=event.tracker_code,
+                        tracker_name=tracker_name,
+                    )
+                )
+
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "get_keyword_insights timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "event_count": len(event_docs),
+                    "product_count": len(product_docs),
+                    "snapshot_count": len(snapshot_docs),
+                }
+            },
+        )
+        return KeywordInsights(
+            timeframe=timeframe,
+            generated_at=utc_now(),
+            new_top10_entrants=new_top10_entrants,
+            first_time_entrants=first_time_entrants,
+            returning_entrants=returning_entrants,
         )

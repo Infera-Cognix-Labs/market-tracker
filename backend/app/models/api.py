@@ -37,6 +37,7 @@ class TrackerStatus(str, Enum):
 class TrackerType(str, Enum):
     CATEGORY = "CATEGORY"
     COMPETITOR = "COMPETITOR"
+    KEYWORD = "KEYWORD"
 
 
 class Frequency(str, Enum):
@@ -222,6 +223,102 @@ class CategoryTrackerUpdateRequest(ApiModel):
     tracking_config: CategoryTrackingConfigInput | None = None
     schedule: TrackerScheduleInput | None = None
     status: TrackerStatus | None = None
+
+
+# ── Keyword Tracker ───────────────────────────────────────────────────────────
+
+
+class KeywordScope(ApiModel):
+    keyword: str = Field(min_length=1, max_length=200)
+    sort_by: str = Field(default="relevance")
+
+
+class KeywordTrackingConfig(ApiModel):
+    top_n: int = Field(default=100)
+    top10_alert_enabled: bool
+
+
+class KeywordTrackingConfigInput(ApiModel):
+    top10_alert_enabled: bool = True
+
+
+class KeywordTrackerStats(ApiModel):
+    last_job_at: datetime | None = None
+    last_success_at: datetime | None = None
+    snapshot_count: int = 0
+
+
+class KeywordTrackerLatestSnapshotSummary(ApiModel):
+    snapshot_date: date
+    captured_at: datetime
+    top10_asins: list[AsinCode]
+
+
+class KeywordTracker(ApiModel):
+    tracker_code: str
+    name: str
+    marketplace: MarketplaceCode
+    scope: KeywordScope
+    tracking_config: KeywordTrackingConfig
+    schedule: TrackerSchedule
+    status: TrackerStatus
+    stats: KeywordTrackerStats
+    latest_snapshot_summary: KeywordTrackerLatestSnapshotSummary | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class KeywordTrackerCreateRequest(ApiModel):
+    name: str = Field(min_length=1, max_length=120)
+    marketplace: MarketplaceCode
+    scope: KeywordScope
+    tracking_config: KeywordTrackingConfigInput = Field(
+        default_factory=KeywordTrackingConfigInput
+    )
+    schedule: TrackerScheduleInput
+
+
+class KeywordTrackerUpdateRequest(ApiModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    tracking_config: KeywordTrackingConfigInput | None = None
+    schedule: TrackerScheduleInput | None = None
+    status: TrackerStatus | None = None
+
+
+class KeywordSnapshotSummary(ApiModel):
+    asin_count: int
+    new_entrant_count: int
+    returning_count: int
+    exit_count: int
+    enter_top10_count: int
+    exit_top10_count: int
+
+
+class KeywordSnapshot(ApiModel):
+    tracker_code: str
+    marketplace: MarketplaceCode
+    keyword: str
+    snapshot_date: date
+    captured_at: datetime
+    top_n: int = 100
+    products: list[CategorySnapshotProduct]
+    summary: KeywordSnapshotSummary
+    source_refs: dict[str, Any] | None = None
+
+
+class KeywordHighlight(ApiModel):
+    tracker_code: str
+    tracker_name: str
+    new_entrant_count: int
+    exit_count: int
+    top10_enter_count: int
+
+
+class KeywordTrackerListResponse(ApiModel):
+    items: list[KeywordTracker]
+    page: int
+    page_size: int
+    total: int
 
 
 class CategorySnapshotSummary(ApiModel):
@@ -602,6 +699,7 @@ class Threat(ApiModel):
 class DashboardOverviewSummary(ApiModel):
     active_category_tracker_count: int
     active_competitor_tracker_count: int
+    active_keyword_tracker_count: int
     tracked_product_count: int
     new_entrant_count: int
     returning_count: int
@@ -634,6 +732,7 @@ class DashboardOverview(ApiModel):
     top_threats: list[Threat]
     category_highlights: list[CategoryHighlight]
     competitor_highlights: list[CompetitorHighlight]
+    keyword_highlights: list[KeywordHighlight]
 
 
 class WeeklyDigestSummary(ApiModel):
@@ -763,6 +862,14 @@ class ReturningEntrantItem(ApiModel):
 
 
 class CategoryInsights(ApiModel):
+    timeframe: Timeframe
+    generated_at: datetime
+    new_top10_entrants: list[CategoryEntrantItem]
+    first_time_entrants: list[CategoryEntrantItem]
+    returning_entrants: list[ReturningEntrantItem]
+
+
+class KeywordInsights(ApiModel):
     timeframe: Timeframe
     generated_at: datetime
     new_top10_entrants: list[CategoryEntrantItem]

@@ -27,6 +27,7 @@ from app.models.documents import (
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     JobDocument,
+    KeywordTrackerDocument,
     ProductDocument,
     RawImportBatchDocument,
 )
@@ -632,6 +633,19 @@ class ResultImporterService:
                 category_top_n=tracker_document.tracking_config.top_n,
             )
 
+        if tracker_type == TrackerType.KEYWORD:
+            tracker_document = await KeywordTrackerDocument.find_one(
+                KeywordTrackerDocument.workspace_id == workspace_id,
+                KeywordTrackerDocument.tracker_code == tracker_code,
+            )
+            if tracker_document is None:
+                raise ValueError("Keyword tracker not found.")
+            return TrackerContext(
+                tracker_type=tracker_type,
+                marketplace=tracker_document.marketplace,
+                category_top_n=tracker_document.tracking_config.top_n,
+            )
+
         tracker_document = await CompetitorTrackerDocument.find_one(
             CompetitorTrackerDocument.workspace_id == workspace_id,
             CompetitorTrackerDocument.tracker_code == tracker_code,
@@ -900,6 +914,20 @@ class ResultImporterService:
             tracker_document = await CategoryTrackerDocument.find_one(
                 CategoryTrackerDocument.workspace_id == workspace_id,
                 CategoryTrackerDocument.tracker_code == tracker_code,
+            )
+            if tracker_document is None:
+                return
+            tracker_document.stats.last_job_at = now
+            if final_status in {JobStatus.SUCCESS, JobStatus.PARTIAL_SUCCESS}:
+                tracker_document.stats.last_success_at = now
+                tracker_document.stats.snapshot_count += 1
+            await tracker_document.save()
+            return
+
+        if tracker_type == TrackerType.KEYWORD:
+            tracker_document = await KeywordTrackerDocument.find_one(
+                KeywordTrackerDocument.workspace_id == workspace_id,
+                KeywordTrackerDocument.tracker_code == tracker_code,
             )
             if tracker_document is None:
                 return

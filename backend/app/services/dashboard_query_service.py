@@ -22,6 +22,7 @@ from app.models.documents import (
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     EventDocument,
+    KeywordTrackerDocument,
     ProductDocument,
     ProductSnapshotDocument,
     WeeklyDigestDocument,
@@ -33,6 +34,7 @@ from app.services.shared import (
     competitor_doc_to_model,
     digest_doc_to_model,
     event_doc_to_model,
+    keyword_doc_to_model,
     product_doc_to_model,
 )
 
@@ -49,6 +51,9 @@ class DashboardQueryService:
         ).to_list()
         competitor_docs = await CompetitorTrackerDocument.find(
             CompetitorTrackerDocument.workspace_id == workspace_id
+        ).to_list()
+        keyword_docs = await KeywordTrackerDocument.find(
+            KeywordTrackerDocument.workspace_id == workspace_id
         ).to_list()
 
         # Compute timeframe bounds to limit event query
@@ -70,6 +75,7 @@ class DashboardQueryService:
             competitor_trackers=[
                 competitor_doc_to_model(doc) for doc in competitor_docs
             ],
+            keyword_trackers=[keyword_doc_to_model(doc) for doc in keyword_docs],
             events=[event_doc_to_model(doc) for doc in event_docs],
         )
         t_transform = (time.monotonic() - t1) * 1000
@@ -82,6 +88,7 @@ class DashboardQueryService:
                     "transform_ms": round(t_transform, 2),
                     "category_count": len(category_docs),
                     "competitor_count": len(competitor_docs),
+                    "keyword_count": len(keyword_docs),
                     "event_count": len(event_docs),
                 }
             },

@@ -262,6 +262,38 @@ class ProdigerCategoryAdapter:
         )
 
 
+class HarvestlabKeywordAdapter:
+    actor_id = "harvestlab/amazon-scraper"
+
+    def to_standard_contract(
+        self,
+        raw_payload: dict[str, object],
+        marketplace: str,
+    ) -> CategoryProductRecord | None:
+        asin = _coerce_asin(_pick(raw_payload, "asin"))
+        if not asin:
+            return None
+        return CategoryProductRecord(
+            asin=asin,
+            rank_position=_coerce_int(
+                _pick(raw_payload, "searchResultPosition", "position")
+            ),
+            title=_coerce_string(_pick(raw_payload, "title")),
+            brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
+            product_url=_coerce_string(_pick(raw_payload, "url", "product_url")),
+            main_image_url=_coerce_string(_pick(raw_payload, "image_url")),
+            price_current=_coerce_float(_pick(raw_payload, "price")),
+            price_original=_coerce_float(_pick(raw_payload, "original_price")),
+            currency=_coerce_string(_pick(raw_payload, "currency")),
+            rating_value=_coerce_float(_pick(raw_payload, "rating")),
+            review_count=_coerce_int(_pick(raw_payload, "reviews_count")),
+            availability_status=_coerce_string(
+                _pick(raw_payload, "availability_status", "availability")
+            ),
+            bsr_position=_coerce_int(_pick(raw_payload, "bestseller_rank")),
+        )
+
+
 class JungleeAsinsAdapter:
     actor_id = "junglee/amazon-asins-scraper"
 

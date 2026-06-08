@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.v1.deps import get_store
-from app.models.api import CategoryInsights, CompetitorAlertCounts, CompetitorInsights, Timeframe
+from app.models.api import CategoryInsights, CompetitorAlertCounts, CompetitorInsights, KeywordInsights, Timeframe
 from app.store import BaseStore
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/summaries", tags=["summaries"])
@@ -35,3 +35,12 @@ async def get_competitor_alerts(
     store: Annotated[BaseStore, Depends(get_store)],
 ) -> CompetitorAlertCounts:
     return await store.get_competitor_alerts(workspace_id)
+
+
+@router.get("/keyword-insights", response_model=KeywordInsights)
+async def get_keyword_insights(
+    workspace_id: str,
+    store: Annotated[BaseStore, Depends(get_store)],
+    timeframe: Timeframe = Query(default=Timeframe.WEEKLY),
+) -> KeywordInsights:
+    return await store.get_keyword_insights(workspace_id, timeframe)

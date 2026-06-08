@@ -13,6 +13,10 @@ import type {
   CompetitorAlertCounts,
   NotificationRule,
   NotificationRuleRequest,
+  KeywordTracker,
+  KeywordTrackerCreateRequest,
+  KeywordTrackerUpdateRequest,
+  KeywordInsights,
 } from "./types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_BASE_PATH || "/market-tracker"}/api`
@@ -302,4 +306,45 @@ export const apiGetCompetitorInsights = async (timeframe: Timeframe = "WEEKLY"):
 
 export const apiGetCompetitorAlerts = async (): Promise<CompetitorAlertCounts> => {
   return apiFetch<CompetitorAlertCounts>(`/summaries/competitor-alerts`)
+}
+
+// ── Keyword Trackers ──────────────────────────────────────────────────────
+
+export const apiListKeywordTrackers = async (page = 1, pageSize = 20): Promise<PagedResponse<KeywordTracker>> => {
+  return apiFetch<PagedResponse<KeywordTracker>>(`/keyword-trackers${qs({ page, page_size: pageSize })}`)
+}
+
+export const apiGetKeywordTracker = async (trackerCode: string): Promise<KeywordTracker> => {
+  return apiFetch<KeywordTracker>(`/keyword-trackers/${trackerCode}`)
+}
+
+export const apiGetLatestKeywordSnapshot = async (trackerCode: string): Promise<CategorySnapshot | null> => {
+  return apiFetch<CategorySnapshot>(`/keyword-trackers/${trackerCode}/snapshots/latest`)
+}
+
+export const apiCreateKeywordTracker = async (payload: KeywordTrackerCreateRequest): Promise<KeywordTracker> => {
+  return apiFetch<KeywordTracker>("/keyword-trackers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export const apiUpdateKeywordTracker = async (
+  trackerCode: string,
+  payload: KeywordTrackerUpdateRequest
+): Promise<KeywordTracker> => {
+  return apiFetch<KeywordTracker>(`/keyword-trackers/${trackerCode}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  })
+}
+
+export const apiDeleteKeywordTracker = async (trackerCode: string): Promise<void> => {
+  await apiFetch<void>(`/keyword-trackers/${trackerCode}`, { method: "DELETE" })
+}
+
+// ── Keyword Summaries ──────────────────────────────────────────────────────
+
+export const apiGetKeywordInsights = async (timeframe: Timeframe = "WEEKLY"): Promise<KeywordInsights> => {
+  return apiFetch<KeywordInsights>(`/summaries/keyword-insights${qs({ timeframe })}`)
 }

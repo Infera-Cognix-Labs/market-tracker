@@ -22,6 +22,13 @@ from app.models.api import (
     CompetitorTrackerListResponse,
     CompetitorTrackerStats,
     CompetitorTrackerUpdateRequest,
+    KeywordSnapshot,
+    KeywordTracker,
+    KeywordTrackerCreateRequest,
+    KeywordTrackerListResponse,
+    KeywordTrackerStats,
+    KeywordTrackerUpdateRequest,
+    KeywordTrackingConfig,
     Timeframe,
     TrackedAsin,
     TrackedAsinReplacementRequest,
@@ -35,6 +42,8 @@ from app.models.documents import (
     CompetitorTrackerDocument,
     EventDocument,
     JobDocument,
+    KeywordSnapshotDocument,
+    KeywordTrackerDocument,
     ProductDocument,
     ProductSnapshotDocument,
     RawImportBatchDocument,
@@ -42,11 +51,14 @@ from app.models.documents import (
 from app.services.shared import (
     build_competitor_summaries,
     build_category_snapshot_with_rank_comparison,
+    build_keyword_snapshot_with_rank_comparison,
     category_doc_to_model,
     competitor_detail_to_list_model,
     competitor_doc_to_model,
     event_doc_to_model,
     generate_tracker_code,
+    keyword_doc_to_model,
+    keyword_snapshot_doc_to_model,
     product_doc_to_model,
     snapshot_doc_to_model,
     timeframe_bounds,
@@ -516,6 +528,11 @@ class TrackerManagementService:
                 CategorySnapshotDocument.workspace_id == workspace_id,
                 CategorySnapshotDocument.tracker_code == tracker_code,
             ).delete()
+        elif tracker_type == "KEYWORD":
+            await KeywordSnapshotDocument.find(
+                KeywordSnapshotDocument.workspace_id == workspace_id,
+                KeywordSnapshotDocument.tracker_code == tracker_code,
+            ).delete()
 
         product_snapshot_docs = await ProductSnapshotDocument.find(
             ProductSnapshotDocument.workspace_id == workspace_id,
@@ -565,6 +582,184 @@ class TrackerManagementService:
         await self._delete_tracker_data(workspace_id, tracker_code, "COMPETITOR")
         await document.delete()
 
+    async def list_keyword_trackers(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordTrackerListResponse:
+        t0 = time.monotonic()
+        query = KeywordTrackerDocument.find(
+            KeywordTrackerDocument.workspace_id == workspace_id
+        )
+        total = await query.count()
+        page_docs = await (
+            query.sort(("updated_at", -1))
+            .skip((page - 1) * page_size)
+            .limit(page_size)
+            .to_list()
+        )
+        t_db = (time.monotonic() - t0) * 1000
+        t1 = time.monotonic()
+        items = [keyword_doc_to_model(doc) for doc in page_docs]
+        t_transform = (time.monotonic() - t1) * 1000
+        _logger.info(
+            "list_keyword_trackers timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "db_ms": round(t_db, 2),
+                    "transform_ms": round(t_transform, 2),
+                    "total": total,
+                }
+            },
+        )
+        return KeywordTrackerListResponse(
+            items=items,
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    async def create_keyword_tracker(
+        self, workspace_id: str, payload: KeywordTrackerCreateRequest
+    ) -> KeywordTracker:
+        existing_docs = await KeywordTrackerDocument.find(
+            KeywordTrackerDocument.workspace_id == workspace_id
+        ).to_list()
+        existing_trackers = [keyword_doc_to_model(doc) for doc in existing_docs]
+        for tracker in existing_trackers:
+            same_marketplace = tracker.marketplace == payload.marketplace
+            same_keyword = (
+                tracker.scope.keyword.lower() == payload.scope.keyword.lower()
+            )
+            if same_marketplace and same_keyword:
+                raise ConflictError(
+                    "A keyword tracker already exists for this marketplace and keyword."
+                )
+
+        now = utc_now()
+        tracker = KeywordTracker(
+            tracker_code=generate_tracker_code(
+                "kt",
+                payload.name,
+                {item.tracker_code for item in existing_trackers},
+            ),
+            name=payload.name,
+            marketplace=payload.marketplace,
+            scope=payload.scope,
+            tracking_config=KeywordTrackingConfig(
+                top_n=100,
+                top10_alert_enabled=payload.tracking_config.top10_alert_enabled,
+            ),
+            schedule=TrackerSchedule.model_validate(payload.schedule.model_dump()),
+            status=TrackerStatus.ACTIVE,
+            stats=payload_keyword_stats(),
+            latest_snapshot_summary=None,
+            created_at=now,
+            updated_at=now,
+        )
+        await KeywordTrackerDocument(
+            workspace_id=workspace_id,
+            **tracker.model_dump(mode="python"),
+        ).insert()
+        return tracker
+
+    async def get_keyword_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> KeywordTracker:
+        document = await KeywordTrackerDocument.find_one(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            KeywordTrackerDocument.tracker_code == tracker_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword tracker not found.")
+        return keyword_doc_to_model(document)
+
+    async def update_keyword_tracker(
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        payload: KeywordTrackerUpdateRequest,
+    ) -> KeywordTracker:
+        document = await KeywordTrackerDocument.find_one(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            KeywordTrackerDocument.tracker_code == tracker_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword tracker not found.")
+
+        tracker = keyword_doc_to_model(document).model_copy(deep=True)
+        if payload.name is not None:
+            tracker.name = payload.name
+        if payload.schedule is not None:
+            tracker.schedule = TrackerSchedule.model_validate(
+                payload.schedule.model_dump()
+            )
+        if payload.status is not None:
+            tracker.status = payload.status
+        if payload.tracking_config is not None and (
+            "top10_alert_enabled" in payload.tracking_config.model_fields_set
+        ):
+            tracker.tracking_config.top10_alert_enabled = (
+                payload.tracking_config.top10_alert_enabled
+            )
+        tracker.updated_at = utc_now()
+
+        for key, value in tracker.model_dump(mode="python").items():
+            setattr(document, key, value)
+        await document.save()
+        return tracker
+
+    async def get_latest_keyword_snapshot(
+        self,
+        workspace_id: str,
+        tracker_code: str,
+        timeframe: Timeframe = Timeframe.WEEKLY,
+    ) -> KeywordSnapshot:
+        t0 = time.monotonic()
+        latest_doc = await KeywordSnapshotDocument.find(
+            KeywordSnapshotDocument.workspace_id == workspace_id,
+            KeywordSnapshotDocument.tracker_code == tracker_code,
+        ).sort((KeywordSnapshotDocument.snapshot_date, -1)).first_or_none()
+        if latest_doc is None:
+            raise NotFoundError("Keyword snapshot not found.")
+        latest = keyword_snapshot_doc_to_model(latest_doc)
+        from_date, _ = timeframe_bounds(timeframe, latest.snapshot_date)
+
+        comparison_doc = await KeywordSnapshotDocument.find(
+            KeywordSnapshotDocument.workspace_id == workspace_id,
+            KeywordSnapshotDocument.tracker_code == tracker_code,
+            KeywordSnapshotDocument.snapshot_date >= from_date,
+            KeywordSnapshotDocument.snapshot_date < latest.snapshot_date,
+        ).sort((KeywordSnapshotDocument.snapshot_date, 1)).first_or_none()
+        t_db = (time.monotonic() - t0) * 1000
+        _logger.info(
+            "get_latest_keyword_snapshot timing.",
+            extra={
+                "context": {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker_code,
+                    "db_ms": round(t_db, 2),
+                    "has_comparison": comparison_doc is not None,
+                }
+            },
+        )
+        if comparison_doc is None:
+            return latest
+        comparison = keyword_snapshot_doc_to_model(comparison_doc)
+        return build_keyword_snapshot_with_rank_comparison(latest, comparison)
+
+    async def delete_keyword_tracker(
+        self, workspace_id: str, tracker_code: str
+    ) -> None:
+        document = await KeywordTrackerDocument.find_one(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            KeywordTrackerDocument.tracker_code == tracker_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword tracker not found.")
+
+        await self._delete_tracker_data(workspace_id, tracker_code, "KEYWORD")
+        await document.delete()
+
 
 def payload_tracking_stats() -> CategoryTrackerStats:
     return CategoryTrackerStats(snapshot_count=0)
@@ -576,3 +771,7 @@ def payload_competitor_stats(tracked_asin_count: int) -> CompetitorTrackerStats:
         last_job_at=None,
         last_success_at=None,
     )
+
+
+def payload_keyword_stats() -> KeywordTrackerStats:
+    return KeywordTrackerStats(snapshot_count=0)
