@@ -268,7 +268,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       {/* Severity */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
-          SEVERITY â€” leave empty to match all
+          SEVERITY - leave empty to match all
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {SEVERITIES.map(s => {
@@ -296,7 +296,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       {/* Event types */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
-          EVENT TYPES â€” leave empty to match all
+          EVENT TYPES - leave empty to match all
         </div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {EVENT_TYPES.map(et => {
@@ -326,7 +326,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       {/* Tracker filter */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
-          TRACKER FILTER â€” leave empty to match all
+          TRACKER FILTER - leave empty to match all
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <div style={{ display: "flex", gap: 4 }}>
@@ -660,7 +660,7 @@ export const EventsPage = () => {
                       })}
                     </div>
                     <span style={{ fontSize: 10, fontFamily: T.mono, color: rule.webhook_url ? T.green : T.red, flexShrink: 0 }}>
-                      {rule.webhook_url ? "âœ“ webhook" : "âš  no webhook"}
+                      {rule.webhook_url ? "Webhook" : "No webhook"}
                     </span>
                     {rule.tracker_code && (
                       <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: T.bg4, color: T.text3, fontFamily: T.mono, flexShrink: 0 }}>
@@ -677,7 +677,7 @@ export const EventsPage = () => {
                         fontSize: 10, cursor: "pointer", flexShrink: 0,
                       }}
                     >
-                      {isEditing ? "â–²" : "Edit"}
+                      {isEditing ? "Collapse" : "Edit"}
                     </button>
                     <button
                       onClick={() => isNewRule ? cancelEditing("new") : void deleteRule(ruleCode)}
@@ -708,7 +708,7 @@ export const EventsPage = () => {
         </div>
       )}
 
-      {/* â”€â”€ Filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <Filter size={13} style={{ color: T.text3 }} />
 
@@ -758,7 +758,7 @@ export const EventsPage = () => {
             <>
               <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
                 style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
-              <span style={{ color: T.text3, fontSize: 11 }}>â†’</span>
+              <span style={{ color: T.text3, fontSize: 11 }}>-&gt;</span>
               <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
                 style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
             </>
@@ -788,7 +788,7 @@ export const EventsPage = () => {
         {!loading && error && events.length === 0 && (
           <div style={{ textAlign: "center", padding: 24, color: T.red, fontSize: 12 }}>{error}</div>
         )}
-        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading eventsâ€¦</div>}
+        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading events...</div>}
         {!loading && events.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3 }}>
             <Filter size={32} style={{ margin: "0 auto 12px", opacity: 0.25 }} />
