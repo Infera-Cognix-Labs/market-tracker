@@ -6,14 +6,23 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListEvents, apiGetProductDetail, apiListCategoryTrackers, apiListCompetitorTrackers } from "../shared/api"
-import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker } from "../shared/types"
+import {
+  apiCreateNotificationRule,
+  apiDeleteNotificationRule,
+  apiGetProductDetail,
+  apiListCategoryTrackers,
+  apiListCompetitorTrackers,
+  apiListEvents,
+  apiListNotificationRules,
+  apiUpdateNotificationRule,
+} from "../shared/api"
+import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker, NotificationRule, NotificationRuleRequest } from "../shared/types"
 
 const EVENT_TYPES: EventType[] = [
   "NEW_ENTRANT_TOP50", "RETURNING_TOP50", "EXIT_TOP50",
   "ENTER_TOP10", "EXIT_TOP10",
   "PRICE_CHANGED", "PROMOTION_CHANGED",
-  "TITLE_CHANGED", "MAIN_IMAGE_CHANGED", "VARIATIONS_ADDED", "CONTENT_CHANGED",
+  "TITLE_CHANGED", "MAIN_IMAGE_CHANGED", "VARIATIONS_ADDED",
   "AVAILABILITY_CHANGED", "BUY_BOX_CHANGED",
 ]
 const SEVERITIES: Severity[] = ["HIGH", "MEDIUM", "LOW"]
@@ -32,40 +41,54 @@ const presetRange = (preset: DatePreset): { from: string; to: string } | null =>
   return { from: toISODate(from), to }
 }
 
-// â”€â”€ Notification Rules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Notification Rules
 
-interface NotificationRule {
-  id: string
+type EditableNotificationRule = {
+  rule_code: string
   name: string
   enabled: boolean
   severities: Severity[]
-  eventTypes: EventType[]
-  trackerType: "" | "CATEGORY" | "COMPETITOR"
-  trackerCode: string
-  webhookUrl: string
+  event_types: EventType[]
+  tracker_type: "" | "CATEGORY" | "COMPETITOR"
+  tracker_code: string
+  webhook_url: string
 }
 
-const makeNewRule = (): NotificationRule => ({
-  id: typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+const makeNewRule = (): EditableNotificationRule => ({
+  rule_code: "new",
   name: "New Rule",
   enabled: true,
   severities: ["HIGH"],
-  eventTypes: [],
-  trackerType: "",
-  trackerCode: "",
-  webhookUrl: "",
+  event_types: [],
+  tracker_type: "",
+  tracker_code: "",
+  webhook_url: "",
 })
 
-const eventMatchesRule = (ev: Event, rule: NotificationRule): boolean => {
-  if (!rule.enabled || !rule.webhookUrl) return false
-  if (rule.severities.length > 0 && !rule.severities.includes(ev.severity)) return false
-  if (rule.eventTypes.length > 0 && !rule.eventTypes.includes(ev.event_type)) return false
-  if (rule.trackerType && ev.tracker_type !== rule.trackerType) return false
-  if (rule.trackerCode && ev.tracker_code !== rule.trackerCode) return false
-  return true
+const toEditableRule = (rule: NotificationRule): EditableNotificationRule => ({
+  rule_code: rule.rule_code,
+  name: rule.name,
+  enabled: rule.enabled,
+  severities: rule.severities,
+  event_types: rule.event_types,
+  tracker_type: rule.tracker_type || "",
+  tracker_code: rule.tracker_code || "",
+  webhook_url: rule.webhook_url,
+})
+
+const toRuleRequest = (rule: EditableNotificationRule): NotificationRuleRequest => {
+  return {
+    name: rule.name,
+    enabled: rule.enabled,
+    webhook_url: rule.webhook_url,
+    severities: rule.severities,
+    event_types: rule.event_types,
+    tracker_type: rule.tracker_type || null,
+    tracker_code: rule.tracker_code || null,
+  }
 }
 
-// â”€â”€ TrackerDropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// TrackerDropdown
 
 interface TrackerDropdownProps {
   label: string
@@ -175,11 +198,11 @@ const TrackerDropdown = ({ label, options, selectedCode, onSelect }: TrackerDrop
   )
 }
 
-// â”€â”€ RuleEditor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// RuleEditor
 
 interface RuleEditorProps {
-  rule: NotificationRule
-  onChange: (patch: Partial<NotificationRule>) => void
+  rule: EditableNotificationRule
+  onChange: (patch: Partial<EditableNotificationRule>) => void
   onSave: () => void
   onCancel: () => void
   categoryTrackers: CategoryTracker[]
@@ -195,16 +218,16 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
   }
 
   const toggleEventType = (et: EventType) => {
-    const next = rule.eventTypes.includes(et)
-      ? rule.eventTypes.filter(x => x !== et)
-      : [...rule.eventTypes, et]
-    onChange({ eventTypes: next })
+    const next = rule.event_types.includes(et)
+      ? rule.event_types.filter(x => x !== et)
+      : [...rule.event_types, et]
+    onChange({ event_types: next })
   }
 
   const trackerOptions =
-    rule.trackerType === "CATEGORY"
+    rule.tracker_type === "CATEGORY"
       ? categoryTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
-      : rule.trackerType === "COMPETITOR"
+      : rule.tracker_type === "COMPETITOR"
         ? competitorTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
         : []
 
@@ -230,12 +253,12 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 4 }}>SLACK WEBHOOK URL</div>
           <input
-            value={rule.webhookUrl}
-            onChange={e => onChange({ webhookUrl: e.target.value })}
+            value={rule.webhook_url}
+            onChange={e => onChange({ webhook_url: e.target.value })}
             placeholder="https://hooks.slack.com/services/..."
             style={{
               width: "100%", padding: "6px 10px", borderRadius: 4,
-              border: `1px solid ${rule.webhookUrl ? T.green : T.border}`,
+              border: `1px solid ${rule.webhook_url ? T.green : T.border}`,
               background: T.bg4, color: T.text0, fontSize: 11, fontFamily: T.mono, outline: "none",
             }}
           />
@@ -245,7 +268,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       {/* Severity */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
-          SEVERITY â€” leave empty to match all
+          SEVERITY - leave empty to match all
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {SEVERITIES.map(s => {
@@ -273,12 +296,12 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       {/* Event types */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
-          EVENT TYPES â€” leave empty to match all
+          EVENT TYPES - leave empty to match all
         </div>
         <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {EVENT_TYPES.map(et => {
             const meta = AlertTypeMeta(et)
-            const active = rule.eventTypes.includes(et)
+            const active = rule.event_types.includes(et)
             return (
               <button
                 key={et}
@@ -303,7 +326,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       {/* Tracker filter */}
       <div>
         <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, marginBottom: 6 }}>
-          TRACKER FILTER â€” leave empty to match all
+          TRACKER FILTER - leave empty to match all
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <div style={{ display: "flex", gap: 4 }}>
@@ -314,12 +337,12 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
             ] as const).map(opt => (
               <button
                 key={opt.value}
-                onClick={() => onChange({ trackerType: opt.value, trackerCode: "" })}
+                onClick={() => onChange({ tracker_type: opt.value, tracker_code: "" })}
                 style={{
                   padding: "4px 10px", borderRadius: 5,
-                  border: `1px solid ${rule.trackerType === opt.value ? T.blue : T.border}`,
-                  background: rule.trackerType === opt.value ? `${T.blue}22` : "transparent",
-                  color: rule.trackerType === opt.value ? T.blue : T.text3,
+                  border: `1px solid ${rule.tracker_type === opt.value ? T.blue : T.border}`,
+                  background: rule.tracker_type === opt.value ? `${T.blue}22` : "transparent",
+                  color: rule.tracker_type === opt.value ? T.blue : T.text3,
                   fontSize: 11, fontWeight: 600, cursor: "pointer", transition: "all .15s",
                 }}
               >
@@ -327,12 +350,12 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
               </button>
             ))}
           </div>
-          {rule.trackerType && (
+          {rule.tracker_type && (
             <TrackerDropdown
-              label={`${rule.trackerType === "CATEGORY" ? "Category" : "Competitor"}: All`}
+              label={`${rule.tracker_type === "CATEGORY" ? "Category" : "Competitor"}: All`}
               options={trackerOptions}
-              selectedCode={rule.trackerCode}
-              onSelect={code => onChange({ trackerCode: code })}
+              selectedCode={rule.tracker_code}
+              onSelect={code => onChange({ tracker_code: code })}
             />
           )}
         </div>
@@ -375,7 +398,6 @@ export const EventsPage = () => {
   const [customFrom, setCustomFrom] = useState("")
   const [customTo, setCustomTo] = useState("")
   const [productImages, setProductImages] = useState<Map<string, string>>(new Map())
-  const [slackStatus, setSlackStatus] = useState<Map<string, "sending" | "done" | "error">>(new Map())
   const [filterTrackerType, setFilterTrackerType] = useState<"" | "CATEGORY" | "COMPETITOR">("")
   const [selectedTrackerCode, setSelectedTrackerCode] = useState<string>("")
   const [categoryTrackers, setCategoryTrackers] = useState<CategoryTracker[]>([])
@@ -385,73 +407,17 @@ export const EventsPage = () => {
   const [showSettings, setShowSettings] = useState(false)
   const [notifRules, setNotifRules] = useState<NotificationRule[]>([])
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null)
-  const [editingRules, setEditingRules] = useState<Record<string, NotificationRule>>({})
+  const [editingRules, setEditingRules] = useState<Record<string, EditableNotificationRule>>({})
 
-  // Load notification rules from localStorage
-  useEffect(() => {
+  const loadNotificationRules = useCallback(async () => {
     try {
-      const stored = localStorage.getItem("event_notif_rules")
-      if (stored) setNotifRules(JSON.parse(stored) as NotificationRule[])
+      setNotifRules(await apiListNotificationRules())
     } catch { /* ignore */ }
   }, [])
 
-  const saveRules = useCallback((rules: NotificationRule[]) => {
-    setNotifRules(rules)
-    localStorage.setItem("event_notif_rules", JSON.stringify(rules))
-  }, [])
-
-  const autoNotify = useCallback(async (loadedEvents: Event[], rules: NotificationRule[]) => {
-    const activeRules = rules.filter(r => r.enabled && r.webhookUrl)
-    if (activeRules.length === 0) return
-
-    let notifiedSet: Set<string>
-    try {
-      const stored = localStorage.getItem("notified_event_codes")
-      notifiedSet = new Set(stored ? (JSON.parse(stored) as string[]) : [])
-    } catch {
-      notifiedSet = new Set()
-    }
-
-    const newlyNotified: string[] = []
-    for (const ev of loadedEvents) {
-      if (notifiedSet.has(ev.event_code)) continue
-      for (const rule of activeRules) {
-        if (eventMatchesRule(ev, rule)) {
-          const color = ev.severity === "HIGH" ? "danger" : ev.severity === "MEDIUM" ? "warning" : "#36a64f"
-          const payload = {
-            text: `ðŸ”” [${rule.name}] ${ev.title}`,
-            attachments: [{
-              color,
-              fields: [
-                { title: "Type", value: ev.event_type, short: true },
-                { title: "Severity", value: ev.severity, short: true },
-                { title: "ASIN", value: ev.asin, short: true },
-                { title: "Tracker", value: `${ev.tracker_code} (${ev.tracker_type})`, short: true },
-                { title: "Product", value: ev.title, short: false },
-                { title: "Summary", value: ev.summary || "N/A", short: false },
-                { title: "Time", value: new Date(ev.event_time).toLocaleString(), short: true },
-                { title: "Marketplace", value: ev.marketplace, short: true },
-              ],
-            }],
-          }
-          void fetch(rule.webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            mode: "no-cors",
-          })
-          newlyNotified.push(ev.event_code)
-          break // one notification per event
-        }
-      }
-    }
-
-    if (newlyNotified.length > 0) {
-      const updated = [...notifiedSet, ...newlyNotified].slice(-1000)
-      localStorage.setItem("notified_event_codes", JSON.stringify(updated))
-    }
-  }, [])
-
+  useEffect(() => {
+    void loadNotificationRules()
+  }, [loadNotificationRules])
   const loadEvents = useCallback(async (p: number) => {
     setLoading(true)
     setError(null)
@@ -480,12 +446,6 @@ export const EventsPage = () => {
       setTotal(res.total)
       setPageNum(p)
 
-      // Auto-notify: read current rules from state
-      setNotifRules(currentRules => {
-        void autoNotify(res.items, currentRules)
-        return currentRules
-      })
-
       // Batch-fetch product images for unique ASINs on this page
       const pairs = [...new Map(res.items.map(e => [`${e.marketplace}:${e.asin}`, e])).values()]
       const results = await Promise.allSettled(
@@ -506,7 +466,7 @@ export const EventsPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [filterType, filterSeverity, filterTrackerType, selectedTrackerCode, datePreset, customFrom, customTo, autoNotify])
+  }, [filterType, filterSeverity, filterTrackerType, selectedTrackerCode, datePreset, customFrom, customTo])
 
   useEffect(() => {
     void loadEvents(1)
@@ -541,45 +501,49 @@ export const EventsPage = () => {
   // Rule management helpers
   const addRule = () => {
     const rule = makeNewRule()
-    const updated = [...notifRules, rule]
-    saveRules(updated)
-    setExpandedRuleId(rule.id)
-    setEditingRules(prev => ({ ...prev, [rule.id]: rule }))
+    setExpandedRuleId(rule.rule_code)
+    setEditingRules(prev => ({ ...prev, [rule.rule_code]: rule }))
   }
 
-  const deleteRule = (id: string) => {
-    saveRules(notifRules.filter(r => r.id !== id))
-    if (expandedRuleId === id) setExpandedRuleId(null)
+  const deleteRule = async (ruleCode: string) => {
+    await apiDeleteNotificationRule(ruleCode)
+    setNotifRules(prev => prev.filter(r => r.rule_code !== ruleCode))
+    if (expandedRuleId === ruleCode) setExpandedRuleId(null)
   }
 
-  const toggleRuleEnabled = (id: string) => {
-    saveRules(notifRules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r))
+  const toggleRuleEnabled = async (rule: NotificationRule) => {
+    const updated = await apiUpdateNotificationRule(rule.rule_code, { enabled: !rule.enabled })
+    setNotifRules(prev => prev.map(r => r.rule_code === rule.rule_code ? updated : r))
   }
 
   const startEditing = (rule: NotificationRule) => {
-    setEditingRules(prev => ({ ...prev, [rule.id]: { ...rule } }))
-    setExpandedRuleId(prev => prev === rule.id ? null : rule.id)
+    const editable = toEditableRule(rule)
+    setEditingRules(prev => ({ ...prev, [rule.rule_code]: editable }))
+    setExpandedRuleId(prev => prev === rule.rule_code ? null : rule.rule_code)
   }
 
-  const saveRule = (id: string) => {
-    const editing = editingRules[id]
+  const saveRule = async (ruleCode: string) => {
+    const editing = editingRules[ruleCode]
     if (!editing) return
-    saveRules(notifRules.map(r => r.id === id ? editing : r))
+    const saved = ruleCode === "new"
+      ? await apiCreateNotificationRule(toRuleRequest(editing))
+      : await apiUpdateNotificationRule(ruleCode, toRuleRequest(editing))
+    setNotifRules(prev => ruleCode === "new" ? [...prev, saved] : prev.map(r => r.rule_code === ruleCode ? saved : r))
     setExpandedRuleId(null)
+    setEditingRules(prev => { const n = { ...prev }; delete n[ruleCode]; return n })
   }
 
-  const cancelEditing = (id: string) => {
+  const cancelEditing = (ruleCode: string) => {
     setExpandedRuleId(null)
-    setEditingRules(prev => { const n = { ...prev }; delete n[id]; return n })
+    setEditingRules(prev => { const n = { ...prev }; delete n[ruleCode]; return n })
   }
 
-  const updateEditingRule = (id: string, patch: Partial<NotificationRule>) => {
-    setEditingRules(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  const updateEditingRule = (ruleCode: string, patch: Partial<EditableNotificationRule>) => {
+    setEditingRules(prev => ({ ...prev, [ruleCode]: { ...prev[ruleCode], ...patch } }))
   }
 
-  const activeRuleCount = notifRules.filter(r => r.enabled && r.webhookUrl).length
-
-
+  const displayedRules = expandedRuleId === "new" && editingRules.new ? [...notifRules, editingRules.new] : notifRules
+  const activeRuleCount = notifRules.filter(r => r.enabled && r.webhook_url).length
 
   return (
     <div className="anim-fade">
@@ -613,7 +577,7 @@ export const EventsPage = () => {
         }
       />
 
-      {/* â”€â”€ Settings Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Settings Panel */}
       {showSettings && (
         <div style={{
           marginBottom: 20, borderRadius: 10,
@@ -622,15 +586,15 @@ export const EventsPage = () => {
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "12px 16px",
-            borderBottom: notifRules.length > 0 ? `1px solid ${T.border}` : undefined,
+            borderBottom: displayedRules.length > 0 ? `1px solid ${T.border}` : undefined,
             background: T.bg3,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Settings size={13} style={{ color: T.text3 }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>Notification Rules</span>
-              {notifRules.length > 0 && (
+              {displayedRules.length > 0 && (
                 <span style={{ fontSize: 10, color: T.text3, background: T.bg4, padding: "1px 6px", borderRadius: 4 }}>
-                  {notifRules.length} rule{notifRules.length > 1 ? "s" : ""}
+                  {displayedRules.length} rule{displayedRules.length > 1 ? "s" : ""}
                 </span>
               )}
             </div>
@@ -647,7 +611,7 @@ export const EventsPage = () => {
             </button>
           </div>
 
-          {notifRules.length === 0 ? (
+          {displayedRules.length === 0 ? (
             <div style={{ padding: "24px 16px", textAlign: "center" }}>
               <div style={{ fontSize: 12, color: T.text3, marginBottom: 4 }}>No notification rules yet</div>
               <div style={{ fontSize: 11, color: T.text3 }}>
@@ -655,17 +619,19 @@ export const EventsPage = () => {
               </div>
             </div>
           ) : (
-            notifRules.map((rule, idx) => {
-              const isEditing = expandedRuleId === rule.id
-              const editState = isEditing && editingRules[rule.id] ? editingRules[rule.id] : rule
+            displayedRules.map((rule, idx) => {
+              const ruleCode = rule.rule_code
+              const isNewRule = ruleCode === "new"
+              const isEditing = expandedRuleId === ruleCode
+              const editState = editingRules[ruleCode] || (isNewRule ? rule as EditableNotificationRule : toEditableRule(rule as NotificationRule))
               return (
-                <div key={rule.id} style={{ borderBottom: idx < notifRules.length - 1 ? `1px solid ${T.border}` : undefined }}>
+                <div key={ruleCode} style={{ borderBottom: idx < displayedRules.length - 1 ? `1px solid ${T.border}` : undefined }}>
                   <div style={{
                     display: "flex", alignItems: "center", gap: 10, padding: "10px 16px",
                     background: isEditing ? T.bg3 : undefined,
                   }}>
                     <button
-                      onClick={() => toggleRuleEnabled(rule.id)}
+                      onClick={() => isNewRule ? updateEditingRule("new", { enabled: !rule.enabled }) : void toggleRuleEnabled(rule as NotificationRule)}
                       title={rule.enabled ? "Disable" : "Enable"}
                       style={{
                         width: 32, height: 18, borderRadius: 9, border: "none", cursor: "pointer",
@@ -693,16 +659,16 @@ export const EventsPage = () => {
                         )
                       })}
                     </div>
-                    <span style={{ fontSize: 10, fontFamily: T.mono, color: rule.webhookUrl ? T.green : T.red, flexShrink: 0 }}>
-                      {rule.webhookUrl ? "âœ“ webhook" : "âš  no webhook"}
+                    <span style={{ fontSize: 10, fontFamily: T.mono, color: rule.webhook_url ? T.green : T.red, flexShrink: 0 }}>
+                      {rule.webhook_url ? "Webhook" : "No webhook"}
                     </span>
-                    {rule.trackerCode && (
+                    {rule.tracker_code && (
                       <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: T.bg4, color: T.text3, fontFamily: T.mono, flexShrink: 0 }}>
-                        {[...categoryTrackers, ...competitorTrackers].find(t => t.tracker_code === rule.trackerCode)?.name || rule.trackerCode}
+                        {[...categoryTrackers, ...competitorTrackers].find(t => t.tracker_code === rule.tracker_code)?.name || rule.tracker_code}
                       </span>
                     )}
                     <button
-                      onClick={() => startEditing(rule)}
+                      onClick={() => isNewRule ? setExpandedRuleId("new") : startEditing(rule as NotificationRule)}
                       style={{
                         padding: "3px 8px", borderRadius: 4,
                         border: `1px solid ${isEditing ? T.blue : T.border}`,
@@ -711,10 +677,10 @@ export const EventsPage = () => {
                         fontSize: 10, cursor: "pointer", flexShrink: 0,
                       }}
                     >
-                      {isEditing ? "â–²" : "Edit"}
+                      {isEditing ? "Collapse" : "Edit"}
                     </button>
                     <button
-                      onClick={() => deleteRule(rule.id)}
+                      onClick={() => isNewRule ? cancelEditing("new") : void deleteRule(ruleCode)}
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "center",
                         width: 24, height: 24, borderRadius: 4,
@@ -728,9 +694,9 @@ export const EventsPage = () => {
                   {isEditing && (
                     <RuleEditor
                       rule={editState}
-                      onChange={patch => updateEditingRule(rule.id, patch)}
-                      onSave={() => saveRule(rule.id)}
-                      onCancel={() => cancelEditing(rule.id)}
+                      onChange={patch => updateEditingRule(ruleCode, patch)}
+                      onSave={() => void saveRule(ruleCode)}
+                      onCancel={() => cancelEditing(ruleCode)}
                       categoryTrackers={categoryTrackers}
                       competitorTrackers={competitorTrackers}
                     />
@@ -742,7 +708,7 @@ export const EventsPage = () => {
         </div>
       )}
 
-      {/* â”€â”€ Filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Filters */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <Filter size={13} style={{ color: T.text3 }} />
 
@@ -792,7 +758,7 @@ export const EventsPage = () => {
             <>
               <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
                 style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
-              <span style={{ color: T.text3, fontSize: 11 }}>â†’</span>
+              <span style={{ color: T.text3, fontSize: 11 }}>-&gt;</span>
               <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
                 style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg2, color: T.text0, fontSize: 11, fontFamily: T.mono, cursor: "pointer" }} />
             </>
@@ -817,12 +783,12 @@ export const EventsPage = () => {
         </div>
       </div>
 
-      {/* â”€â”€ Events list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/*  Events list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {!loading && error && events.length === 0 && (
           <div style={{ textAlign: "center", padding: 24, color: T.red, fontSize: 12 }}>{error}</div>
         )}
-        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading eventsâ€¦</div>}
+        {loading && <div style={{ textAlign: "center", padding: 40, color: T.text3, fontSize: 13 }}>Loading events...</div>}
         {!loading && events.length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: T.text3 }}>
             <Filter size={32} style={{ margin: "0 auto 12px", opacity: 0.25 }} />
@@ -840,7 +806,6 @@ export const EventsPage = () => {
           const meta = AlertTypeMeta(ev.event_type)
           const imageUrl = ev.payload.current?.main_image_url || ev.payload.previous?.main_image_url
             || productImages.get(`${ev.marketplace}:${ev.asin}`)
-          const evSlackStatus = slackStatus.get(ev.event_code)
           return (
             <div key={ev.event_code}
               style={{ background: T.bg2, border: `1px solid ${T.border}`, borderLeft: `3px solid ${meta.color}`, borderRadius: 8, padding: "12px 16px", display: "flex", alignItems: "center", gap: 14, transition: "all .15s" }}
@@ -860,11 +825,6 @@ export const EventsPage = () => {
                   <span style={{ fontSize: 9, fontFamily: T.mono, color: T.text3, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
                     {ev.tracker_type}
                   </span>
-                  {evSlackStatus && (
-                    <span style={{ fontSize: 9, fontFamily: T.mono, color: evSlackStatus === "done" ? T.green : evSlackStatus === "error" ? T.red : T.amber, padding: "1px 5px", background: T.bg4, borderRadius: 3 }}>
-                      {evSlackStatus === "done" ? "Sent âœ“" : evSlackStatus === "error" ? "Failed âœ—" : "Sending..."}
-                    </span>
-                  )}
                 </div>
                 <div style={{ fontSize: 13, color: T.text0, fontWeight: 500 }}>{ev.title}</div>
                 <div style={{ fontSize: 12, color: T.text2, marginTop: 2 }}>{ev.summary}</div>
@@ -879,7 +839,7 @@ export const EventsPage = () => {
         })}
       </div>
 
-      {/* â”€â”€ Pagination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* Pagination  */}
       {total > 20 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
           <button className="btn-ghost" disabled={page <= 1} onClick={() => void loadEvents(page - 1)}>

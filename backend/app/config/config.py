@@ -344,6 +344,11 @@ class WorkerConfig(BaseModel):
         3600,
         "DIGEST_WORKER_INTERVAL_SECS",
     )
+    notification_interval_secs: int = _config_int(
+        ("workers", "notification_interval_secs"),
+        60,
+        "NOTIFICATION_WORKER_INTERVAL_SECS",
+    )
 
 
 class Config(BaseModel):
