@@ -25,6 +25,7 @@ from app.models.documents import (
     EventDocument,
     NotificationDeliveryDocument,
     NotificationRuleDocument,
+    ProductDocument,
 )
 from app.services.shared import event_doc_to_model
 
@@ -270,7 +271,8 @@ class NotificationService:
         rule: NotificationRuleDocument,
         event: Event,
     ) -> tuple[bool, str | None]:
-        payload = self._build_slack_payload(rule, event)
+        product = await self._get_product_document(rule.workspace_id, event)
+        payload = self._build_slack_payload(rule, event, product)
         try:
             await asyncio.to_thread(self._post_json, rule.webhook_url, payload)
         except (HTTPError, URLError, TimeoutError, OSError) as exc:
@@ -299,56 +301,95 @@ class NotificationService:
         with urlopen(request, timeout=10) as response:
             response.read()
 
+    async def _get_product_document(
+        self, workspace_id: str, event: Event
+    ) -> ProductDocument | None:
+        return await ProductDocument.find_one(
+            ProductDocument.workspace_id == workspace_id,
+            ProductDocument.marketplace == event.marketplace,
+            ProductDocument.asin == event.asin,
+        )
+
+    def _event_product_image_url(self, event: Event) -> str | None:
+        current = event.payload.current
+        if current and current.main_image_url:
+            return current.main_image_url
+        previous = event.payload.previous
+        if previous and previous.main_image_url:
+            return previous.main_image_url
+        return None
+
+    def _event_product_url(
+        self, event: Event, product: ProductDocument | None = None
+    ) -> str:
+        if product and product.product_url:
+            return product.product_url
+        return f"https://www.amazon.com/dp/{event.asin}"
+
     def _build_slack_payload(
-        self, rule: NotificationRuleDocument, event: Event
+        self,
+        rule: NotificationRuleDocument,
+        event: Event,
+        product: ProductDocument | None = None,
     ) -> dict[str, Any]:
         color = {
             "HIGH": "#dc2626",
             "MEDIUM": "#d97706",
             "LOW": "#16a34a",
         }.get(event.severity.value, "#64748b")
+        product_url = self._event_product_url(event, product)
+        image_url = (
+            product.main_image_url_latest
+            if product and product.main_image_url_latest
+            else self._event_product_image_url(event)
+        )
+        attachment: dict[str, Any] = {
+            "color": color,
+            "fields": [
+                {
+                    "title": "Type",
+                    "value": event.event_type.value,
+                    "short": True,
+                },
+                {
+                    "title": "Severity",
+                    "value": event.severity.value,
+                    "short": True,
+                },
+                {
+                    "title": "ASIN",
+                    "value": f"<{product_url}|{event.asin}>",
+                    "short": True,
+                },
+                {
+                    "title": "Tracker",
+                    "value": (
+                        f"{event.tracker_code} "
+                        f"({event.tracker_type.value})"
+                    ),
+                    "short": True,
+                },
+                {"title": "Product", "value": event.title, "short": False},
+                {
+                    "title": "Summary",
+                    "value": event.summary or "N/A",
+                    "short": False,
+                },
+                {
+                    "title": "Time",
+                    "value": event.event_time.isoformat(),
+                    "short": True,
+                },
+                {
+                    "title": "Marketplace",
+                    "value": event.marketplace,
+                    "short": True,
+                },
+            ],
+        }
+        if image_url:
+            attachment["image_url"] = image_url
         return {
             "text": f"[{rule.name}] {event.title}",
-            "attachments": [
-                {
-                    "color": color,
-                    "fields": [
-                        {
-                            "title": "Type",
-                            "value": event.event_type.value,
-                            "short": True,
-                        },
-                        {
-                            "title": "Severity",
-                            "value": event.severity.value,
-                            "short": True,
-                        },
-                        {"title": "ASIN", "value": event.asin, "short": True},
-                        {
-                            "title": "Tracker",
-                            "value": (
-                                f"{event.tracker_code} "
-                                f"({event.tracker_type.value})"
-                            ),
-                            "short": True,
-                        },
-                        {"title": "Product", "value": event.title, "short": False},
-                        {
-                            "title": "Summary",
-                            "value": event.summary or "N/A",
-                            "short": False,
-                        },
-                        {
-                            "title": "Time",
-                            "value": event.event_time.isoformat(),
-                            "short": True,
-                        },
-                        {
-                            "title": "Marketplace",
-                            "value": event.marketplace,
-                            "short": True,
-                        },
-                    ],
-                }
-            ],
+            "attachments": [attachment],
         }
