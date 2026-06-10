@@ -178,7 +178,7 @@ class NormalizationService:
 
         rating_value = _coerce_float(_pick(payload, "rating", "stars", "rating_value"))
         review_count = _coerce_int(
-            _pick(payload, "reviewCount", "reviewsCount", "n_reviews", "review_count")
+            _pick(payload, "reviewCount", "reviewsCount", "reviews_count", "n_reviews", "review_count")
         )
 
         variation_count = _coerce_int(
@@ -306,16 +306,30 @@ def _normalize_availability_status(payload: dict[str, object]) -> AvailabilitySt
         )
 
     status_text = _coerce_string(
-        _pick(payload, "availability_status", "availability_text", "availabilityStatus")
+        _pick(payload, "availability_status", "availability_text", "availabilityStatus", "availability")
     )
-    if not status_text:
+    if status_text:
+        normalized = status_text.lower()
+        if "out of stock" in normalized or "unavailable" in normalized:
+            return AvailabilityStatus.OUT_OF_STOCK
+        if "in stock" in normalized or "available" in normalized:
+            return AvailabilityStatus.IN_STOCK
         return AvailabilityStatus.UNKNOWN
 
-    normalized = status_text.lower()
-    if "out of stock" in normalized or "unavailable" in normalized:
-        return AvailabilityStatus.OUT_OF_STOCK
-    if "in stock" in normalized or "available" in normalized:
+    # harvestlab returns in_stock as null for search results.
+    # Infer from heuristic signals when the actor omits explicit stock data.
+    is_prime = payload.get("is_prime")
+    if is_prime is True:
         return AvailabilityStatus.IN_STOCK
+
+    delivery_info = _coerce_string(_pick(payload, "delivery_info", "deliveryInfo"))
+    if delivery_info:
+        return AvailabilityStatus.IN_STOCK
+
+    price = payload.get("price")
+    if isinstance(price, (int, float)) and price > 0:
+        return AvailabilityStatus.IN_STOCK
+
     return AvailabilityStatus.UNKNOWN
 
 
@@ -459,7 +473,7 @@ def normalize_junglee_item(
 
     rating_value = _coerce_float(_pick(payload, "stars", "rating", "rating_value"))
     review_count = _coerce_int(
-        _pick(payload, "reviewsCount", "review_count", "n_reviews")
+        _pick(payload, "reviewsCount", "reviews_count", "review_count", "n_reviews")
     )
 
     bsr_position = _extract_rank_from_payload(payload)

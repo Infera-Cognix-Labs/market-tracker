@@ -11,7 +11,6 @@ import {
   apiCreateKeywordTracker,
   apiUpdateKeywordTracker,
   apiDeleteKeywordTracker,
-  apiGetKeywordInsights,
   apiListEvents,
   ApiError,
 } from "../shared/api"
@@ -22,11 +21,9 @@ import type {
   CategorySnapshot,
   CategorySnapshotProduct,
   DealInfo,
-  Timeframe,
   TrackerStatus,
   Event,
   EventType,
-  KeywordInsights,
 } from "../shared/types"
 
 type KpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
@@ -383,8 +380,6 @@ export const KeywordPageInner = () => {
   const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("ALL")
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
   const [justAdded, setJustAdded] = useState<string | null>(null)
-  const [insights, setInsights] = useState<KeywordInsights | null>(null)
-  const [insightsTimeframe, setInsightsTimeframe] = useState<Timeframe>("WEEKLY")
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
 
@@ -443,13 +438,6 @@ export const KeywordPageInner = () => {
       })
     return () => { cancelled = true }
   }, [selectedCode, snapshot?.snapshot_date, activeKpiFilter])
-
-  // Load insights
-  useEffect(() => {
-    apiGetKeywordInsights(insightsTimeframe)
-      .then(d => setInsights(d))
-      .catch(() => {})
-  }, [insightsTimeframe])
 
   const statusColor = (s?: string) => s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
 
@@ -946,34 +934,6 @@ export const KeywordPageInner = () => {
           {!loading && snapshot && allVisibleRows.length === 0 && (
             <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
           )}
-        </div>
-
-        {/* Keyword Insights */}
-        <div className="card" style={{ marginTop: 16, padding: "14px 18px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>Keyword Insights</span>
-            <select value={insightsTimeframe} onChange={e => setInsightsTimeframe(e.target.value as Timeframe)}
-              style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bg3, color: T.text2, fontSize: 11, cursor: "pointer" }}>
-              <option value="DAILY">Daily</option>
-              <option value="WEEKLY">Weekly</option>
-              <option value="MONTHLY">Monthly</option>
-            </select>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-            {[
-              { label: "Top 10 Entrants", value: insights?.new_top10_entrants.length ?? 0, color: T.amber, icon: <Star size={13} /> },
-              { label: "First-Time", value: insights?.first_time_entrants.length ?? 0, color: T.green, icon: <Zap size={13} /> },
-              { label: "Returning", value: insights?.returning_entrants.length ?? 0, color: T.purple, icon: <RefreshCw size={13} /> },
-            ].map(m => (
-              <div key={m.label} className="card" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 6, background: `${m.color}18`, display: "flex", alignItems: "center", justifyContent: "center", color: m.color }}>{m.icon}</div>
-                <div>
-                  <span style={{ fontSize: 20, fontWeight: 700, fontFamily: T.mono, color: m.color }}>{m.value}</span>
-                  <div style={{ fontSize: 10, color: T.text2 }}>{m.label}</div>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </>
