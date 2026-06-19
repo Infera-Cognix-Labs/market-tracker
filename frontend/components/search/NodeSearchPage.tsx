@@ -8,17 +8,19 @@ import { Badge } from "../shared/Badge"
 import { apiCreateCategoryTracker, ApiError } from "../shared/api"
 import type { CategoryTracker, CategoryTrackerCreateRequest } from "../shared/types"
 
-// ── Parse browse node ID from an Amazon best-sellers URL ─────────────────────
-function parseNodeId(input: string): string | null {
+// ── Parse and validate Amazon best-sellers URL ────────────────────────────────
+function parseBestsellerUrl(input: string): string | null {
   const trimmed = input.trim()
-  // Already a pure numeric ID
-  if (/^\d+$/.test(trimmed)) return trimmed
-  // Extract from URL: .../zgbs/<cat>/<nodeId> or node=<nodeId>
-  const pathMatch = trimmed.match(/\/zgbs\/[^/]+\/(\d+)/)
-  if (pathMatch) return pathMatch[1]
-  const queryMatch = trimmed.match(/[?&]node=(\d+)/)
-  if (queryMatch) return queryMatch[1]
-  return null
+  if (!trimmed.startsWith("http")) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.hostname.includes("amazon.") && (trimmed.includes("/zgbs/") || trimmed.includes("Best-Sellers") || trimmed.includes("best-sellers"))) {
+      return trimmed
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 // ── Marketplace options ───────────────────────────────────────────────────────
@@ -68,16 +70,19 @@ export const NodeSearchPage = () => {
   const [created, setCreated] = useState<CategoryTracker[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  // ── Derive parsed node ID for preview ───────────────────────────────────────
-  const parsedNodeId = parseNodeId(nodeInput)
-  const isUrl = nodeInput.trim().startsWith("http")
+  // ── Derive parsed URL for preview ──────────────────────────────────────────
+  const parsedUrl = parseBestsellerUrl(nodeInput)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
 
     if (!nodeInput.trim()) {
-      setError("Please enter a browse node ID or Amazon best-sellers URL.")
+      setError("Please enter a Best-sellers category URL.")
+      return
+    }
+    if (!parsedUrl) {
+      setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.com/Best-Sellers/zgbs/...)")
       return
     }
     if (!name.trim()) {
@@ -85,9 +90,7 @@ export const NodeSearchPage = () => {
       return
     }
 
-    const scope = isUrl
-      ? { browse_node_url: nodeInput.trim(), browse_node_id: parsedNodeId ?? undefined }
-      : { browse_node_id: nodeInput.trim() }
+    const scope = { browse_node_url: parsedUrl }
 
     const payload: CategoryTrackerCreateRequest = {
       name: name.trim(),
@@ -110,7 +113,7 @@ export const NodeSearchPage = () => {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setError("A tracker for this marketplace and node already exists.")
+          setError("A tracker for this marketplace and URL already exists.")
         } else if (err.status === 400 && err.details?.reason) {
           setError(err.details.reason)
         } else {
@@ -128,46 +131,46 @@ export const NodeSearchPage = () => {
     <div className="anim-fade">
       <PageHeader
         title="Node Search"
-        sub="Create a Category Tracker by entering an Amazon browse node ID or best-sellers URL"
+        sub="Create a Category Tracker by entering an Amazon best-sellers category URL"
       />
 
       {/* ── Form card ─────────────────────────────────────────────────────── */}
       <div className="card" style={{ padding: "24px 24px", marginBottom: 24, maxWidth: 640 }}>
         <form onSubmit={handleSubmit}>
-          {/* Browse node input */}
+          {/* Best-sellers URL input */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Browse Node ID or Best-sellers URL</label>
+            <label style={labelStyle}>Best-sellers Category URL</label>
             <div style={{ position: "relative" }}>
               <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
               <input
                 type="text"
                 value={nodeInput}
                 onChange={e => setNodeInput(e.target.value)}
-                placeholder="e.g. 13893610011 or https://www.amazon.com/Best-Sellers/zgbs/..."
+                placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
                 style={{ ...inputStyle, paddingLeft: 34 }}
               />
             </div>
             {/* Parse preview */}
             {nodeInput.trim() && (
               <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                {parsedNodeId ? (
+                {parsedUrl ? (
                   <>
                     <CheckCircle size={12} style={{ color: T.green }} />
-                    <span style={{ fontSize: 11, color: T.green, fontFamily: T.mono }}>
-                      Node ID: {parsedNodeId}
+                    <span style={{ fontSize: 11, color: T.green }}>
+                      Valid Best-sellers URL
                     </span>
                   </>
                 ) : (
                   <>
                     <AlertCircle size={12} style={{ color: T.red }} />
                     <span style={{ fontSize: 11, color: T.red }}>
-                      Could not extract node ID — check the URL format
+                      Please enter a valid Amazon Best-sellers URL
                     </span>
                   </>
                 )}
-                {isUrl && (
+                {parsedUrl && (
                   <a
-                    href={nodeInput.trim()}
+                    href={parsedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ fontSize: 11, color: T.blue, marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 3, textDecoration: "none" }}
@@ -306,7 +309,11 @@ export const NodeSearchPage = () => {
                     <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
                       Code: <strong style={{ color: T.amber }}>{t.tracker_code}</strong>
                       {" · "}
-                      Node: <strong style={{ color: T.blue }}>{t.scope.browse_node_id ?? "—"}</strong>
+                      {t.scope.browse_node_url ? (
+                        <a href={t.scope.browse_node_url} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none" }}>
+                          Category URL <ExternalLink size={9} />
+                        </a>
+                      ) : "—"}
                       {" · "}
                       {t.schedule.frequency} @ {String(t.schedule.hour_utc).padStart(2, "0")}:00 UTC
                       {" · "}

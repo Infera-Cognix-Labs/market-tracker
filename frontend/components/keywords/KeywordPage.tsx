@@ -11,6 +11,7 @@ import {
   apiCreateKeywordTracker,
   apiUpdateKeywordTracker,
   apiDeleteKeywordTracker,
+  apiTriggerJob,
   apiListEvents,
   ApiError,
 } from "../shared/api"
@@ -382,6 +383,20 @@ export const KeywordPageInner = () => {
   const [justAdded, setJustAdded] = useState<string | null>(null)
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
+  const [triggering, setTriggering] = useState(false)
+
+  const handleTriggerJob = async () => {
+    if (!selectedCode) return
+    setTriggering(true)
+    try {
+      await apiTriggerJob("KEYWORD", selectedCode)
+      setRefreshKey(k => k + 1)
+    } catch {
+      // ignore – user can retry
+    } finally {
+      setTriggering(false)
+    }
+  }
 
   // Load trackers
   useEffect(() => {
@@ -928,7 +943,21 @@ export const KeywordPageInner = () => {
             <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 13 }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
               <div style={{ fontWeight: 600, color: T.text2, marginBottom: 6 }}>No snapshot yet</div>
-              <div style={{ fontSize: 12 }}>This tracker hasn&apos;t run yet. Trigger a job or wait for the scheduled run.</div>
+              <div style={{ fontSize: 12, marginBottom: 16 }}>This tracker hasn&apos;t run yet.</div>
+              <button
+                type="button"
+                disabled={triggering}
+                onClick={handleTriggerJob}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, border: `1px solid ${T.blue}`,
+                  background: triggering ? `${T.blue}60` : T.blue, color: "#fff",
+                  fontSize: 13, fontWeight: 600, cursor: triggering ? "wait" : "pointer",
+                  fontFamily: T.sans, display: "inline-flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <Zap size={14} />
+                {triggering ? "Triggering..." : "Trigger Now"}
+              </button>
             </div>
           )}
           {!loading && snapshot && allVisibleRows.length === 0 && (
