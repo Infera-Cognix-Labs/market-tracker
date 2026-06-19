@@ -42,6 +42,10 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _rule_effective_since(rule: NotificationRuleDocument) -> datetime:
+    return max(_as_utc(rule.created_at), _as_utc(rule.updated_at))
+
+
 def _build_code(prefix: str, *parts: object) -> str:
     digest = hashlib.sha1(
         "|".join(str(part) for part in parts).encode("utf-8")
@@ -134,6 +138,7 @@ class NotificationService:
     async def process_pending_notifications(
         self, *, batch_size: int = 100
     ) -> NotificationWorkerResult:
+        batch_size = max(1, batch_size)
         rules = (
             await NotificationRuleDocument.find({"enabled": True})
             .sort("+created_at")
@@ -155,47 +160,58 @@ class NotificationService:
         skipped_existing = 0
 
         for rule in rules:
-            event_documents = (
-                await EventDocument.find(
-                    {
-                        "workspace_id": rule.workspace_id,
-                        "event_time": {"$gte": rule.created_at},
-                    }
+            effective_since = _rule_effective_since(rule)
+            attempted_for_rule = 0
+            offset = 0
+            while attempted_for_rule < batch_size:
+                event_documents = (
+                    await EventDocument.find(
+                        self._build_event_query(rule, effective_since)
+                    )
+                    .sort("-event_time")
+                    .skip(offset)
+                    .limit(batch_size)
+                    .to_list()
                 )
-                .sort("-event_time")
-                .limit(batch_size)
-                .to_list()
-            )
-            scanned_events += len(event_documents)
-            for event_document in event_documents:
-                if _as_utc(event_document.event_time) < _as_utc(rule.created_at):
-                    continue
-                event = event_doc_to_model(event_document)
-                if not self._matches_rule(event, rule):
-                    continue
+                if not event_documents:
+                    break
 
-                delivery = await self._claim_delivery(rule, event)
-                if delivery is None:
-                    skipped_existing += 1
-                    continue
+                scanned_events += len(event_documents)
+                offset += len(event_documents)
 
-                matched += 1
-                ok, error = await self._send_slack(rule, event)
-                now = _utc_now()
-                delivery.attempts += 1
-                delivery.updated_at = now
-                delivery.status = (
-                    NotificationDeliveryStatus.SUCCESS.value
-                    if ok
-                    else NotificationDeliveryStatus.FAILED.value
-                )
-                delivery.error = error
-                delivery.delivered_at = now if ok else None
-                await delivery.save()
-                if ok:
-                    sent += 1
-                else:
-                    failed += 1
+                for event_document in event_documents:
+                    if attempted_for_rule >= batch_size:
+                        break
+
+                    if _as_utc(event_document.event_time) < effective_since:
+                        continue
+                    event = event_doc_to_model(event_document)
+                    if not self._matches_rule(event, rule):
+                        continue
+
+                    delivery = await self._claim_delivery(rule, event)
+                    if delivery is None:
+                        skipped_existing += 1
+                        continue
+
+                    matched += 1
+                    attempted_for_rule += 1
+                    ok, error = await self._send_slack(rule, event)
+                    now = _utc_now()
+                    delivery.attempts += 1
+                    delivery.updated_at = now
+                    delivery.status = (
+                        NotificationDeliveryStatus.SUCCESS.value
+                        if ok
+                        else NotificationDeliveryStatus.FAILED.value
+                    )
+                    delivery.error = error
+                    delivery.delivered_at = now if ok else None
+                    await delivery.save()
+                    if ok:
+                        sent += 1
+                    else:
+                        failed += 1
 
         return NotificationWorkerResult(
             scanned_events=scanned_events,
@@ -204,6 +220,23 @@ class NotificationService:
             failed=failed,
             skipped_existing=skipped_existing,
         )
+
+    def _build_event_query(
+        self, rule: NotificationRuleDocument, effective_since: datetime
+    ) -> dict[str, Any]:
+        query: dict[str, Any] = {
+            "workspace_id": rule.workspace_id,
+            "event_time": {"$gte": effective_since},
+        }
+        if rule.severities:
+            query["severity"] = {"$in": rule.severities}
+        if rule.event_types:
+            query["event_type"] = {"$in": rule.event_types}
+        if rule.tracker_type:
+            query["tracker_type"] = rule.tracker_type
+        if rule.tracker_code:
+            query["tracker_code"] = rule.tracker_code
+        return query
 
     async def _get_rule_document(
         self, workspace_id: str, rule_code: str
