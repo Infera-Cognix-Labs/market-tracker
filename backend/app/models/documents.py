@@ -167,6 +167,8 @@ class EventDocument(WorkspaceDocument):
             IndexModel([("workspace_id", 1), ("event_code", 1)], unique=True),
             IndexModel([("workspace_id", 1), ("snapshot_date", -1)]),
             IndexModel([("workspace_id", 1), ("tracker_code", 1)]),
+            IndexModel([("workspace_id", 1), ("severity", 1), ("event_time", -1)]),
+            IndexModel([("workspace_id", 1), ("event_type", 1), ("event_time", -1)]),
             IndexModel(
                 [
                     ("workspace_id", 1),
