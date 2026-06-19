@@ -241,8 +241,8 @@ export interface CategoryTracker {
 }
 
 export interface CategoryScope {
+  browse_node_url: string
   browse_node_id?: string
-  browse_node_url?: string
 }
 
 export interface CategoryTrackingConfig {

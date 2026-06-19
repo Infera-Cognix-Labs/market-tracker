@@ -5,7 +5,7 @@ import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, P
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents, ApiError } from "../shared/api"
+import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiTriggerJob, apiListEvents, ApiError } from "../shared/api"
 import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
 
 type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
@@ -23,14 +23,18 @@ const CATEGORY_FILTER_TO_EVENT: Record<Exclude<CategoryKpiFilter, "ALL">, EventT
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function parseNodeId(input: string): string | null {
+function parseBestsellerUrl(input: string): string | null {
   const trimmed = input.trim()
-  if (/^\d+$/.test(trimmed)) return trimmed
-  const pathMatch = trimmed.match(/\/zgbs\/[^/]+\/(\d+)/)
-  if (pathMatch) return pathMatch[1]
-  const queryMatch = trimmed.match(/[?&]node=(\d+)/)
-  if (queryMatch) return queryMatch[1]
-  return null
+  if (!trimmed.startsWith("http")) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.hostname.includes("amazon.") && (trimmed.includes("/zgbs/") || trimmed.includes("Best-Sellers") || trimmed.includes("best-sellers"))) {
+      return trimmed
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 const extractBrandName = (url: string): string => {
@@ -176,7 +180,7 @@ const matchesCategoryEventSearch = (search: string, event: Event): boolean => {
 interface CreateModalProps { onClose: () => void; onCreate: (t: CategoryTracker) => void }
 
 const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
-  const [nodeInput, setNodeInput] = useState("")
+  const [urlInput, setUrlInput] = useState("")
   const [name, setName] = useState("")
   const [marketplace, setMarketplace] = useState("amazon_us")
   const [top10Alert, setTop10Alert] = useState(true)
@@ -184,17 +188,15 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const parsedNodeId = parseNodeId(nodeInput)
-  const isUrl = nodeInput.trim().startsWith("http")
+  const parsedUrl = parseBestsellerUrl(urlInput)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (!nodeInput.trim()) { setError("Please enter a browse node ID or URL."); return }
+    if (!urlInput.trim()) { setError("Please enter a Best-sellers category URL."); return }
+    if (!parsedUrl) { setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.com/Best-Sellers/zgbs/...)"); return }
     if (!name.trim()) { setError("Please enter a tracker name."); return }
-    const scope = isUrl
-      ? { browse_node_url: nodeInput.trim(), browse_node_id: parsedNodeId ?? undefined }
-      : { browse_node_id: nodeInput.trim() }
+    const scope = { browse_node_url: parsedUrl }
     const payload: CategoryTrackerCreateRequest = {
       name: name.trim(), marketplace, scope,
       tracking_config: { top10_alert_enabled: top10Alert },
@@ -207,7 +209,7 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setError("A tracker for this marketplace and node already exists.")
+          setError("A tracker for this marketplace and URL already exists.")
         } else if (err.status === 400 && err.details?.reason) {
           setError(err.details.reason)
         } else {
@@ -222,36 +224,36 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
-    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div className="card" style={{ width: "100%", maxWidth: 560, padding: "24px 28px", position: "relative" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>New Category Tracker</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "flex" }}><X size={18} /></button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Browse Node ID or Best-sellers URL</label>
-            <div style={{ position: "relative" }}>
-              <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
-              <input type="text" value={nodeInput} onChange={e => setNodeInput(e.target.value)}
-                placeholder="e.g. 13893610011 or https://www.amazon.com/Best-Sellers/zgbs/..."
-                style={{ ...inputStyle, paddingLeft: 32 }} />
-            </div>
-            {nodeInput.trim() && (
-              <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 6 }}>
-                {parsedNodeId
-                  ? <><CheckCircle size={12} style={{ color: T.green }} /><span style={{ fontSize: 11, color: T.green, fontFamily: T.mono }}>Node ID: {parsedNodeId}</span></>
-                  : <><AlertCircle size={12} style={{ color: T.red }} /><span style={{ fontSize: 11, color: T.red }}>Could not extract node ID — check URL format</span></>
-                }
-                {isUrl && (
-                  <a href={nodeInput.trim()} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 11, color: T.blue, marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 3, textDecoration: "none" }}>
-                    Preview <ExternalLink size={10} />
-                  </a>
-                )}
-              </div>
-            )}
+      <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div className="card" style={{ width: "100%", maxWidth: 560, padding: "24px 28px", position: "relative" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>New Category Tracker</span>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "flex" }}><X size={18} /></button>
           </div>
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Best-sellers Category URL</label>
+              <div style={{ position: "relative" }}>
+                <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
+                <input type="text" value={urlInput} onChange={e => setUrlInput(e.target.value)}
+                  placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
+                  style={{ ...inputStyle, paddingLeft: 32 }} />
+              </div>
+              {urlInput.trim() && (
+                <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 6 }}>
+                  {parsedUrl
+                    ? <><CheckCircle size={12} style={{ color: T.green }} /><span style={{ fontSize: 11, color: T.green }}>Valid Best-sellers URL</span></>
+                    : <><AlertCircle size={12} style={{ color: T.red }} /><span style={{ fontSize: 11, color: T.red }}>Please enter a valid Amazon Best-sellers URL</span></>
+                  }
+                  {parsedUrl && (
+                    <a href={parsedUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: T.blue, marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 3, textDecoration: "none" }}>
+                      Preview <ExternalLink size={10} />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Tracker Name</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
@@ -421,6 +423,20 @@ export const CategoryPageInner = () => {
   const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>("ALL")
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
   const [justAdded, setJustAdded] = useState<string | null>(null)
+  const [triggering, setTriggering] = useState(false)
+
+  const handleTriggerJob = async () => {
+    if (!selectedCode) return
+    setTriggering(true)
+    try {
+      await apiTriggerJob("CATEGORY", selectedCode)
+      setRefreshKey(k => k + 1)
+    } catch {
+      // ignore
+    } finally {
+      setTriggering(false)
+    }
+  }
 
   // Load trackers
   useEffect(() => {
@@ -664,14 +680,10 @@ export const CategoryPageInner = () => {
                 {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
               </div>
               <div style={{ display: "flex", gap: 16, marginTop: 6 }}>
-                <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                  Node: <strong style={{ color: T.amber }}>{selectedTracker.scope.browse_node_id}</strong>
-                </span>
-                <span style={{ fontSize: 11, color: T.text3 }}>|</span>
                 {selectedTracker.scope.browse_node_url && (
                   <a href={selectedTracker.scope.browse_node_url} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 11, color: T.blue, fontFamily: T.mono, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                    Browse Node URL <ExternalLink size={9} />
+                    Category URL <ExternalLink size={9} />
                   </a>
                 )}
               </div>
@@ -1009,7 +1021,21 @@ export const CategoryPageInner = () => {
           <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 13 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
             <div style={{ fontWeight: 600, color: T.text2, marginBottom: 6 }}>No snapshot yet</div>
-            <div style={{ fontSize: 12 }}>This tracker hasn&apos;t run yet. Trigger a job or wait for the scheduled run.</div>
+            <div style={{ fontSize: 12, marginBottom: 16 }}>This tracker hasn&apos;t run yet.</div>
+            <button
+              type="button"
+              disabled={triggering}
+              onClick={handleTriggerJob}
+              style={{
+                padding: "8px 20px", borderRadius: 8, border: `1px solid ${T.blue}`,
+                background: triggering ? `${T.blue}60` : T.blue, color: "#fff",
+                fontSize: 13, fontWeight: 600, cursor: triggering ? "wait" : "pointer",
+                fontFamily: T.sans, display: "inline-flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <Zap size={14} />
+              {triggering ? "Triggering..." : "Trigger Now"}
+            </button>
           </div>
         )}
         {!loading && snapshot && allVisibleRows.length === 0 && (

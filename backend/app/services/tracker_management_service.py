@@ -197,7 +197,7 @@ class TrackerManagementService:
             marketplace=payload.marketplace,
             scope=payload.scope,
             tracking_config=CategoryTrackingConfig(
-                top_n=100,
+                top_n=60,
                 top10_alert_enabled=payload.tracking_config.top10_alert_enabled,
             ),
             schedule=TrackerSchedule.model_validate(payload.schedule.model_dump()),

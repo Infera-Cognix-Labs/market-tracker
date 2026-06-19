@@ -12,43 +12,24 @@ apify:
   import_worker_interval_secs: 30
   actor_pools:
     category:
-      saswave:
-        actor_id: "saswave/amazon-product-scraper"
+      junglee_bestsellers:
+        actor_id: "junglee/amazon-bestsellers"
         task_id: ""
-        name: "Saswave Amazon Scraper"
-        adapter: "saswave_category"
+        name: "Junglee Amazon Bestsellers Scraper"
+        adapter: "junglee_bestsellers"
         build: "latest"
         memory_mbytes: 4096
         enabled: true
         priority: 1
-      prodiger:
-        actor_id: "prodiger/amazon-product-scraper"
-        task_id: ""
-        name: "Prodiger Amazon Scraper (Pay-Per-Event)"
-        adapter: "prodiger_category"
-        build: "latest"
-        memory_mbytes: 4096
-        enabled: true
-        priority: 2
         input_adapter:
           field_map:
-            search_url: "startUrls"
-            top_n: "maxProductsPerSearch"
-            max_pages: "maxSearchPages"
-          wrap_object:
-            startUrls: "url"
-          marketplace_map:
-            amazon_us: "US"
-            amazon_uk: "UK"
-            amazon_de: "DE"
-            amazon_fr: "FR"
-            amazon_it: "IT"
-            amazon_es: "ES"
-            amazon_ca: "CA"
-            amazon_jp: "JP"
-            amazon_in: "IN"
-            amazon_au: "AU"
-            amazon_mx: "MX"
+            search_url: "categoryUrls"
+            top_n: "maxItemsPerStartUrl"
+          wrap_array: "categoryUrls"
+          static_fields:
+            detailedInformation: true
+            depthOfCrawl: 1
+            language: "en"
     competitor:
       saswave:
         actor_id: "saswave/amazon-product-scraper"
