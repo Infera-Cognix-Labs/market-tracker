@@ -33,7 +33,7 @@ class NormalizedProductRecord:
     captured_at: datetime
     brand: str
     title: str
-    product_url: str
+    product_url: str | None
     main_image_url: str
     title_hash: str
     main_image_hash: str
@@ -115,11 +115,8 @@ class NormalizationService:
             or "Unknown"
         )
 
-        product_url = (
-            _coerce_string(
-                _pick(payload, "url", "product_url", "productUrl", "productLink")
-            )
-            or f"https://www.amazon.com/dp/{asin}"
+        product_url = _coerce_string(
+            _pick(payload, "url", "product_url", "productUrl", "productLink")
         )
 
         main_image_url = _coerce_image_url(payload)
@@ -458,10 +455,7 @@ def normalize_junglee_item(
 
     title = _coerce_string(_pick(payload, "title")) or asin
     brand = _coerce_string(_pick(payload, "brand")) or "Unknown"
-    product_url = (
-        _coerce_string(_pick(payload, "url"))
-        or f"https://www.amazon.com/dp/{asin}"
-    )
+    product_url = _coerce_string(_pick(payload, "url"))
     main_image_url = _pick_junglee_image_url(payload)
 
     price_current = _extract_nested_price(payload, "price")

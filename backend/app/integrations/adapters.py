@@ -7,7 +7,6 @@ from typing import Protocol
 from app.models.api import DealInfo
 from app.models.contracts import (
     CategoryProductRecord,
-    CompetitorProductRecord,
     DealRecord,
 )
 
@@ -105,7 +104,7 @@ class ActorAdapter(Protocol):
         self,
         raw_payload: dict[str, object],
         marketplace: str,
-    ) -> CategoryProductRecord | CompetitorProductRecord | DealRecord | None: ...
+    ) -> CategoryProductRecord | DealRecord | None: ...
 
 
 class SaswaveCategoryAdapter:
@@ -175,57 +174,6 @@ class SaswaveCategoryAdapter:
 
 
 
-
-
-class SaswaveCompetitorAdapter:
-    actor_id = "saswave/amazon-product-scraper"
-
-    def to_standard_contract(
-        self,
-        raw_payload: dict[str, object],
-        marketplace: str,
-    ) -> CompetitorProductRecord | None:
-        asin = _coerce_asin(_pick(raw_payload, "asin", "ASIN", "productAsin"))
-        if not asin:
-            return None
-        return CompetitorProductRecord(
-            asin=asin,
-            title=_coerce_string(_pick(raw_payload, "title", "name")),
-            brand=_coerce_string(_pick(raw_payload, "brand", "manufacturer"))
-            or "Unknown",
-            price_current=_coerce_float(
-                _pick(raw_payload, "price", "price_current")
-            ),
-            price_original=_coerce_float(
-                _pick(raw_payload, "price_original", "originalPrice")
-            ),
-            currency=_coerce_string(
-                _pick(raw_payload, "currency", "currencyCode")
-            ),
-            rating_value=_coerce_float(
-                _pick(raw_payload, "rating", "stars", "rating_value")
-            ),
-            review_count=_coerce_int(
-                _pick(raw_payload, "reviewCount", "reviewsCount", "review_count")
-            ),
-            availability_status=_coerce_string(
-                _pick(raw_payload, "availability_status", "availability")
-            ),
-            buy_box_status=_coerce_string(
-                _pick(raw_payload, "buy_box_status", "buyBoxStatus")
-            ),
-            buy_box_seller_name=_coerce_string(
-                _pick(
-                    raw_payload,
-                    "buy_box_seller_name",
-                    "buyBoxSellerName",
-                    "seller_name",
-                )
-            ),
-            variation_count=_coerce_int(
-                _pick(raw_payload, "variation_count", "variationCount")
-            ),
-        )
 
 
 

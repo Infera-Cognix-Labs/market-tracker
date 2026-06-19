@@ -864,7 +864,7 @@ export const CategoryPageInner = () => {
                     </div>
                   </td>
                   <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11 }}>
-                    <a href={p.product_url} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+                    <a href={p.product_url || `https://www.amazon.com/dp/${p.asin}`} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
                       {p.asin}<ExternalLink size={9} />
                     </a>
                   </td>

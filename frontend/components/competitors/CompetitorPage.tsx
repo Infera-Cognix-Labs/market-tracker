@@ -750,7 +750,12 @@ export const CompetitorPage = () => {
           {products.map((p: TrackedProductSummary, i: number) => (
             <div key={i} className="row-hover" onClick={() => { setSelectedAsinIdx(i); setTablePage(0); setEventsPage(0); setOpenCouponRowKey(null); setOpenDealRowKey(null) }}
               style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === selectedAsinIdx ? T.bg4 : T.bg2, border: `1px solid ${i === selectedAsinIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
-              <div style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3 }}>{p.asin}</div>
+              {p.product_url
+                ? <a href={p.product_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                    style={{ fontSize: 11, fontFamily: T.mono, color: T.blue, marginBottom: 3, display: "inline-block", textDecoration: "none" }}
+                    onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                    onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}>{p.asin}</a>
+                : <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3, display: "inline-block" }}>{p.asin}</span>}
               <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: T.mono, fontSize: 12, color: T.amber }}>
@@ -787,7 +792,12 @@ export const CompetitorPage = () => {
                   {productDetail?.title_latest || selectedProduct?.title || "—"}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3 }}>{selectedProduct?.asin}</span>
+                  {selectedProduct?.product_url
+                    ? <a href={selectedProduct.product_url} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, fontFamily: T.mono, color: T.blue, textDecoration: "none" }}
+                        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}>{selectedProduct?.asin}</a>
+                    : <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3 }}>{selectedProduct?.asin}</span>}
                   <span style={{ fontSize: 11, color: T.text2 }}>{productDetail?.brand || selectedProduct?.brand}</span>
                   <Badge type={selectedProduct?.availability_status === "IN_STOCK" ? "listing" : "stock"} text={selectedProduct?.availability_status === "IN_STOCK" ? "In Stock" : "Out of Stock"} />
                 </div>
@@ -1116,8 +1126,8 @@ export const CompetitorPage = () => {
               </div>
             )}
             {/* Link to Amazon */}
-            {selectedProduct && (
-              <a href={`https://www.amazon.com/dp/${selectedProduct.asin}`} target="_blank" rel="noopener noreferrer"
+            {selectedProduct?.product_url && (
+              <a href={selectedProduct.product_url} target="_blank" rel="noopener noreferrer"
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, padding: "8px 0", color: T.blue, fontSize: 12, textDecoration: "none" }}>
                 <ExternalLink size={13} /> View on Amazon
               </a>

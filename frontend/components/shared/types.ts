@@ -295,7 +295,7 @@ export interface CategorySnapshotProduct {
   comparison_snapshot_date?: string | null
   title: string
   brand: string
-  product_url: string
+  product_url?: string | null
   price_current: number
   price_original?: number | null
   currency: string
@@ -364,6 +364,7 @@ export interface TrackedProductSummary {
   asin: string
   brand: string
   title: string
+  product_url?: string | null
   current_bsr_position: number | null
   current_price: number | null
   currency: string | null
@@ -380,7 +381,7 @@ export interface ProductDetail {
   parent_asin?: string | null
   brand: string
   title_latest: string
-  product_url: string
+  product_url?: string | null
   main_image_url_latest: string
   first_seen_at: string
   last_seen_at: string

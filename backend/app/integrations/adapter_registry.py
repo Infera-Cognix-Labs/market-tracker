@@ -5,17 +5,17 @@ from app.integrations.adapters import (
     DealsScraperAdapter,
     HarvestlabKeywordAdapter,
     JungleeAsinsAdapter,
+    JungleeBestsellersAdapter,
     ProdigerCategoryAdapter,
     SaswaveCategoryAdapter,
-    SaswaveCompetitorAdapter,
 )
 
 _ADAPTER_REGISTRY: dict[str, ActorAdapter] = {
     "saswave_category": SaswaveCategoryAdapter(),
     "prodiger_category": ProdigerCategoryAdapter(),
     "harvestlab_keyword": HarvestlabKeywordAdapter(),
+    "junglee_bestsellers": JungleeBestsellersAdapter(),
     "junglee_asins": JungleeAsinsAdapter(),
-    "saswave_competitor": SaswaveCompetitorAdapter(),
     "deals_scraper": DealsScraperAdapter(),
 }
 
