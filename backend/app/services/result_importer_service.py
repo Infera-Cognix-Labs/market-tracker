@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
@@ -44,7 +43,6 @@ from app.services.snapshot_service import SnapshotService
 
 logger = get_logger(__name__)
 metrics = get_metrics()
-MAX_CATEGORY_SEARCH_PAGES = 10
 
 
 @dataclass(frozen=True)
@@ -277,42 +275,6 @@ class ResultImporterService:
         job_document.summary.events_emitted = 0
         snapshot_latency_ms = 0.0
         event_generation_latency_ms = 0.0
-        category_unique_asin_count: int | None = None
-
-        if tracker_context.tracker_type == TrackerType.CATEGORY and normalized.records:
-            category_unique_asin_count = _count_unique_asins(normalized.records)
-            target_unique_count = tracker_context.category_top_n or 100
-            next_max_pages = _next_category_search_max_pages(
-                current_max_pages=_current_category_search_max_pages(
-                    run_document,
-                    fallback_top_n=target_unique_count,
-                ),
-                current_unique_count=category_unique_asin_count,
-                target_unique_count=target_unique_count,
-            )
-            if next_max_pages is not None:
-                retry_status = await self._redispatch_category_run(
-                    job_document=job_document,
-                    run_document=run_document,
-                    target_unique_count=target_unique_count,
-                    current_unique_count=category_unique_asin_count,
-                    next_max_pages=next_max_pages,
-                )
-                if retry_status == JobStatus.FAILED:
-                    metrics.increment(
-                        "import_jobs_completed_total",
-                        1.0,
-                        workspace_id=job_document.workspace_id,
-                        tracker_code=job_document.tracker_code,
-                        final_status=retry_status,
-                    )
-                    await self._update_tracker_stats(
-                        workspace_id=job_document.workspace_id,
-                        tracker_type=tracker_context.tracker_type,
-                        tracker_code=job_document.tracker_code,
-                        final_status=retry_status,
-                    )
-                return retry_status
 
         if tracker_context.tracker_type == TrackerType.CATEGORY and normalized.records:
             null_asins = _detect_asins_with_nulls(normalized.records)
@@ -384,21 +346,6 @@ class ResultImporterService:
                 message=(
                     f"Skipped {normalized.invalid_count} invalid records while processing dataset "
                     f"{run_document.default_dataset_id}."
-                ),
-            )
-        elif (
-            tracker_context.tracker_type == TrackerType.CATEGORY
-            and normalized.records
-            and (tracker_context.category_top_n or 100)
-            > (category_unique_asin_count or 0)
-        ):
-            final_status = JobStatus.PARTIAL_SUCCESS
-            job_document.error = JobError(
-                code="CATEGORY_UNIQUE_INSUFFICIENT",
-                message=(
-                    f"Collected only {category_unique_asin_count or 0} unique ASINs for target "
-                    f"top {tracker_context.category_top_n or 100} after reaching "
-                    f"max_pages={_current_category_search_max_pages(run_document, fallback_top_n=tracker_context.category_top_n or 100)}."
                 ),
             )
         elif normalized.invalid_count > 0 and expected_items > 0:
@@ -804,102 +751,6 @@ class ResultImporterService:
         )
         return NormalizationResult(records=current_records, invalid_count=0)
 
-    async def _redispatch_category_run(
-        self,
-        *,
-        job_document: JobDocument,
-        run_document: ApifyRunDocument,
-        target_unique_count: int,
-        current_unique_count: int,
-        next_max_pages: int,
-    ) -> JobStatus:
-        pool_code = job_document.pool_code
-        if not pool_code:
-            await self._mark_failed(
-                job_document,
-                code="MISSING_POOL_CODE",
-                message=(
-                    f"Cannot expand category crawl for job `{job_document.job_code}` "
-                    "because pool_code is missing."
-                ),
-            )
-            return JobStatus.FAILED
-
-        run_input = dict(run_document.run_input or {})
-        run_input["max_pages"] = next_max_pages
-
-        binding_code = f"{pool_code}:{job_document.current_pool_index or 0}"
-        launch = await self.gateway.start_run(
-            binding_code,
-            run_input,
-            webhooks=self._build_run_webhooks(),
-        )
-        new_run_document = ApifyRunDocument(
-            workspace_id=job_document.workspace_id,
-            tracking_job_code=job_document.job_code,
-            provider=job_document.run_strategy.provider,
-            binding_code=binding_code,
-            actor_ref=launch.binding.actor_id,
-            task_ref=launch.binding.task_id,
-            apify_run_id=launch.provider_run_id,
-            default_dataset_id=launch.default_dataset_id,
-            run_input=launch.run_input,
-            input_hash=launch.input_hash,
-            status=(launch.status or ExternalRunStatus.READY).value,
-            apify_status_raw=launch.raw_status,
-            origin="IMPORT_RETRY",
-            started_at=coerce_datetime(launch.started_at),
-            finished_at=coerce_datetime(launch.finished_at),
-            poll_count=0,
-            error=None,
-            created_at=utc_now(),
-            updated_at=utc_now(),
-        )
-        await new_run_document.insert()
-
-        job_document.external_run = ExternalRunSummary(
-            provider_run_id=launch.provider_run_id,
-            status=launch.status or ExternalRunStatus.READY,
-            started_at=coerce_datetime(launch.started_at) or job_document.started_at,
-            finished_at=coerce_datetime(launch.finished_at),
-        )
-        job_document.finished_at = None
-        if launch.status == ExternalRunStatus.SUCCEEDED:
-            job_document.status = JobStatus.IMPORTING
-            job_document.error = None
-        elif launch.status in {
-            ExternalRunStatus.FAILED,
-            ExternalRunStatus.TIMED_OUT,
-            ExternalRunStatus.ABORTED,
-        }:
-            job_document.status = JobStatus.FAILED
-            job_document.error = JobError(
-                code=launch.status.value,
-                message=f"Apify retry run finished with status `{launch.status.value}`.",
-            )
-            job_document.finished_at = coerce_datetime(launch.finished_at) or utc_now()
-        else:
-            job_document.status = JobStatus.RUNNING_EXTERNAL
-            job_document.error = None
-        await job_document.save()
-
-        logger.info(
-            "Expanded category crawl because unique ASIN coverage was below target.",
-            extra={
-                "context": correlation_context(
-                    job_code=job_document.job_code,
-                    tracker_code=job_document.tracker_code,
-                    previous_apify_run_id=run_document.apify_run_id,
-                    new_apify_run_id=launch.provider_run_id,
-                    dataset_id=launch.default_dataset_id,
-                    current_unique_count=current_unique_count,
-                    target_unique_count=target_unique_count,
-                    next_max_pages=next_max_pages,
-                )
-            },
-        )
-        return JobStatus(job_document.status)
-
     async def _update_tracker_stats(
         self,
         *,
@@ -984,54 +835,6 @@ class ResultImporterService:
                 "request_url": webhook_url,
             }
         ]
-
-
-def _count_unique_asins(records) -> int:
-    return len({record.asin for record in records})
-
-
-def _current_category_search_max_pages(
-    run_document: ApifyRunDocument,
-    *,
-    fallback_top_n: int,
-) -> int:
-    run_input = getattr(run_document, "run_input", {})
-    if not isinstance(run_input, dict):
-        run_input = {}
-    raw_max_pages = run_input.get("max_pages")
-    if isinstance(raw_max_pages, int) and raw_max_pages > 0:
-        return raw_max_pages
-    estimated_items_per_page = 16
-    return max(
-        1,
-        min(
-            MAX_CATEGORY_SEARCH_PAGES,
-            math.ceil(fallback_top_n / estimated_items_per_page),
-        ),
-    )
-
-
-def _next_category_search_max_pages(
-    *,
-    current_max_pages: int,
-    current_unique_count: int,
-    target_unique_count: int,
-) -> int | None:
-    if current_unique_count >= target_unique_count:
-        return None
-    if current_max_pages >= MAX_CATEGORY_SEARCH_PAGES:
-        return None
-
-    estimated_next_pages = math.ceil(
-        current_max_pages * target_unique_count / max(1, current_unique_count)
-    )
-    next_max_pages = min(
-        MAX_CATEGORY_SEARCH_PAGES,
-        max(current_max_pages + 1, estimated_next_pages),
-    )
-    if next_max_pages <= current_max_pages:
-        return None
-    return next_max_pages
 
 
 def _apify_run_sort_key(run_document: ApifyRunDocument) -> tuple[datetime, datetime]:

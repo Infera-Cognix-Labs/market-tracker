@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from datetime import UTC, datetime
 from time import perf_counter
 
@@ -246,17 +245,9 @@ class RunOrchestrator:
         if job.tracker_type == TrackerType.CATEGORY:
             top_n = max(1, tracker_document.tracking_config.top_n)
             browse_node_url = tracker_document.scope.browse_node_url
-            browse_node_id = tracker_document.scope.browse_node_id
             amazon_domain = _marketplace_to_amazon_domain(
                 tracker_document.marketplace
             )
-
-            if browse_node_url:
-                search_url = browse_node_url
-            elif browse_node_id:
-                search_url = f"https://{amazon_domain}/s?i=specialty-aps&rh=n%3A{browse_node_id}"
-            else:
-                search_url = ""
 
             base_input.update(
                 {
@@ -264,11 +255,9 @@ class RunOrchestrator:
                     "marketplace_code": tracker_document.marketplace.split(".")[-1]
                     if "." in tracker_document.marketplace
                     else tracker_document.marketplace,
-                    "browse_node_id": browse_node_id,
                     "browse_node_url": browse_node_url,
                     "top_n": top_n,
-                    "search_url": search_url,
-                    "max_pages": _category_search_max_pages(top_n),
+                    "search_url": browse_node_url,
                     "amazon_domain": amazon_domain,
                 }
             )
@@ -351,10 +340,3 @@ def _marketplace_to_amazon_domain(marketplace: str) -> str:
         "amazon_jp": "amazon.co.jp",
     }
     return mapping.get(marketplace.lower(), "amazon.com")
-
-
-def _category_search_max_pages(top_n: int) -> int:
-    # Search result pages usually expose far fewer than 100 organic products,
-    # so 1 page is not enough to reliably build a top-100 snapshot.
-    estimated_items_per_page = 16
-    return max(1, min(10, math.ceil(top_n / estimated_items_per_page)))
