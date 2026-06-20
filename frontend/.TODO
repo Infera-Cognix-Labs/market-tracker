@@ -54,11 +54,11 @@
 
 ## P1 — Custom Hooks → `shared/hooks.ts`
 
-- [ ] `useTrackerList(apiFn)` — replace 3 identical useEffect + state patterns
-- [ ] `useSnapshot(trackerCode, apiFn, deps)` — replace 2 identical snapshot fetch patterns
-- [ ] `useFilteredEvents(trackerType, trackerCode, snapshotDate, filter)` — replace 2 identical events fetch patterns (~55 lines each)
-- [ ] `useTriggerJob(trackerType, trackerCode)` — replace 2 identical trigger handlers
-- [ ] `handleApiError(err, setError, context)` — replace 4 identical ApiError catch blocks
+- [x] `useTrackerList(apiFn)` — replace 3 identical useEffect + state patterns
+- [x] `useSnapshot(trackerCode, apiFn, deps)` — replace 2 identical snapshot fetch patterns
+- [x] `useFilteredEvents(trackerType, trackerCode, snapshotDate, filter)` — replace 2 identical events fetch patterns (~55 lines each)
+- [x] `useTriggerJob(trackerType, trackerCode)` — replace 2 identical trigger handlers
+- [x] `handleApiError(err, setError, context)` — replace 4 identical ApiError catch blocks
 
 ---
 
@@ -66,10 +66,10 @@
 
 These two pages are ~70-80% structurally identical. Consider:
 
-- [ ] Extract shared `useTrackerPage()` hook encapsulating 16+ common state variables
-- [ ] Extract `<ProductTable>` component (shared between both pages, ~260 lines duplicated)
-- [ ] Extract `<EventsTable>` component
-- [ ] Evaluate creating a `<TrackerPageLayout>` base with slot-based composition
+- [x] Extract shared `useTrackerPage()` hook encapsulating 16+ common state variables
+- [x] Extract `<ProductTable>` component (shared between both pages, ~260 lines duplicated)
+- [x] Extract `<EventsTable>` component (consolidated into `<ProductTable>`)
+- [x] Evaluate creating a `<TrackerPageLayout>` base with slot-based composition
 
 ---
 
@@ -89,9 +89,9 @@ These two pages are ~70-80% structurally identical. Consider:
 | Priority | Lines Saved | Files Touched |
 |----------|------------|---------------|
 | P0 | ~600 | 8 |
-| P1 | ~700 | 4 |
+| P1 | ~1,020 | 8 |
 | P2 | ~200 | 6 |
-| **Total** | **~1,500** | **12** |
+| **Total** | **~1,820** | **16** |
 
 ---
 

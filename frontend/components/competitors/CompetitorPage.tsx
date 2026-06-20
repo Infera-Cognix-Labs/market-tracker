@@ -11,16 +11,11 @@ import { Dropdown } from "../shared/Dropdown"
 import { PageHeader } from "../shared/PageHeader"
 import { StatusFilterTabs } from "../shared/StatusFilterTabs"
 import { TrackerInfoCard, TrackerStat } from "../shared/TrackerInfoCard"
-import { apiCreateCompetitorTracker, apiDeleteCompetitorTracker, ApiError, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiListCompetitorTrackers, apiListEvents, apiReplaceTrackedAsins, apiUpdateCompetitorTracker } from "../shared/api"
-import { parseCouponItems, parseDealItems, HOURS as SHARED_HOURS } from "../shared/formatting"
+import { apiCreateCompetitorTracker, apiDeleteCompetitorTracker, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiListCompetitorTrackers, apiListEvents, apiReplaceTrackedAsins, apiUpdateCompetitorTracker } from "../shared/api"
+import { MARKETPLACES, parseCouponItems, parseDealItems, HOURS as SHARED_HOURS } from "../shared/formatting"
+import { handleApiError } from "../shared/hooks"
 import type { CompetitorTrackerCreateRequest, CompetitorTrackerDetail, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Event, ProductDetail, ProductTimelineResponse, Timeframe, TrackedProductSummary, TrackerStatus } from "../shared/types"
 
-const MARKETPLACES = [
-  "amazon_us", "amazon_de", "amazon_uk", "amazon_fr",
-  "amazon_it", "amazon_es", "amazon_ca", "amazon_jp",
-]
-
-const MARKETPLACES_OPTIONS = MARKETPLACES.map(m => ({ value: m, label: m }))
 const HOURS = SHARED_HOURS
 
 const DEFAULT_TRACK_FIELDS: CompetitorTrackFields = {
@@ -354,17 +349,7 @@ const CreateTrackerModal = ({
       const tracker = await apiCreateCompetitorTracker(payload)
       onCreate(tracker)
     } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 409) {
-          setError("A tracker for this marketplace and ASINs already exists.")
-        } else if (err.status === 400 && err.details?.reason) {
-          setError(err.details.reason)
-        } else {
-          setError(err.message || "Failed to create tracker. Please try again.")
-        }
-      } else {
-        setError("Failed to create tracker. Please try again.")
-      }
+      handleApiError(err, setError, "A tracker for this marketplace and ASINs already exists.")
       setSubmitting(false)
     }
   }
@@ -398,7 +383,7 @@ const CreateTrackerModal = ({
 
             {/* Marketplace */}
             <div style={{ marginBottom: 16 }}>
-              <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES_OPTIONS} />
+              <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
             </div>
 
             {/* ASIN input */}

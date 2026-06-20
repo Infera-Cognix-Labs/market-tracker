@@ -1,38 +1,27 @@
 "use client"
 
-import { AlertCircle, Edit2, ExternalLink, Info, Plus, Search, Trash2, TrendingDown, TrendingUp, X } from "lucide-react"
-import { Suspense, useEffect, useMemo, useReducer, useState } from "react"
-import { Badge } from "../shared/Badge"
+import { Info, Plus, Search, X } from "lucide-react"
+import { Suspense, useState } from "react"
+import { ProductTable } from "../categories/ProductTable"
 import { ConfirmDialog } from "../shared/ConfirmDialog"
 import { T } from "../shared/DesignTokens"
 import { Dropdown } from "../shared/Dropdown"
 import { ErrorBanner } from "../shared/ErrorBanner"
-import { EventsStatusBanner } from "../shared/EventsStatusBanner"
-import { InfoBanner } from "../shared/InfoBanner"
-import { KpiFilterBar } from "../shared/KpiFilterBar"
-import { NoSnapshotPlaceholder } from "../shared/NoSnapshotPlaceholder"
-import { PageHeader } from "../shared/PageHeader"
-import { SearchInput } from "../shared/SearchInput"
 import { SnapshotMetadataBar } from "../shared/SnapshotMetadataBar"
-import { StatusFilterTabs } from "../shared/StatusFilterTabs"
 import { TrackerInfoCard, TrackerStat } from "../shared/TrackerInfoCard"
-import { TrackerSelector } from "../shared/TrackerSelector"
+import { TrackerPageLayout } from "../shared/TrackerPageLayout"
 import {
   apiCreateKeywordTracker,
   apiDeleteKeywordTracker,
-  ApiError,
   apiGetLatestKeywordSnapshot,
   apiListEvents,
   apiListKeywordTrackers,
   apiTriggerJob,
   apiUpdateKeywordTracker,
 } from "../shared/api"
-import { eventToProduct, extractBrandName, FILTER_TO_EVENT, getEventImageUrl, HOURS, inputStyle, labelStyle, MARKETPLACES, matchesEventSearch, matchesProductSearch, parseCouponItems, parseDealItems, rankTrendMeta } from "../shared/formatting"
+import { HOURS, inputStyle, labelStyle, MARKETPLACES } from "../shared/formatting"
+import { handleApiError, useTrackerPage } from "../shared/hooks"
 import type {
-  CategorySnapshot,
-  CategorySnapshotProduct,
-  Event,
-  EventType,
   KeywordTracker,
   KeywordTrackerCreateRequest,
   KeywordTrackerUpdateRequest,
@@ -41,13 +30,6 @@ import type {
 
 type KpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
 
-type TableRow =
-  | { kind: "product"; key: string; product: CategorySnapshotProduct }
-  | { kind: "event"; key: string; event: Event }
-
-const KEYWORD_FILTER_TO_EVENT = FILTER_TO_EVENT as Record<Exclude<KpiFilter, "ALL">, EventType>
-
-// ── Create Keyword Tracker Modal ─────────────────────────────────────────
 interface CreateModalProps { onClose: () => void; onCreate: (t: KeywordTracker) => void }
 
 const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
@@ -74,17 +56,7 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
       const tracker = await apiCreateKeywordTracker(payload)
       onCreate(tracker)
     } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 409) {
-          setError("A tracker for this keyword already exists.")
-        } else if (err.status === 400 && err.details?.reason) {
-          setError(err.details.reason)
-        } else {
-          setError(err.message || "Failed to create tracker. Please try again.")
-        }
-      } else {
-        setError("Failed to create tracker. Please try again.")
-      }
+      handleApiError(err, setError, "A tracker for this keyword already exists.")
       setSubmitting(false)
     }
   }
@@ -118,12 +90,7 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
             <div style={{ marginBottom: 20 }}>
               <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
-            {error && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 14 }}>
-                <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: T.red }}>{error}</span>
-              </div>
-            )}
+            {error && <ErrorBanner message={error} />}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
               <button type="submit" disabled={submitting} className="btn-primary" style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -207,16 +174,11 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
                 ))}
               </div>
             </div>
-            {error && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 14 }}>
-                <AlertCircle size={13} style={{ color: T.red, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: T.red }}>{error}</span>
-              </div>
-            )}
+            {error && <ErrorBanner message={error} />}
             <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
               <button type="button" onClick={() => setShowConfirm(true)}
                 style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
-                <Trash2 size={12} /> Delete
+                Delete
               </button>
               <div style={{ display: "flex", gap: 10 }}>
                 <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
@@ -241,207 +203,41 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
   )
 }
 
-// ── Events Reducer ──────────────────────────────────────────────────────
-type EventsState = { events: Event[]; loading: boolean; error: string | null }
-type EventsAction =
-  | { type: "FETCH_START" }
-  | { type: "FETCH_OK"; events: Event[] }
-  | { type: "FETCH_ERR"; error: string }
-  | { type: "RESET" }
-
-function eventsReducer(state: EventsState, action: EventsAction): EventsState {
-  switch (action.type) {
-    case "FETCH_START": return { ...state, loading: true, error: null }
-    case "FETCH_OK": return { events: action.events, loading: false, error: null }
-    case "FETCH_ERR": return { events: [], loading: false, error: action.error }
-    case "RESET": return { events: [], loading: false, error: null }
-  }
-}
-
-// ── Main KeywordPage ─────────────────────────────────────────────────────
 export const KeywordPageInner = () => {
-  const [trackers, setTrackers] = useState<KeywordTracker[]>([])
-  const [selectedCode, setSelectedCode] = useState<string>("")
-  const [snapshot, setSnapshot] = useState<CategorySnapshot | null>(null)
-  const [search, setSearch] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [showEdit, setShowEdit] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-  const [statusFilter, setStatusFilter] = useState<string>("ACTIVE")
-  const [activeKpiFilter, setActiveKpiFilter] = useState<KpiFilter>("ALL")
-  const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
-  const [justAdded, setJustAdded] = useState<string | null>(null)
-  const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
-  const [openDealKey, setOpenDealKey] = useState<string | null>(null)
-  const [triggering, setTriggering] = useState(false)
-  const [showMetaDetail, setShowMetaDetail] = useState(false)
-
-  const handleTriggerJob = async () => {
-    if (!selectedCode) return
-    setTriggering(true)
-    try {
-      await apiTriggerJob("KEYWORD", selectedCode)
-      setRefreshKey(k => k + 1)
-    } catch {
-      // ignore – user can retry
-    } finally {
-      setTriggering(false)
-    }
-  }
-
-  // Load trackers
-  useEffect(() => {
-    apiListKeywordTrackers()
-      .then(res => {
-        setTrackers(res.items)
-        if (res.items.length > 0) {
-          const firstActive = res.items.find(t => t.status === "ACTIVE") ?? res.items[0]
-          setSelectedCode(firstActive.tracker_code)
-        }
-      })
-      .catch(() => {
-        setTrackers([])
-        setError("Failed to load keyword trackers")
-      })
-      .finally(() => setLoading(false))
-  }, [])
-
-  // Load snapshot when tracker changes
-  useEffect(() => {
-    if (!selectedCode) return
-    let cancelled = false
-    apiGetLatestKeywordSnapshot(selectedCode)
-      .then(snap => { if (!cancelled) { setSnapshot(snap); setLoading(false) } })
-      .catch(() => { if (!cancelled) { setSnapshot(null); setLoading(false) } })
-    return () => { cancelled = true }
-  }, [selectedCode, refreshKey])
-
-  // Load events when filter changes
-  useEffect(() => {
-    if (!selectedCode || !snapshot?.snapshot_date || activeKpiFilter === "ALL") {
-      dispatchEvents({ type: "RESET" })
-      return
-    }
-    let cancelled = false
-    dispatchEvents({ type: "FETCH_START" })
-    apiListEvents({
-      tracker_type: "KEYWORD",
-      tracker_code: selectedCode,
-      from_date: snapshot.snapshot_date,
-      to_date: snapshot.snapshot_date,
-      page_size: 200,
-    })
-      .then(res => {
-        if (cancelled) return
-        dispatchEvents({
-          type: "FETCH_OK",
-          events: res.items.filter(event => Object.values(KEYWORD_FILTER_TO_EVENT).includes(event.event_type)),
-        })
-      })
-      .catch(() => {
-        if (cancelled) return
-        dispatchEvents({ type: "FETCH_ERR", error: "Failed to load events" })
-      })
-    return () => { cancelled = true }
-  }, [selectedCode, snapshot?.snapshot_date, activeKpiFilter])
-
-  const selectedTracker = trackers.find(t => t.tracker_code === selectedCode)
-
-  const products = useMemo(() => snapshot?.products ?? [], [snapshot])
-
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => matchesProductSearch(search, p))
-  }, [products, search])
-
-  const allVisibleRows = useMemo<TableRow[]>(() => {
-    if (!snapshot) return []
-    if (activeKpiFilter === "ALL") {
-      return filteredProducts.map(p => ({ kind: "product", key: p.asin, product: p }))
-    }
-
-    const eventType = KEYWORD_FILTER_TO_EVENT[activeKpiFilter]
-    const relevantEvents = eventsState.events.filter(e => e.event_type === eventType)
-
-    if (activeKpiFilter === "EXITS") {
-      return relevantEvents
-        .filter(e => matchesEventSearch(search, e))
-        .map(e => {
-          const product = eventToProduct(e)
-          return { kind: "product" as const, key: `${product.asin}-exit-${e.snapshot_date}`, product }
-        })
-    }
-
-    if (activeKpiFilter === "EXIT_TOP10") {
-      const productsByAsin = new Map(products.map(p => [p.asin, p]))
-      return relevantEvents
-        .filter(e => matchesEventSearch(search, e))
-        .map(e => {
-          const product = productsByAsin.get(e.asin)
-          if (product) return { kind: "product" as const, key: `${product.asin}-${product.rank_position}`, product }
-          const fallbackProduct = eventToProduct(e)
-          return { kind: "product" as const, key: `${fallbackProduct.asin}-exit10-${e.snapshot_date}`, product: fallbackProduct }
-        })
-    }
-
-    const eventAsins = new Set(relevantEvents.map(e => e.asin))
-    return filteredProducts
-      .filter(p => eventAsins.has(p.asin))
-      .map(p => ({ kind: "product", key: p.asin, product: p }))
-  }, [snapshot, activeKpiFilter, filteredProducts, eventsState.events, search, products])
-
-  const totalFilteredCount = useMemo(() => {
-    if (!snapshot) return 0
-    if (activeKpiFilter === "ALL") return snapshot.products.length
-    const eventType = KEYWORD_FILTER_TO_EVENT[activeKpiFilter]
-    if (activeKpiFilter === "EXITS" || activeKpiFilter === "EXIT_TOP10") {
-      return eventsState.events.filter(e => e.event_type === eventType).length
-    }
-    const eventAsins = new Set(
-      eventsState.events.filter(e => e.event_type === eventType).map(e => e.asin)
-    )
-    return snapshot.products.filter(p => eventAsins.has(p.asin)).length
-  }, [snapshot, activeKpiFilter, eventsState.events])
-
-  const handleCreate = (tracker: KeywordTracker) => {
-    setShowCreate(false)
-    setTrackers(prev => [tracker, ...prev])
-    setSelectedCode(tracker.tracker_code)
-    setJustAdded(tracker.tracker_code)
-    setTimeout(() => setJustAdded(null), 5000)
-    setLoading(true)
-    setRefreshKey(k => k + 1)
-  }
-
-  const handleUpdate = (tracker: KeywordTracker) => {
-    setShowEdit(false)
-    setTrackers(prev => prev.map(t => t.tracker_code === tracker.tracker_code ? tracker : t))
-    setLoading(true)
-    setRefreshKey(k => k + 1)
-  }
-
-  // KPI counts
-  const newEntrantCount = snapshot?.summary.new_entrant_count ?? 0
-  const returningCount = snapshot?.summary.returning_count ?? 0
-  const exitCount = snapshot?.summary.exit_count ?? 0
-  const enterTop10Count = snapshot?.summary.enter_top10_count ?? 0
-  const exitTop10Count = snapshot?.summary.exit_top10_count ?? 0
+  const {
+    trackers, selectedCode,
+    loading, error,
+    snapshot, snapshotLoading,
+    search, setSearch,
+    showCreate, setShowCreate, showEdit, setShowEdit,
+    statusFilter, setStatusFilter,
+    activeKpiFilter, setActiveKpiFilter,
+    eventsState,
+    justAdded,
+    openCouponKey, setOpenCouponKey,
+    openDealKey, setOpenDealKey,
+    triggering, handleTriggerJob,
+    showMetaDetail, setShowMetaDetail,
+    selectedTracker,
+    allVisibleRows, totalFilteredCount,
+    handleSelectTracker, handleCreate, handleUpdate, handleDelete,
+    setLoading,
+  } = useTrackerPage<KeywordTracker>({
+    trackerType: "KEYWORD",
+    apiListTrackers: apiListKeywordTrackers,
+    apiGetSnapshot: apiGetLatestKeywordSnapshot,
+    apiListEvents,
+    apiTriggerJob,
+    listErrorMsg: "Failed to load keyword trackers",
+  })
 
   if (trackers.length === 0) return (
     <>
       {showCreate && (
-        <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+        <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { handleCreate(t); setLoading(true) }} />
       )}
       <div className="anim-fade">
-        <PageHeader title="Keyword Tracker" sub="Monitor Amazon search results for keywords"
-          actions={
-            <button className="btn-primary" onClick={() => setShowCreate(true)}
-              style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Plus size={14} /> New Tracker
-            </button>
-          } />
-        <div style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
+        <div className="card" style={{ textAlign: "center", padding: "80px 24px", color: T.text3 }}>
           {loading
             ? <div style={{ fontSize: 13 }}>Loading trackers…</div>
             : <>
@@ -464,48 +260,35 @@ export const KeywordPageInner = () => {
   return (
     <>
       {showCreate && (
-        <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+        <CreateKeywordTrackerModal onClose={() => setShowCreate(false)} onCreate={t => { handleCreate(t); setLoading(true) }} />
       )}
       {showEdit && selectedTracker && (
         <EditKeywordTrackerModal
-          tracker={selectedTracker}
+          tracker={selectedTracker as KeywordTracker}
           onClose={() => setShowEdit(false)}
-          onUpdate={handleUpdate}
-          onDelete={code => {
-            setTrackers(prev => prev.filter(t => t.tracker_code !== code))
-            setSelectedCode("")
-            setSnapshot(null)
-            setShowEdit(false)
-          }}
+          onUpdate={handleUpdate as (t: KeywordTracker) => void}
+          onDelete={handleDelete}
         />
       )}
-      <div className="anim-fade">
-        <PageHeader title="Keyword Tracker" sub="Monitor Amazon search results for keywords"
-          actions={
-            <div style={{ display: "flex", gap: 8 }}>
-              {selectedTracker && (
-                <button className="btn-ghost" onClick={() => setShowEdit(true)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <Edit2 size={14} /> Edit Tracker
-                </button>
-              )}
-              <button className="btn-primary" onClick={() => setShowCreate(true)}
-                style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Plus size={14} /> New Tracker
-              </button>
-            </div>
-          } />
-
-        {/* Status filter tabs */}
-        <StatusFilterTabs trackers={trackers} value={statusFilter} onChange={setStatusFilter} />
-
-        {/* Tracker selector */}
-        <TrackerSelector trackers={trackers} statusFilter={statusFilter} selectedCode={selectedCode} onSelect={code => { setSnapshot(null); setLoading(true); setSelectedCode(code); setRefreshKey(k => k + 1) }} />
-
-        {/* Error */}
+      <TrackerPageLayout
+        title="Keyword Tracker"
+        sub="Monitor Amazon search results for keywords"
+        trackers={trackers}
+        selectedCode={selectedCode}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        onSelectTracker={handleSelectTracker}
+        onEdit={() => setShowEdit(true)}
+        onCreate={() => setShowCreate(true)}
+        selectedTracker={selectedTracker}
+        snapshot={snapshot}
+        activeKpiFilter={activeKpiFilter}
+        onKpiFilterChange={f => setActiveKpiFilter(f as KpiFilter)}
+        eventsState={eventsState}
+        onEventsRetry={() => setActiveKpiFilter(prev => prev)}
+      >
         {error && <ErrorBanner message={error} />}
 
-        {/* Tracker info card */}
         {selectedTracker && (
           <TrackerInfoCard
             name={selectedTracker.name}
@@ -522,23 +305,6 @@ export const KeywordPageInner = () => {
           />
         )}
 
-        {/* Snapshot summary KPIs */}
-        {snapshot && (
-          <KpiFilterBar
-            summary={{
-              asin_count: snapshot.summary.asin_count,
-              new_entrants: newEntrantCount,
-              returning: returningCount,
-              exits: exitCount,
-              enter_top10: enterTop10Count,
-              exit_top10: exitTop10Count,
-            }}
-            activeFilter={activeKpiFilter}
-            onFilterChange={f => setActiveKpiFilter(f as KpiFilter)}
-          />
-        )}
-
-        {/* Snapshot metadata */}
         {snapshot && (
           <SnapshotMetadataBar
             snapshotDate={snapshot.snapshot_date}
@@ -563,213 +329,25 @@ export const KeywordPageInner = () => {
             }
           />
         )}
+      </TrackerPageLayout>
 
-        {/* Events loading/error banner */}
-        <EventsStatusBanner loading={eventsState.loading} error={eventsState.error} onRetry={() => setActiveKpiFilter(prev => prev)} />
-
-        {/* Products table */}
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
-            <SearchInput value={search} onChange={setSearch} placeholder="Search ASIN, title, or brand..." />
-            <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>
-              {allVisibleRows.length} of {totalFilteredCount} {activeKpiFilter === "ALL" ? "products" : "matched rows"}
-            </span>
-          </div>
-
-          {justAdded && <InfoBanner message="Data will be collected and displayed in a few minutes." />}
-
-          {loading ? (
-            <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading snapshot...</div>
-          ) : (
-            <div style={{ width: "100%", overflowX: "auto" }}>
-              <table style={{ width: "100%", minWidth: 1100, borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${T.border}` }}>
-                    {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Deal", "Coupon"].map(h => (
-                      <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {allVisibleRows.map(row => {
-                    if (row.kind === "event") {
-                      const event = row.event
-                      const imageUrl = getEventImageUrl(event)
-                      const rankLabel = event.payload.current_rank ?? event.payload.previous_rank ?? null
-                      const prev = event.payload.previous
-                      return (
-                        <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: `${T.bg3}30` }}>
-                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, color: T.text1 }}>
-                            {rankLabel != null ? String(rankLabel).padStart(2, "0") : "--"}
-                          </td>
-                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>
-                            {event.event_type.replaceAll("_", " ")}
-                          </td>
-                          <td style={{ padding: "6px 10px" }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              {imageUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={imageUrl} alt={event.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-                              ) : (
-                                <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>N/A</span>
-                              )}
-                            </div>
-                          </td>
-                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>{event.asin}</td>
-                          <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
-                            <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prev?.title || event.title}</div>
-                          </td>
-                          <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
-                            {prev?.brand ? (
-                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", width: "100%" }}>{extractBrandName(prev.brand)}</span>
-                            ) : <span style={{ color: T.text3 }}>—</span>}
-                          </td>
-                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
-                            {prev?.price_current != null && prev.price_current > 0 ? (
-                              <>
-                                {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_current.toFixed(2)}
-                                {prev.price_original != null && prev.price_original > prev.price_current && (
-                                  <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
-                                    {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_original.toFixed(2)}
-                                  </span>
-                                )}
-                              </>
-                            ) : <span style={{ color: T.text3 }}>—</span>}
-                          </td>
-                          <td style={{ padding: "9px 10px", fontSize: 12, color: T.text3 }}>—</td>
-                          <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text3 }}>—</td>
-                          <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
-                          <td style={{ padding: "9px 10px" }}><Badge type="info" text="—" /></td>
-                          <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
-                          <td style={{ padding: "9px 10px", fontSize: 11, color: T.text3 }}>—</td>
-                        </tr>
-                      )
-                    }
-
-                    const p = row.product
-                    const isExitFilter = activeKpiFilter === "EXITS"
-                    return (
-                      <tr key={row.key} className="row-hover" style={{ borderBottom: `1px solid ${T.border}`, background: !isExitFilter && p.rank_position <= 10 ? `${T.bg3}50` : "transparent" }}>
-                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 13, fontWeight: !isExitFilter && p.rank_position <= 10 ? 700 : 400, color: !isExitFilter && p.rank_position <= 10 ? T.amber : T.text1 }}>
-                          {isExitFilter ? "—" : String(p.rank_position).padStart(2, "0")}
-                        </td>
-                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, whiteSpace: "nowrap" }}>
-                          {isExitFilter ? (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: T.text3, fontStyle: "italic" }}>
-                              Historical
-                            </span>
-                          ) : (() => {
-                            const meta = rankTrendMeta(p)
-                            return (
-                              <span title={p.comparison_snapshot_date ? `Previous: ${p.previous_rank_position ?? "not ranked"} on ${p.comparison_snapshot_date}` : "No comparison snapshot"}
-                                style={{ display: "inline-flex", alignItems: "center", gap: 4, color: meta.color, fontWeight: p.rank_trend && p.rank_trend !== "STABLE" ? 700 : 500 }}>
-                                {p.rank_trend === "UP" && <TrendingUp size={12} />}
-                                {p.rank_trend === "DOWN" && <TrendingDown size={12} />}
-                                {meta.label}
-                              </span>
-                            )
-                          })()}
-                        </td>
-                        <td style={{ padding: "6px 10px" }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={p.image_url} alt={p.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-                          </div>
-                        </td>
-                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11 }}>
-                          <a href={p.product_url || `https://www.amazon.com/dp/${p.asin}`} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                            {p.asin}<ExternalLink size={9} />
-                          </a>
-                        </td>
-                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
-                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-                        </td>
-                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.text2, width: 90, maxWidth: 90 }}>
-                          {p.brand ? (
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", width: "100%" }}>{extractBrandName(p.brand)}</span>
-                          ) : <span style={{ color: T.text3 }}>—</span>}
-                        </td>
-                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
-                          {p.price_current > 0 ? (
-                            <>
-                              {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_current.toFixed(2)}
-                              {p.price_original && p.price_original > p.price_current && (
-                                <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
-                                  {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_original.toFixed(2)}
-                                </span>
-                              )}
-                            </>
-                          ) : <span style={{ color: T.text3 }}>—</span>}
-                        </td>
-                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.green }}>
-                          {p.rating_value > 0 ? `${p.rating_value}★` : <span style={{ color: T.text3 }}>—</span>}
-                        </td>
-                        <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>
-                          {p.review_count > 0 ? p.review_count.toLocaleString() : <span style={{ color: T.text3 }}>—</span>}
-                        </td>
-                        <td style={{ padding: "9px 10px" }}>
-                          <Badge type={p.availability_status === "IN_STOCK" ? "listing" : "stock"} text={p.availability_status === "IN_STOCK" ? "In Stock" : p.availability_status === "OUT_OF_STOCK" ? "OOS" : p.availability_status} />
-                        </td>
-                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.blue }}>
-                          {(() => {
-                            const dealItems = parseDealItems(p.deal_info)
-                            if (dealItems.length === 0) return "—"
-                            const dealKey = `${p.asin}-${p.rank_position}`
-                            const isOpen = openDealKey === dealKey
-                            return (
-                              <div style={{ minWidth: 160 }}>
-                                <button type="button" onClick={() => setOpenDealKey(prev => prev === dealKey ? null : dealKey)}
-                                  style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.blue}`, background: `${T.blue}16`, color: T.blue, fontSize: 10, fontFamily: T.mono, fontWeight: 600, cursor: "pointer" }}>
-                                  {isOpen ? "Hide" : "View"} Deal
-                                </button>
-                                {isOpen && (
-                                  <div style={{ marginTop: 6, padding: "6px 8px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, color: T.text1, lineHeight: 1.4 }}>
-                                    {dealItems.map((deal, idx) => (
-                                      <div key={`${deal}-${idx}`} style={{ marginBottom: idx < dealItems.length - 1 ? 4 : 0 }}>• {deal}</div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
-                        </td>
-                        <td style={{ padding: "9px 10px", fontSize: 11, color: T.amber }}>
-                          {(() => {
-                            const couponItems = parseCouponItems(p.coupon_text)
-                            if (couponItems.length === 0) return "—"
-                            const couponKey = `${p.asin}-${p.rank_position}`
-                            const isOpen = openCouponKey === couponKey
-                            return (
-                              <div style={{ minWidth: 160 }}>
-                                <button type="button" onClick={() => setOpenCouponKey(prev => prev === couponKey ? null : couponKey)}
-                                  style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.amberD}`, background: `${T.amber}14`, color: T.amber, fontSize: 10, fontFamily: T.mono, fontWeight: 600, cursor: "pointer" }}>
-                                  {isOpen ? "Hide" : "View"} {couponItems.length} Coupon{couponItems.length > 1 ? "s" : ""}
-                                </button>
-                                {isOpen && (
-                                  <div style={{ marginTop: 6, padding: "6px 8px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, color: T.text1, lineHeight: 1.4 }}>
-                                    {couponItems.map((coupon, idx) => (
-                                      <div key={`${coupon}-${idx}`} style={{ marginBottom: idx < couponItems.length - 1 ? 4 : 0 }}>• {coupon}</div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {!loading && !snapshot && <NoSnapshotPlaceholder triggering={triggering} onTrigger={handleTriggerJob} />}
-          {!loading && snapshot && allVisibleRows.length === 0 && (
-            <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
-          )}
-        </div>
-      </div>
+      <ProductTable
+        search={search}
+        onSearchChange={setSearch}
+        allVisibleRows={allVisibleRows}
+        totalFilteredCount={totalFilteredCount}
+        activeKpiFilter={activeKpiFilter}
+        loading={snapshotLoading}
+        openCouponKey={openCouponKey}
+        openDealKey={openDealKey}
+        onOpenCouponKeyChange={setOpenCouponKey}
+        onOpenDealKeyChange={setOpenDealKey}
+        justAdded={justAdded}
+        hasSnapshot={!!snapshot}
+        triggering={triggering}
+        onTrigger={handleTriggerJob}
+        productUrlResolver={(p) => p.product_url || `https://www.amazon.com/dp/${p.asin}`}
+      />
     </>
   )
 }
