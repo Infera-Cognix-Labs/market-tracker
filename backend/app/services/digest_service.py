@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from time import perf_counter
 
+from app.config.config import get_settings
 from app.core.logging import correlation_context, get_logger
 from app.core.metrics import get_metrics
 from app.core.utils import utc_now
@@ -18,7 +19,13 @@ from app.models.documents import (
     EventDocument,
     WeeklyDigestDocument,
 )
-from app.services.shared import build_top_threats, event_doc_to_model, sort_events
+from app.services.llm_service import LLMService
+from app.services.shared import (
+    build_top_threats,
+    digest_doc_to_model,
+    event_doc_to_model,
+    sort_events,
+)
 
 logger = get_logger(__name__)
 metrics = get_metrics()
@@ -219,6 +226,29 @@ class DigestService:
             created_at=utc_now(),
         )
         await digest_document.insert()
+
+        settings = get_settings()
+        if settings.llm_config.enabled and settings.llm_config.api_key:
+            try:
+                llm_service = LLMService(settings.llm_config)
+                digest_model = digest_doc_to_model(digest_document)
+                insights = await llm_service.generate_digest_insights(
+                    digest=digest_model,
+                    events=sorted_events,
+                )
+                if insights is not None:
+                    digest_document.insights = insights
+                    await digest_document.save()
+            except Exception:
+                logger.warning(
+                    "LLM insight generation failed, continuing without insights.",
+                    extra={
+                        "context": correlation_context(
+                            workspace_id=workspace_id,
+                            digest_code=digest_code,
+                        )
+                    },
+                )
 
         logger.info(
             "Generated weekly digest.",

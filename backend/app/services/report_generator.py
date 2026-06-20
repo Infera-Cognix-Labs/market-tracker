@@ -110,6 +110,8 @@ class ReportPDFGenerator:
         self._draw_header(pdf)
         self._draw_summary(pdf)
         self._draw_signal_analytics(pdf)
+        if self.digest.insights:
+            self._draw_ai_insights(pdf)
         self._draw_trackers(pdf)
         self._draw_threats(pdf)
 
@@ -332,6 +334,55 @@ class ReportPDFGenerator:
             pdf.cell(width - 8, 4, _safe_pdf_text(value[:34]))
         pdf.set_y(y + 20)
 
+    def _draw_ai_insights(self, pdf: FPDF) -> None:
+        assert self.digest.insights is not None
+        insights = self.digest.insights
+        page_width = pdf.w - pdf.l_margin - pdf.r_margin
+
+        self._section_title(pdf, "AI Insights")
+        y = pdf.get_y()
+        self._set_fill_color(pdf, SURFACE)
+        pdf.set_draw_color(*_pdf_rgb(BORDER))
+        content_height = 12 + len(insights.key_trends) * 5 + 14
+        pdf.rect(pdf.l_margin, y, page_width, content_height, "DF")
+
+        cursor_y = y + 4
+        pdf.set_xy(pdf.l_margin + 4, cursor_y)
+        self._set_text_color(pdf, BRAND_NAVY)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(page_width - 8, 4, "Executive Summary")
+        cursor_y += 5
+        pdf.set_x(pdf.l_margin + 4)
+        self._set_text_color(pdf, INK)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.multi_cell(page_width - 8, 4, _safe_pdf_text(insights.executive_summary))
+        cursor_y = pdf.get_y() + 3
+
+        pdf.set_xy(pdf.l_margin + 4, cursor_y)
+        self._set_text_color(pdf, BRAND_NAVY)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(page_width - 8, 4, "Key Trends")
+        cursor_y += 5
+        for trend in insights.key_trends:
+            pdf.set_x(pdf.l_margin + 4)
+            self._set_text_color(pdf, INK)
+            pdf.set_font("Helvetica", "", 7.5)
+            pdf.multi_cell(page_width - 8, 4, _safe_pdf_text(f"• {trend}"))
+            cursor_y = pdf.get_y() + 1
+        cursor_y += 2
+
+        pdf.set_xy(pdf.l_margin + 4, cursor_y)
+        self._set_text_color(pdf, BRAND_NAVY)
+        pdf.set_font("Helvetica", "B", 8)
+        pdf.cell(page_width - 8, 4, "Risk Assessment")
+        cursor_y += 5
+        pdf.set_x(pdf.l_margin + 4)
+        self._set_text_color(pdf, INK)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.multi_cell(page_width - 8, 4, _safe_pdf_text(insights.risk_assessment))
+
+        pdf.set_y(y + content_height + 4)
+
     def _draw_trackers(self, pdf: FPDF) -> None:
         self._section_title(pdf, "Trackers Included")
         page_width = pdf.w - pdf.l_margin - pdf.r_margin
@@ -474,6 +525,9 @@ class ReportExcelGenerator:
 
         self._create_analytics_sheet(wb)
 
+        if self.digest.insights:
+            self._create_insights_sheet(wb)
+
         ws_trackers = wb.create_sheet("Trackers")
         ws_trackers.sheet_properties.tabColor = BRAND_BLUE
         ws_trackers["A1"] = "Tracker Name"
@@ -575,6 +629,58 @@ class ReportExcelGenerator:
         for index, width in widths.items():
             ws.column_dimensions[get_column_letter(index)].width = width
         ws.freeze_panes = "A5"
+
+    def _create_insights_sheet(self, wb: Workbook) -> None:
+        assert self.digest.insights is not None
+        insights = self.digest.insights
+
+        ws = wb.create_sheet("AI Insights")
+        ws.sheet_properties.tabColor = "7C3AED"
+
+        ws["A1"] = "AI Insights"
+        ws["A1"].font = Font(bold=True, size=16, color="FFFFFF")
+        ws["A1"].fill = PatternFill("solid", fgColor=BRAND_NAVY)
+        ws.merge_cells("A1:F1")
+        ws.row_dimensions[1].height = 26
+
+        ws["A3"] = "Executive Summary"
+        ws["A3"].font = Font(bold=True, color=BRAND_NAVY)
+        ws["A4"] = insights.executive_summary
+        ws["A4"].alignment = Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells("A4:F4")
+        ws.row_dimensions[4].height = 60
+
+        current_row = 6
+        ws.cell(row=current_row, column=1, value="Key Trends")
+        ws.cell(row=current_row, column=1).font = Font(bold=True, color=BRAND_NAVY)
+        current_row += 1
+        for i, trend in enumerate(insights.key_trends, start=1):
+            ws.cell(row=current_row, column=1, value=f"{i}.")
+            ws.cell(row=current_row, column=1).font = Font(color=MUTED)
+            ws.cell(row=current_row, column=2, value=trend)
+            ws.cell(row=current_row, column=2).alignment = Alignment(wrap_text=True)
+            ws.merge_cells(
+                start_row=current_row, start_column=2,
+                end_row=current_row, end_column=6,
+            )
+            current_row += 1
+
+        current_row += 1
+        ws.cell(row=current_row, column=1, value="Risk Assessment")
+        ws.cell(row=current_row, column=1).font = Font(bold=True, color=BRAND_NAVY)
+        current_row += 1
+        ws.cell(row=current_row, column=1, value=insights.risk_assessment)
+        ws.cell(row=current_row, column=1).alignment = Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells(
+            start_row=current_row, start_column=1,
+            end_row=current_row, end_column=6,
+        )
+        ws.row_dimensions[current_row].height = 45
+
+        ws.column_dimensions["A"].width = 12
+        ws.column_dimensions["B"].width = 60
+        for col in "CDEF":
+            ws.column_dimensions[col].width = 16
 
     def _write_count_table(
         self,

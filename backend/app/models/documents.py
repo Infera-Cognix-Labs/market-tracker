@@ -16,6 +16,7 @@ from app.models.api import (
     CompetitorTrackerStats,
     CompetitorTrackFields,
     DealInfo,
+    DigestInsights,
     EventPayload,
     ExternalRunSummary,
     JobError,
@@ -405,6 +406,7 @@ class WeeklyDigestDocument(WorkspaceDocument):
     summary: WeeklyDigestSummary
     threats: list[Threat]
     report_storage_uri: str | None = None
+    insights: DigestInsights | None = None
     created_at: datetime
 
     class Settings:

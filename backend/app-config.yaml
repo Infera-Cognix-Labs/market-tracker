@@ -86,3 +86,12 @@ storage:
 workers:
   scheduler_interval_secs: 60
   digest_interval_secs: 3600
+
+llm:
+  enabled: true
+  provider: "openai"
+  model: "gpt-4o-mini"
+  max_tokens: 2500
+  temperature: 0.3
+  timeout_secs: 30
+  retry_attempts: 2
