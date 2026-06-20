@@ -156,7 +156,7 @@ class CategoryScope(ApiModel):
 
 
 class CategoryTrackingConfig(ApiModel):
-    top_n: int = Field(default=60)
+    top_n: int = Field(default=50)
     top10_alert_enabled: bool
 
 
@@ -350,7 +350,7 @@ class CategorySnapshot(ApiModel):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 60
+    top_n: int = 50
     products: list[CategorySnapshotProduct]
     summary: CategorySnapshotSummary
     source_refs: dict[str, Any] | None = None
