@@ -32,6 +32,9 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
 }
 export const marketplaceLabel = (mp: string) => MARKETPLACE_LABELS[mp] ?? mp.replace("amazon_", "").toUpperCase()
 
+export const statusColor = (s?: string) =>
+  s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.red : T.text3
+
 export const css = `
   *{box-sizing:border-box;margin:0;padding:0}
   :root{font-family:${T.sans};background:${T.bg0};color:${T.text0};-webkit-font-smoothing:antialiased}

@@ -1,0 +1,106 @@
+# Frontend Boilerplate Refactoring TODO
+
+> Generated from codebase audit. ~2,500-3,000 lines of duplicated code across 8 page files.
+
+---
+
+## P0 — Helper Functions → `shared/formatting.ts` ✅ DONE
+
+- [x] Move `formatMoney()` (CategoryPage:68, KeywordPage:48, CompetitorPage:43)
+- [x] Move `parseDealItems()` (CategoryPage:73, KeywordPage:100, CompetitorPage:48)
+- [x] Move `parseCouponItems()` (CategoryPage:60, KeywordPage:116, CompetitorPage:35)
+- [x] Move `extractBrandName()` (CategoryPage:42, KeywordPage:87)
+- [x] Move `rankTrendMeta()` (CategoryPage:111, KeywordPage:75)
+- [x] Move `getEventImageUrl()` (CategoryPage:119, KeywordPage:83)
+- [x] Move `eventToProduct()` (CategoryPage:123, KeywordPage:144)
+- [x] Move `matchesSearch()` / `matchesEventSearch()` (CategoryPage:161, KeywordPage:124)
+- [x] Move `parseBestsellerUrl()` (CategoryPage:28, NodeSearchPage:12)
+- [x] Move `statusColor()` (CategoryPage:526, KeywordPage:482, CompetitorPage:602)
+
+---
+
+## P0 — Constants → `shared/DesignTokens.ts` ✅ DONE
+
+- [x] Unify `MARKETPLACES` constant (CategoryPage:97, KeywordPage:62, NodeSearchPage:27, CompetitorPage:15)
+- [x] Unify `HOURS` constant (CategoryPage:184, KeywordPage:73, CompetitorPage:21)
+- [x] Move `FILTER_TO_EVENT` mapping (CategoryPage:19, KeywordPage:38)
+
+---
+
+## P0 — Shared Components → `shared/components/` ✅ DONE
+
+- [x] `<ErrorBanner message />` — replace 8 occurrences across 4 files
+- [x] `<EmptyState icon title message actionLabel onAction />` — replace 5 occurrences across 5 files
+- [x] `<ModalOverlay children />` — replace 6 occurrences across 3 files
+- [x] `<ModalHeader title onClose />` — replace 4 occurrences across 2 files
+- [x] `<ModalFooter onCancel onSubmitLabel onSubmit submitting />` — replace 5 occurrences across 3 files
+- [x] `<StatusBadge status />` — replace 3 occurrences (replaces inline dot-live + status text)
+- [x] `<StatusToggle value onChange />` — replace 3 occurrences across 3 files
+- [x] `<TrackerInfoCard tracker type />` — replace 3 occurrences across CategoryPage, KeywordPage, CompetitorPage
+- [x] `<TrackerSelector trackers statusFilter selectedCode onSelect />` — replace 3 occurrences
+- [x] `<StatusFilterTabs trackers value onChange />` — replace 3 occurrences
+- [x] `<Pagination page totalPages onPageChange />` — replace 6 occurrences across 4 files
+- [x] `<SearchInput value onChange placeholder />` — replace 2 occurrences
+- [x] `<DeleteButton onClick />` — replace 3 occurrences
+- [x] `<SeverityBadge severity />` — replace 3 occurrences across EventsPage, CompetitorPage, DashboardPage
+- [x] `<AvailabilityBadge status />` — replace 5 occurrences across 3 files
+- [x] `<InfoBanner message />` — replace 2 occurrences (justAdded banner)
+- [x] `<EventsStatusBanner state onRetry />` — replace 2 occurrences (events loading/error)
+- [x] `<SnapshotMetadataBar snapshot />` — replace 2 occurrences
+- [x] `<NoSnapshotPlaceholder triggering onTrigger />` — replace 2 occurrences
+- [x] `<KpiFilterBar summary activeFilter onFilterChange />` — replace 2 occurrences
+
+---
+
+## P1 — Custom Hooks → `shared/hooks.ts`
+
+- [ ] `useTrackerList(apiFn)` — replace 3 identical useEffect + state patterns
+- [ ] `useSnapshot(trackerCode, apiFn, deps)` — replace 2 identical snapshot fetch patterns
+- [ ] `useFilteredEvents(trackerType, trackerCode, snapshotDate, filter)` — replace 2 identical events fetch patterns (~55 lines each)
+- [ ] `useTriggerJob(trackerType, trackerCode)` — replace 2 identical trigger handlers
+- [ ] `handleApiError(err, setError, context)` — replace 4 identical ApiError catch blocks
+
+---
+
+## P1 — Unify CategoryPage + KeywordPage
+
+These two pages are ~70-80% structurally identical. Consider:
+
+- [ ] Extract shared `useTrackerPage()` hook encapsulating 16+ common state variables
+- [ ] Extract `<ProductTable>` component (shared between both pages, ~260 lines duplicated)
+- [ ] Extract `<EventsTable>` component
+- [ ] Evaluate creating a `<TrackerPageLayout>` base with slot-based composition
+
+---
+
+## P2 — Inline Styles → CSS Classes
+
+- [ ] Replace `inputStyle` with `className="input"` (6+ occurrences, class already exists in DesignTokens)
+- [ ] Export `labelStyle` from DesignTokens.ts (5+ occurrences)
+- [ ] Add `.th` class for table headers (4 occurrences)
+- [ ] Extract image thumbnail cell as `<ThumbnailImage src alt size />` (5 occurrences)
+- [ ] Extract price display as `<PriceDisplay current original currency />` (3 occurrences)
+- [ ] Extract deal/coupon popover as `<ExpandableList items label openKey onToggle />` (6 occurrences)
+
+---
+
+## Estimated Impact
+
+| Priority | Lines Saved | Files Touched |
+|----------|------------|---------------|
+| P0 | ~600 | 8 |
+| P1 | ~700 | 4 |
+| P2 | ~200 | 6 |
+| **Total** | **~1,500** | **12** |
+
+---
+
+## Execution Order
+
+1. Create `shared/formatting.ts` — extract all helpers + constants
+2. Create `shared/components/` — extract reusable UI components
+3. Create `shared/hooks.ts` — extract custom hooks
+4. Refactor CategoryPage + KeywordPage to use shared code
+5. Refactor CompetitorPage
+6. Replace inline styles with CSS classes
+7. Run `npm run lint` + `npx tsc --noEmit` after each step
