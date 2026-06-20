@@ -6,14 +6,12 @@ from app.integrations.adapters import (
     HarvestlabKeywordAdapter,
     JungleeAsinsAdapter,
     JungleeBestsellersAdapter,
-    SaswaveCompetitorAdapter,
 )
 
 _ADAPTER_REGISTRY: dict[str, ActorAdapter] = {
     "junglee_bestsellers": JungleeBestsellersAdapter(),
     "junglee_asins": JungleeAsinsAdapter(),
     "harvestlab_keyword": HarvestlabKeywordAdapter(),
-    "saswave_competitor": SaswaveCompetitorAdapter(),
     "deals_scraper": DealsScraperAdapter(),
 }
 

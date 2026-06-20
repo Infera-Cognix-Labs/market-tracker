@@ -391,6 +391,7 @@ class TrackedProductSummary(ApiModel):
     asin: AsinCode
     brand: str
     title: str
+    product_url: str | None = None
     current_bsr_position: int | None = None
     current_price: float | None = None
     currency: str | None = None
@@ -509,7 +510,7 @@ class ProductDetail(ApiModel):
     parent_asin: str | None = None
     brand: str
     title_latest: str
-    product_url: str
+    product_url: str | None = None
     main_image_url_latest: str
     first_seen_at: datetime
     last_seen_at: datetime
@@ -560,7 +561,7 @@ class ProductSnapshot(ApiModel):
     brand: str
     title: str
     title_hash: str | None = None
-    product_url: str
+    product_url: str | None = None
     main_image_url: str
     main_image_hash: str | None = None
     bsr_position: int | None = None
