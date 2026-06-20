@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
-import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, AlertCircle } from "lucide-react"
+import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, AlertCircle, Info } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
@@ -408,6 +408,7 @@ export const KeywordPageInner = () => {
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
   const [triggering, setTriggering] = useState(false)
+  const [showMetaDetail, setShowMetaDetail] = useState(false)
 
   const handleTriggerJob = async () => {
     if (!selectedCode) return
@@ -669,35 +670,32 @@ export const KeywordPageInner = () => {
 
         {/* Tracker info card */}
         {selectedTracker && (
-          <div className="card" style={{ marginBottom: 16, padding: "14px 18px", borderLeft: `3px solid ${T.amber}` }}>
+          <div className="card-soft" style={{ marginBottom: 16, padding: "14px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
                   <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{selectedTracker.name}</span>
                   {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
                 </div>
-                <div style={{ display: "flex", gap: 16, marginTop: 6 }}>
-                  <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                    Keyword: <strong style={{ color: T.amber }}>&quot;{selectedTracker.scope.keyword}&quot;</strong>
-                  </span>
-                  {selectedTracker.scope.sort_by && (
-                    <>
-                      <span style={{ fontSize: 11, color: T.text3 }}>|</span>
-                      <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>Sort: {selectedTracker.scope.sort_by}</span>
-                    </>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 16, marginTop: 6, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                  <span>Schedule: {selectedTracker.schedule.frequency} @ {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC</span>
-                  <span>Top N: {selectedTracker.tracking_config.top_n}</span>
-                </div>
+              <div style={{ fontSize: 12, color: T.text2, marginTop: 4 }}>
+                {selectedTracker.scope.keyword}
+                {" · Top "}
+                {selectedTracker.tracking_config.top_n}
+                {" · "}
+                {selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()}
+                {" at "}
+                {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
+              </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>Last Success: {selectedTracker.stats.last_success_at ? new Date(selectedTracker.stats.last_success_at).toLocaleString() : "—"}</div>
-                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Snapshots: {selectedTracker.stats.snapshot_count}</div>
-                {selectedTracker.latest_snapshot_summary && (
-                  <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Latest: {selectedTracker.latest_snapshot_summary.snapshot_date}</div>
+                {selectedTracker.stats.last_success_at && (
+                  <div style={{ fontSize: 11, color: T.text2 }}>
+                    Last captured: <span style={{ color: T.text1 }}>{new Date(selectedTracker.stats.last_success_at).toLocaleDateString()}</span>
+                  </div>
                 )}
+                <div style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>
+                  Source: Apify · {selectedTracker.stats.snapshot_count} snapshot{selectedTracker.stats.snapshot_count !== 1 ? "s" : ""}
+                </div>
               </div>
             </div>
           </div>
@@ -727,11 +725,26 @@ export const KeywordPageInner = () => {
 
         {/* Snapshot metadata */}
         {snapshot && (
-          <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap", alignItems: "center" }}>
             <span>Snapshot: {snapshot.snapshot_date}</span>
+            <span>·</span>
             <span>Captured: {new Date(snapshot.captured_at).toLocaleString()}</span>
-            {snapshot.source_refs?.provider && <span>Provider: {snapshot.source_refs.provider}</span>}
-            {snapshot.source_refs?.apify_run_id && <span>Run: {snapshot.source_refs.apify_run_id}</span>}
+            {(snapshot.source_refs?.provider || snapshot.source_refs?.apify_run_id) && (
+              <span style={{ position: "relative", display: "inline-flex" }}>
+                <button type="button" onClick={() => setShowMetaDetail(v => !v)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 4px", borderRadius: 4, transition: "color .15s" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T.text1 }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T.text3 }}>
+                  <Info size={11} /> Details
+                </button>
+                {showMetaDetail && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, padding: "8px 10px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 10, color: T.text2, fontFamily: T.mono, whiteSpace: "nowrap", zIndex: 20, boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+                    {snapshot.source_refs?.provider && <div>Provider: {snapshot.source_refs.provider}</div>}
+                    {snapshot.source_refs?.apify_run_id && <div>Run: {snapshot.source_refs.apify_run_id}</div>}
+                  </div>
+                )}
+              </span>
+            )}
           </div>
         )}
 
