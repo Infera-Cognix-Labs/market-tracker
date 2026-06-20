@@ -2,18 +2,23 @@
 
 import { useState, useEffect } from "react"
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2, Package } from "lucide-react"
+import { Plus, ExternalLink, Settings, X, Trash2, CheckCircle, AlertCircle, Edit2, Package } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
-import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiReplaceTrackedAsins, apiListEvents, ApiError } from "../shared/api"
+import { Dropdown } from "../shared/Dropdown"
+import { ConfirmDialog } from "../shared/ConfirmDialog"
+import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiDeleteCompetitorTracker, apiReplaceTrackedAsins, apiListEvents, ApiError } from "../shared/api"
 import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus, DealInfo } from "../shared/types"
 
 const MARKETPLACES = [
   "amazon_us", "amazon_de", "amazon_uk", "amazon_fr",
   "amazon_it", "amazon_es", "amazon_ca", "amazon_jp",
 ]
+
+const MARKETPLACES_OPTIONS = MARKETPLACES.map(m => ({ value: m, label: m }))
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${String(i).padStart(2, "0")}:00 UTC` }))
 
 const DEFAULT_TRACK_FIELDS: CompetitorTrackFields = {
   bsr: true, price: true, buy_box: true, availability: true,
@@ -179,16 +184,20 @@ const EditTrackerModal = ({
   tracker,
   onClose,
   onUpdate,
+  onDelete,
 }: {
   tracker: CompetitorTrackerDetail
   onClose: () => void
   onUpdate: (updated: CompetitorTrackerDetail) => void
+  onDelete: (trackerCode: string) => void
 }) => {
   const [name, setName] = useState(tracker.name)
   const [trackFields, setTrackFields] = useState<CompetitorTrackFields>({ ...tracker.track_fields })
   const [hourUtc, setHourUtc] = useState(tracker.schedule.hour_utc)
   const [status, setStatus] = useState<TrackerStatus>(tracker.status)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const toggleField = (key: keyof CompetitorTrackFields) =>
@@ -211,6 +220,18 @@ const EditTrackerModal = ({
     } catch {
       setError("Failed to update tracker. Please try again.")
       setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await apiDeleteCompetitorTracker(tracker.tracker_code)
+      onDelete(tracker.tracker_code)
+    } catch {
+      setError("Failed to delete tracker.")
+      setDeleting(false)
+      setShowConfirm(false)
     }
   }
 
@@ -261,12 +282,7 @@ const EditTrackerModal = ({
 
           {/* Schedule */}
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Run at (UTC hour)</label>
-            <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-              {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>
-              ))}
-            </select>
+            <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
           </div>
 
           {/* Status */}
@@ -289,19 +305,34 @@ const EditTrackerModal = ({
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button type="button" onClick={onClose}
-              style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer" }}>
-              Cancel
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+            <button type="button" onClick={() => setShowConfirm(true)}
+              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
+              <Trash2 size={12} /> Delete
             </button>
-            <button type="submit" disabled={submitting}
-              style={{ flex: 2, padding: "10px 0", borderRadius: 8, border: "none", background: submitting ? T.bg4 : `linear-gradient(135deg, ${T.amber} 0%, ${T.amberD} 100%)`, color: submitting ? T.text3 : T.bg0, fontSize: 13, fontWeight: 700, fontFamily: T.sans, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {submitting ? "Saving…" : "Save Changes"}
-            </button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="button" onClick={onClose}
+                style={{ padding: "10px 16px", borderRadius: 8, border: `1px solid ${T.border}`, background: "none", color: T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button type="submit" disabled={submitting}
+                style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: submitting ? T.bg4 : `linear-gradient(135deg, ${T.amber} 0%, ${T.amberD} 100%)`, color: submitting ? T.text3 : T.bg0, fontSize: 13, fontWeight: 700, fontFamily: T.sans, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                {submitting ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
     </div>
+    <ConfirmDialog
+      open={showConfirm}
+      title="Delete Tracker"
+      message={<>Delete &quot;<b>{tracker.name}</b>&quot; and all its snapshots? This action cannot be undone.</>}
+      confirmLabel="Delete"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => setShowConfirm(false)}
+    />
     </div>
   )
 }
@@ -401,10 +432,7 @@ const CreateTrackerModal = ({
 
           {/* Marketplace */}
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Marketplace</label>
-            <select value={marketplace} onChange={e => setMarketplace(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-              {MARKETPLACES.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+            <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES_OPTIONS} />
           </div>
 
           {/* ASIN input */}
@@ -453,12 +481,7 @@ const CreateTrackerModal = ({
 
           {/* Schedule */}
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>Run at (UTC hour)</label>
-            <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-              {Array.from({ length: 24 }, (_, i) => (
-                <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>
-              ))}
-            </select>
+            <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
           </div>
 
           {/* Error */}
@@ -638,6 +661,12 @@ export const CompetitorPage = () => {
             setTrackerDetail(updated)
             setShowEdit(false)
           }}
+          onDelete={code => {
+            setTrackers(prev => prev.filter(t => t.tracker_code !== code))
+            setSelectedCode("")
+            setTrackerDetail(null)
+            setShowEdit(false)
+          }}
         />
       )}
       {showManageAsins && tracker && (
@@ -715,27 +744,37 @@ export const CompetitorPage = () => {
 
       {/* Tracker Info Header */}
       {tracker && (
-      <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
+      <div className="card-info">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: T.text0 }}>{tracker.name}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{tracker.name}</span>
               <Badge type="top10" text={tracker.marketplace.toUpperCase()} />
-              {tracker.status === "ACTIVE" && <span className="dot-live" />}
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: tracker.status === "ACTIVE" ? "#0F2A1A" : "#2A100F", color: tracker.status === "ACTIVE" ? T.green : T.red, border: `1px solid ${tracker.status === "ACTIVE" ? T.greenD : T.redD}`, fontFamily: T.mono }}>
+                {tracker.status === "ACTIVE" ? "Active" : tracker.status === "PAUSED" ? "Paused" : "Error"}
+              </span>
             </div>
-            <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-              <span><Calendar size={10} /> {tracker.schedule.frequency} @ {tracker.schedule.hour_utc}:00 UTC</span>
-              <span><Settings size={10} /> {tracker.stats.tracked_asin_count} ASINs</span>
-              <span><Clock size={10} /> Last: {tracker.stats.last_success_at ? new Date(tracker.stats.last_success_at).toLocaleString() : "—"}</span>
+            <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text2, marginTop: 6 }}>
+              <span>{tracker.stats.tracked_asin_count} ASINs</span>
+              <span style={{ color: T.text3 }}>·</span>
+              <span>{tracker.schedule.frequency} @ {tracker.schedule.hour_utc}:00 UTC</span>
             </div>
           </div>
-          {/* Track fields */}
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
-              <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
-                {k.replace(/_/g, " ")}
-              </span>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "right" }}>
+              {tracker.stats.last_success_at && (
+                <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  Last capture <span style={{ color: T.text1 }}>{new Date(tracker.stats.last_success_at).toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
+                <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
+                  {k.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>

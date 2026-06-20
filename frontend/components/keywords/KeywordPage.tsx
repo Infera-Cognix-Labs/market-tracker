@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
-import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, AlertCircle, Trash2 } from "lucide-react"
+import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, AlertCircle, Info } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
+import { Dropdown } from "../shared/Dropdown"
+import { ConfirmDialog } from "../shared/ConfirmDialog"
 import {
   apiListKeywordTrackers,
   apiGetLatestKeywordSnapshot,
@@ -67,6 +69,8 @@ const MARKETPLACES = [
   { value: "amazon_ca", label: "\u{1F1E8}\u{1F1E6} amazon_ca" },
   { value: "amazon_jp", label: "\u{1F1EF}\u{1F1F5} amazon_jp" },
 ]
+
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${String(i).padStart(2, "0")}:00 UTC` }))
 
 const rankTrendMeta = (product: CategorySnapshotProduct) => {
   if (product.rank_trend === "NEW") return { color: T.green, label: "New" }
@@ -241,16 +245,10 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
                 placeholder="e.g. Baby Bottle Warmers" maxLength={120} style={inputStyle} />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Marketplace</label>
-              <select value={marketplace} onChange={e => setMarketplace(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-                {MARKETPLACES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
+              <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             {error && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 14 }}>
@@ -272,13 +270,15 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
 }
 
 // ── Edit Keyword Tracker Modal ───────────────────────────────────────────
-interface EditModalProps { tracker: KeywordTracker; onClose: () => void; onUpdate: (t: KeywordTracker) => void }
+interface EditModalProps { tracker: KeywordTracker; onClose: () => void; onUpdate: (t: KeywordTracker) => void; onDelete: (trackerCode: string) => void }
 
-const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps) => {
+const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditModalProps) => {
   const [name, setName] = useState(tracker.name)
   const [hourUtc, setHourUtc] = useState(tracker.schedule.hour_utc)
   const [status, setStatus] = useState<TrackerStatus>(tracker.status as TrackerStatus)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -300,6 +300,18 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
     }
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await apiDeleteKeywordTracker(tracker.tracker_code)
+      onDelete(tracker.tracker_code)
+    } catch {
+      setError("Failed to delete tracker.")
+      setDeleting(false)
+      setShowConfirm(false)
+    }
+  }
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
       <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -314,10 +326,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
               <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>Status</label>
@@ -336,15 +345,30 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
                 <span style={{ fontSize: 12, color: T.red }}>{error}</span>
               </div>
             )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-              <button type="submit" disabled={submitting} className="btn-primary">
-                {submitting ? "Saving…" : "Save Changes"}
+            <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+              <button type="button" onClick={() => setShowConfirm(true)}
+                style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
+                <Trash2 size={12} /> Delete
               </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+                <button type="submit" disabled={submitting} className="btn-primary">
+                  {submitting ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
             </div>
           </form>
         </div>
       </div>
+    <ConfirmDialog
+      open={showConfirm}
+      title="Delete Tracker"
+      message={<>Delete &quot;<b>{tracker.name}</b>&quot; and all its snapshots? This action cannot be undone.</>}
+      confirmLabel="Delete"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => setShowConfirm(false)}
+    />
     </div>
   )
 }
@@ -384,6 +408,7 @@ export const KeywordPageInner = () => {
   const [openCouponKey, setOpenCouponKey] = useState<string | null>(null)
   const [openDealKey, setOpenDealKey] = useState<string | null>(null)
   const [triggering, setTriggering] = useState(false)
+  const [showMetaDetail, setShowMetaDetail] = useState(false)
 
   const handleTriggerJob = async () => {
     if (!selectedCode) return
@@ -530,19 +555,6 @@ export const KeywordPageInner = () => {
     setRefreshKey(k => k + 1)
   }
 
-  const handleDelete = async () => {
-    if (!selectedCode) return
-    if (!window.confirm("Delete this tracker and all its snapshots?")) return
-    try {
-      await apiDeleteKeywordTracker(selectedCode)
-      setTrackers(prev => prev.filter(t => t.tracker_code !== selectedCode))
-      setSelectedCode("")
-      setSnapshot(null)
-    } catch {
-      setError("Failed to delete tracker.")
-    }
-  }
-
   // KPI counts
   const newEntrantCount = snapshot?.summary.new_entrant_count ?? 0
   const returningCount = snapshot?.summary.returning_count ?? 0
@@ -593,6 +605,12 @@ export const KeywordPageInner = () => {
           tracker={selectedTracker}
           onClose={() => setShowEdit(false)}
           onUpdate={handleUpdate}
+          onDelete={code => {
+            setTrackers(prev => prev.filter(t => t.tracker_code !== code))
+            setSelectedCode("")
+            setSnapshot(null)
+            setShowEdit(false)
+          }}
         />
       )}
       <div className="anim-fade">
@@ -652,38 +670,34 @@ export const KeywordPageInner = () => {
 
         {/* Tracker info card */}
         {selectedTracker && (
-          <div className="card" style={{ marginBottom: 16, padding: "14px 18px", borderLeft: `3px solid ${T.amber}` }}>
+          <div className="card-info">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{selectedTracker.name}</span>
-                  {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
-                </div>
-                <div style={{ display: "flex", gap: 16, marginTop: 6 }}>
-                  <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                    Keyword: <strong style={{ color: T.amber }}>&quot;{selectedTracker.scope.keyword}&quot;</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{selectedTracker.name}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: selectedTracker.status === "ACTIVE" ? "#0F2A1A" : "#2A100F", color: selectedTracker.status === "ACTIVE" ? T.green : T.red, border: `1px solid ${selectedTracker.status === "ACTIVE" ? T.greenD : T.redD}`, fontFamily: T.mono }}>
+                    {selectedTracker.status === "ACTIVE" ? "Active" : selectedTracker.status === "PAUSED" ? "Paused" : "Error"}
                   </span>
-                  {selectedTracker.scope.sort_by && (
-                    <>
-                      <span style={{ fontSize: 11, color: T.text3 }}>|</span>
-                      <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>Sort: {selectedTracker.scope.sort_by}</span>
-                    </>
-                  )}
                 </div>
-                <div style={{ display: "flex", gap: 16, marginTop: 6, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                  <span>Schedule: {selectedTracker.schedule.frequency} @ {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC</span>
-                  <span>Top N: {selectedTracker.tracking_config.top_n}</span>
+                <div style={{ fontSize: 12, color: T.text2, marginTop: 6 }}>
+                  &quot;{selectedTracker.scope.keyword}&quot;
+                  {" · Top "}
+                  {selectedTracker.tracking_config.top_n}
+                  {" · "}
+                  {selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()}
+                  {" at "}
+                  {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
                 </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>Last Success: {selectedTracker.stats.last_success_at ? new Date(selectedTracker.stats.last_success_at).toLocaleString() : "—"}</div>
-                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Snapshots: {selectedTracker.stats.snapshot_count}</div>
-                {selectedTracker.latest_snapshot_summary && (
-                  <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Latest: {selectedTracker.latest_snapshot_summary.snapshot_date}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "right" }}>
+                {selectedTracker.stats.last_success_at && (
+                  <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                    Last capture <span style={{ color: T.text1 }}>{new Date(selectedTracker.stats.last_success_at).toLocaleDateString()}</span>
+                  </div>
                 )}
-                <button onClick={handleDelete} style={{ marginTop: 8, padding: "4px 10px", borderRadius: 6, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
-                  <Trash2 size={11} /> Delete
-                </button>
+                <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  Snapshots <span style={{ color: T.text1 }}>{selectedTracker.stats.snapshot_count}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -713,11 +727,26 @@ export const KeywordPageInner = () => {
 
         {/* Snapshot metadata */}
         {snapshot && (
-          <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap", alignItems: "center" }}>
             <span>Snapshot: {snapshot.snapshot_date}</span>
+            <span>·</span>
             <span>Captured: {new Date(snapshot.captured_at).toLocaleString()}</span>
-            {snapshot.source_refs?.provider && <span>Provider: {snapshot.source_refs.provider}</span>}
-            {snapshot.source_refs?.apify_run_id && <span>Run: {snapshot.source_refs.apify_run_id}</span>}
+            {(snapshot.source_refs?.provider || snapshot.source_refs?.apify_run_id) && (
+              <span style={{ position: "relative", display: "inline-flex" }}>
+                <button type="button" onClick={() => setShowMetaDetail(v => !v)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 4px", borderRadius: 4, transition: "color .15s" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T.text1 }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T.text3 }}>
+                  <Info size={11} /> Details
+                </button>
+                {showMetaDetail && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, padding: "8px 10px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 10, color: T.text2, fontFamily: T.mono, whiteSpace: "nowrap", zIndex: 20, boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+                    {snapshot.source_refs?.provider && <div>Provider: {snapshot.source_refs.provider}</div>}
+                    {snapshot.source_refs?.apify_run_id && <div>Run: {snapshot.source_refs.apify_run_id}</div>}
+                  </div>
+                )}
+              </span>
+            )}
           </div>
         )}
 

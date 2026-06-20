@@ -22,7 +22,6 @@ WORKDIR /app
 
 COPY --from=builder /app/.venv /app/.venv
 COPY app ./app
-COPY docs ./docs
 COPY app-config.yaml ./app-config.yaml
 
 RUN mkdir -p /app/outputs/object-store
