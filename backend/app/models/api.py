@@ -736,6 +736,12 @@ class WeeklyDigestSummary(ApiModel):
     listing_change_count: int
 
 
+class DigestInsights(ApiModel):
+    executive_summary: str
+    key_trends: list[str]
+    risk_assessment: str
+
+
 class WeeklyDigest(ApiModel):
     digest_code: str
     week_start: date
@@ -744,6 +750,7 @@ class WeeklyDigest(ApiModel):
     summary: WeeklyDigestSummary
     threats: list[Threat]
     report_storage_uri: str | None = None
+    insights: DigestInsights | None = None
     created_at: datetime
 
 

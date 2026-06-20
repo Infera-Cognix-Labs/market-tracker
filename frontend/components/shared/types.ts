@@ -542,6 +542,12 @@ export interface JobError {
 
 // ── Weekly Digest ─────────────────────────────────────────────────────────────
 
+export interface DigestInsights {
+  executive_summary: string
+  key_trends: string[]
+  risk_assessment: string
+}
+
 export interface WeeklyDigest {
   digest_code: string
   week_start: string
@@ -550,6 +556,7 @@ export interface WeeklyDigest {
   summary: WeeklyDigestSummary
   threats: Threat[]
   report_storage_uri?: string | null
+  insights?: DigestInsights | null
   created_at: string
 }
 
