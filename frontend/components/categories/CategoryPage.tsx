@@ -6,6 +6,7 @@ import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { Dropdown } from "../shared/Dropdown"
+import { ConfirmDialog } from "../shared/ConfirmDialog"
 import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiDeleteCategoryTracker, apiTriggerJob, apiListEvents, ApiError } from "../shared/api"
 import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
 
@@ -307,6 +308,7 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
   const [status, setStatus] = useState<TrackerStatus>(tracker.status as TrackerStatus)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -330,7 +332,6 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
   }
 
   const handleDelete = async () => {
-    if (!window.confirm("Delete this tracker and all its snapshots?")) return
     setDeleting(true)
     try {
       await apiDeleteCategoryTracker(tracker.tracker_code)
@@ -338,6 +339,7 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
     } catch {
       setError("Failed to delete tracker.")
       setDeleting(false)
+      setShowConfirm(false)
     }
   }
 
@@ -385,9 +387,9 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
             </div>
           )}
           <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
-            <button type="button" onClick={handleDelete} disabled={deleting}
-              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: deleting ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans, opacity: deleting ? 0.5 : 1 }}>
-              <Trash2 size={12} /> {deleting ? "Deleting…" : "Delete"}
+            <button type="button" onClick={() => setShowConfirm(true)}
+              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
+              <Trash2 size={12} /> Delete
             </button>
             <div style={{ display: "flex", gap: 10 }}>
               <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
@@ -399,6 +401,15 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
         </form>
       </div>
     </div>
+    <ConfirmDialog
+      open={showConfirm}
+      title="Delete Tracker"
+      message={`Delete "${tracker.name}" and all its snapshots? This action cannot be undone.`}
+      confirmLabel="Delete"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => setShowConfirm(false)}
+    />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
 import { Dropdown } from "../shared/Dropdown"
+import { ConfirmDialog } from "../shared/ConfirmDialog"
 import { apiListCompetitorTrackers, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiCreateCompetitorTracker, apiUpdateCompetitorTracker, apiDeleteCompetitorTracker, apiReplaceTrackedAsins, apiListEvents, ApiError } from "../shared/api"
 import type { CompetitorTrackerDetail, TrackedProductSummary, ProductDetail, ProductTimelineResponse, CompetitorTrackerCreateRequest, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Timeframe, Event, TrackerStatus, DealInfo } from "../shared/types"
 
@@ -196,6 +197,7 @@ const EditTrackerModal = ({
   const [status, setStatus] = useState<TrackerStatus>(tracker.status)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const toggleField = (key: keyof CompetitorTrackFields) =>
@@ -222,7 +224,6 @@ const EditTrackerModal = ({
   }
 
   const handleDelete = async () => {
-    if (!window.confirm("Delete this tracker and all its snapshots?")) return
     setDeleting(true)
     try {
       await apiDeleteCompetitorTracker(tracker.tracker_code)
@@ -230,6 +231,7 @@ const EditTrackerModal = ({
     } catch {
       setError("Failed to delete tracker.")
       setDeleting(false)
+      setShowConfirm(false)
     }
   }
 
@@ -304,9 +306,9 @@ const EditTrackerModal = ({
           )}
 
           <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
-            <button type="button" onClick={handleDelete} disabled={deleting}
-              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: deleting ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans, opacity: deleting ? 0.5 : 1 }}>
-              <Trash2 size={12} /> {deleting ? "Deleting…" : "Delete"}
+            <button type="button" onClick={() => setShowConfirm(true)}
+              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
+              <Trash2 size={12} /> Delete
             </button>
             <div style={{ display: "flex", gap: 10 }}>
               <button type="button" onClick={onClose}
@@ -322,6 +324,15 @@ const EditTrackerModal = ({
         </form>
       </div>
     </div>
+    <ConfirmDialog
+      open={showConfirm}
+      title="Delete Tracker"
+      message={`Delete "${tracker.name}" and all its snapshots? This action cannot be undone.`}
+      confirmLabel="Delete"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => setShowConfirm(false)}
+    />
     </div>
   )
 }
