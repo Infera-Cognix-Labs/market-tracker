@@ -255,6 +255,34 @@ export const ReportsPage = () => {
               </div>
             </div>
 
+            {/* AI Insights */}
+            {selected.insights && (
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>AI Insights</span>
+                  <span style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, borderRadius: 4, color: T.text3, border: `1px solid ${T.border}` }}>AI-Powered</span>
+                </div>
+                <div style={{ fontSize: 12, color: T.text0, lineHeight: 1.6, marginBottom: 12 }}>
+                  {selected.insights.executive_summary}
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: T.text2, marginBottom: 6, textTransform: "uppercase" as const, letterSpacing: ".04em" }}>Key Trends</div>
+                  {selected.insights.key_trends.map((trend, i) => (
+                    <div key={i} style={{ fontSize: 11, color: T.text1, marginBottom: 4, paddingLeft: 12, position: "relative" as const, lineHeight: 1.5 }}>
+                      <span style={{ position: "absolute", left: 0, color: T.text3 }}>•</span>
+                      {trend}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: T.text2, marginBottom: 4, textTransform: "uppercase" as const, letterSpacing: ".04em" }}>Risk Assessment</div>
+                  <div style={{ fontSize: 11, color: T.text1, lineHeight: 1.5 }}>
+                    {selected.insights.risk_assessment}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Threats */}
             <div className="card">
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>

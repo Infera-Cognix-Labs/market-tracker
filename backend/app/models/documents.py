@@ -16,6 +16,7 @@ from app.models.api import (
     CompetitorTrackerStats,
     CompetitorTrackFields,
     DealInfo,
+    DigestInsights,
     EventPayload,
     ExternalRunSummary,
     JobError,
@@ -67,7 +68,7 @@ class CategorySnapshotDocument(WorkspaceDocument):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 100
+    top_n: int = 60
     products: list[CategorySnapshotProduct] = Field(default_factory=list)
     summary: CategorySnapshotSummary
     source_refs: dict[str, object] | None = None
@@ -242,7 +243,7 @@ class ProductDocument(WorkspaceDocument):
     parent_asin: str | None = None
     brand: str
     title_latest: str
-    product_url: str
+    product_url: str | None = None
     main_image_url_latest: str
     first_seen_at: datetime
     last_seen_at: datetime
@@ -268,7 +269,7 @@ class ProductSnapshotDocument(WorkspaceDocument):
     brand: str
     title: str
     title_hash: str | None = None
-    product_url: str
+    product_url: str | None = None
     main_image_url: str
     main_image_hash: str | None = None
     bsr_position: int | None = None
@@ -405,6 +406,7 @@ class WeeklyDigestDocument(WorkspaceDocument):
     summary: WeeklyDigestSummary
     threats: list[Threat]
     report_storage_uri: str | None = None
+    insights: DigestInsights | None = None
     created_at: datetime
 
     class Settings:

@@ -5,8 +5,8 @@ export const T = {
   bg2:    "#111520",
   bg3:    "#171C2D",
   bg4:    "#1C2238",
-  border: "#232B42",
-  border2:"#2A3452",
+  border: "#1E2640",
+  border2:"#232B42",
   text0:  "#EEF1FA",
   text1:  "#B8C0D8",
   text2:  "#6B7699",
@@ -25,6 +25,12 @@ export const T = {
   mono:   "'JetBrains Mono', monospace",
   sans:   "'Space Grotesk', system-ui, sans-serif",
 }
+
+export const MARKETPLACE_LABELS: Record<string, string> = {
+  amazon_us: "US", amazon_de: "Germany", amazon_uk: "UK", amazon_fr: "France",
+  amazon_it: "Italy", amazon_es: "Spain", amazon_ca: "Canada", amazon_jp: "Japan",
+}
+export const marketplaceLabel = (mp: string) => MARKETPLACE_LABELS[mp] ?? mp.replace("amazon_", "").toUpperCase()
 
 export const css = `
   *{box-sizing:border-box;margin:0;padding:0}
@@ -49,6 +55,8 @@ export const css = `
   .input:focus{border-color:${T.blue}}
   .input::placeholder{color:${T.text3}}
   .card{background:${T.bg2};border:1px solid ${T.border};border-radius:10px;padding:16px}
+  .card-soft{background:${T.bg2};border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .card-info{background:${T.bg3};border:1px solid ${T.border2};border-radius:10px;padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,.35);margin-bottom:16px}
   .divider{height:1px;background:${T.border};margin:12px 0}
   .tag-new{background:#0F2A1A;color:${T.green};border:1px solid ${T.greenD}}
   .tag-ret{background:#1A2010;color:#90EE90;border:1px solid #3A5A2A}

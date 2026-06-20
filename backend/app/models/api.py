@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 MarketplaceCode = Annotated[str, StringConstraints(pattern=r"^amazon_[a-z]{2}$")]
 AsinCode = Annotated[str, StringConstraints(min_length=10, max_length=12)]
@@ -151,20 +151,12 @@ class ErrorResponse(ApiModel):
 
 
 class CategoryScope(ApiModel):
+    browse_node_url: str
     browse_node_id: str | None = None
-    browse_node_url: str | None = None
-
-    @model_validator(mode="after")
-    def validate_scope(self) -> "CategoryScope":
-        if not self.browse_node_id and not self.browse_node_url:
-            raise ValueError(
-                "Either browse_node_id or browse_node_url must be provided."
-            )
-        return self
 
 
 class CategoryTrackingConfig(ApiModel):
-    top_n: int = Field(default=100)
+    top_n: int = Field(default=60)
     top10_alert_enabled: bool
 
 
@@ -332,8 +324,8 @@ class CategorySnapshotSummary(ApiModel):
 
 class CategorySnapshotProduct(ApiModel):
     asin: AsinCode
-    rank_position: int = Field(ge=1, le=50)
-    previous_rank_position: int | None = Field(default=None, ge=1, le=50)
+    rank_position: int = Field(ge=1, le=100)
+    previous_rank_position: int | None = Field(default=None, ge=1, le=100)
     rank_delta: int | None = None
     rank_trend: Literal["UP", "DOWN", "STABLE", "NEW"] | None = None
     comparison_snapshot_date: date | None = None
@@ -358,7 +350,7 @@ class CategorySnapshot(ApiModel):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 100
+    top_n: int = 60
     products: list[CategorySnapshotProduct]
     summary: CategorySnapshotSummary
     source_refs: dict[str, Any] | None = None
@@ -399,6 +391,7 @@ class TrackedProductSummary(ApiModel):
     asin: AsinCode
     brand: str
     title: str
+    product_url: str | None = None
     current_bsr_position: int | None = None
     current_price: float | None = None
     currency: str | None = None
@@ -517,7 +510,7 @@ class ProductDetail(ApiModel):
     parent_asin: str | None = None
     brand: str
     title_latest: str
-    product_url: str
+    product_url: str | None = None
     main_image_url_latest: str
     first_seen_at: datetime
     last_seen_at: datetime
@@ -568,7 +561,7 @@ class ProductSnapshot(ApiModel):
     brand: str
     title: str
     title_hash: str | None = None
-    product_url: str
+    product_url: str | None = None
     main_image_url: str
     main_image_hash: str | None = None
     bsr_position: int | None = None
@@ -743,6 +736,12 @@ class WeeklyDigestSummary(ApiModel):
     listing_change_count: int
 
 
+class DigestInsights(ApiModel):
+    executive_summary: str
+    key_trends: list[str]
+    risk_assessment: str
+
+
 class WeeklyDigest(ApiModel):
     digest_code: str
     week_start: date
@@ -751,6 +750,7 @@ class WeeklyDigest(ApiModel):
     summary: WeeklyDigestSummary
     threats: list[Threat]
     report_storage_uri: str | None = None
+    insights: DigestInsights | None = None
     created_at: datetime
 
 

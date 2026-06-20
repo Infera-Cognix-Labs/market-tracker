@@ -351,6 +351,28 @@ class WorkerConfig(BaseModel):
     )
 
 
+class LLMConfig(BaseModel):
+    enabled: bool = _config_bool(
+        ("llm", "enabled"), False, "LLM_ENABLED"
+    )
+    api_key: str | None = _read_secret(env_name="OPENAI_API_KEY")
+    model: str = (
+        _config_str(("llm", "model"), "gpt-4o-mini", "LLM_MODEL") or "gpt-4o-mini"
+    )
+    max_tokens: int = _config_int(
+        ("llm", "max_tokens"), 2500, "LLM_MAX_TOKENS"
+    ) or 2500
+    temperature: float = float(
+        _config_str(("llm", "temperature"), "0.3", "LLM_TEMPERATURE") or "0.3"
+    )
+    timeout_secs: int = _config_int(
+        ("llm", "timeout_secs"), 30, "LLM_TIMEOUT_SECS"
+    ) or 30
+    retry_attempts: int = _config_int(
+        ("llm", "retry_attempts"), 2, "LLM_RETRY_ATTEMPTS"
+    ) or 2
+
+
 class Config(BaseModel):
     app_name: str = (
         _config_str(("app", "name"), "Market Tracker API") or "Market Tracker API"
@@ -363,6 +385,7 @@ class Config(BaseModel):
     apify_config: ApifyConfig = ApifyConfig()
     storage_config: StorageConfig = StorageConfig()
     worker_config: WorkerConfig = WorkerConfig()
+    llm_config: LLMConfig = Field(default_factory=LLMConfig)
 
 
 @lru_cache(maxsize=1)

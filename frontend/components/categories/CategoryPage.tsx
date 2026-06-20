@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
-import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, CheckCircle, AlertCircle } from "lucide-react"
-import { T } from "../shared/DesignTokens"
+import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, CheckCircle, AlertCircle, Info } from "lucide-react"
+import { T, marketplaceLabel } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiListEvents, ApiError } from "../shared/api"
+import { Dropdown } from "../shared/Dropdown"
+import { ConfirmDialog } from "../shared/ConfirmDialog"
+import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiDeleteCategoryTracker, apiTriggerJob, apiListEvents, ApiError } from "../shared/api"
 import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
 
 type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
@@ -23,14 +25,18 @@ const CATEGORY_FILTER_TO_EVENT: Record<Exclude<CategoryKpiFilter, "ALL">, EventT
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function parseNodeId(input: string): string | null {
+function parseBestsellerUrl(input: string): string | null {
   const trimmed = input.trim()
-  if (/^\d+$/.test(trimmed)) return trimmed
-  const pathMatch = trimmed.match(/\/zgbs\/[^/]+\/(\d+)/)
-  if (pathMatch) return pathMatch[1]
-  const queryMatch = trimmed.match(/[?&]node=(\d+)/)
-  if (queryMatch) return queryMatch[1]
-  return null
+  if (!trimmed.startsWith("http")) return null
+  try {
+    const url = new URL(trimmed)
+    if (url.hostname.includes("amazon.") && (trimmed.includes("/zgbs/") || trimmed.includes("Best-Sellers") || trimmed.includes("best-sellers"))) {
+      return trimmed
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 const extractBrandName = (url: string): string => {
@@ -175,8 +181,10 @@ const matchesCategoryEventSearch = (search: string, event: Event): boolean => {
 // ── Create Category Tracker Modal ─────────────────────────────────────────────
 interface CreateModalProps { onClose: () => void; onCreate: (t: CategoryTracker) => void }
 
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${String(i).padStart(2, "0")}:00 UTC` }))
+
 const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
-  const [nodeInput, setNodeInput] = useState("")
+  const [urlInput, setUrlInput] = useState("")
   const [name, setName] = useState("")
   const [marketplace, setMarketplace] = useState("amazon_us")
   const [top10Alert, setTop10Alert] = useState(true)
@@ -184,17 +192,15 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const parsedNodeId = parseNodeId(nodeInput)
-  const isUrl = nodeInput.trim().startsWith("http")
+  const parsedUrl = parseBestsellerUrl(urlInput)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (!nodeInput.trim()) { setError("Please enter a browse node ID or URL."); return }
+    if (!urlInput.trim()) { setError("Please enter a Best-sellers category URL."); return }
+    if (!parsedUrl) { setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.com/Best-Sellers/zgbs/...)"); return }
     if (!name.trim()) { setError("Please enter a tracker name."); return }
-    const scope = isUrl
-      ? { browse_node_url: nodeInput.trim(), browse_node_id: parsedNodeId ?? undefined }
-      : { browse_node_id: nodeInput.trim() }
+    const scope = { browse_node_url: parsedUrl }
     const payload: CategoryTrackerCreateRequest = {
       name: name.trim(), marketplace, scope,
       tracking_config: { top10_alert_enabled: top10Alert },
@@ -207,7 +213,7 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setError("A tracker for this marketplace and node already exists.")
+          setError("A tracker for this marketplace and URL already exists.")
         } else if (err.status === 400 && err.details?.reason) {
           setError(err.details.reason)
         } else {
@@ -222,53 +228,47 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
-    <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div className="card" style={{ width: "100%", maxWidth: 560, padding: "24px 28px", position: "relative" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>New Category Tracker</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "flex" }}><X size={18} /></button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Browse Node ID or Best-sellers URL</label>
-            <div style={{ position: "relative" }}>
-              <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
-              <input type="text" value={nodeInput} onChange={e => setNodeInput(e.target.value)}
-                placeholder="e.g. 13893610011 or https://www.amazon.com/Best-Sellers/zgbs/..."
-                style={{ ...inputStyle, paddingLeft: 32 }} />
-            </div>
-            {nodeInput.trim() && (
-              <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 6 }}>
-                {parsedNodeId
-                  ? <><CheckCircle size={12} style={{ color: T.green }} /><span style={{ fontSize: 11, color: T.green, fontFamily: T.mono }}>Node ID: {parsedNodeId}</span></>
-                  : <><AlertCircle size={12} style={{ color: T.red }} /><span style={{ fontSize: 11, color: T.red }}>Could not extract node ID — check URL format</span></>
-                }
-                {isUrl && (
-                  <a href={nodeInput.trim()} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 11, color: T.blue, marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 3, textDecoration: "none" }}>
-                    Preview <ExternalLink size={10} />
-                  </a>
-                )}
-              </div>
-            )}
+      <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div className="card" style={{ width: "100%", maxWidth: 560, padding: "24px 28px", position: "relative" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>New Category Tracker</span>
+            <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "flex" }}><X size={18} /></button>
           </div>
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Best-sellers Category URL</label>
+              <div style={{ position: "relative" }}>
+                <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
+                <input type="text" value={urlInput} onChange={e => setUrlInput(e.target.value)}
+                  placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
+                  style={{ ...inputStyle, paddingLeft: 32 }} />
+              </div>
+              {urlInput.trim() && (
+                <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 6 }}>
+                  {parsedUrl
+                    ? <><CheckCircle size={12} style={{ color: T.green }} /><span style={{ fontSize: 11, color: T.green }}>Valid Best-sellers URL</span></>
+                    : <><AlertCircle size={12} style={{ color: T.red }} /><span style={{ fontSize: 11, color: T.red }}>Please enter a valid Amazon Best-sellers URL</span></>
+                  }
+                  {parsedUrl && (
+                    <a href={parsedUrl} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: T.blue, marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 3, textDecoration: "none" }}>
+                      Preview <ExternalLink size={10} />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Tracker Name</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. Baby Bottle Warmers - US" maxLength={120} style={inputStyle} />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Marketplace</label>
-            <select value={marketplace} onChange={e => setMarketplace(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-              {MARKETPLACES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
+            <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
           </div>
           <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
               <label style={labelStyle}>Top 10 Alerts</label>
@@ -299,14 +299,16 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
 }
 
 // ── Edit Category Tracker Modal ───────────────────────────────────────────────
-interface EditModalProps { tracker: CategoryTracker; onClose: () => void; onUpdate: (t: CategoryTracker) => void }
+interface EditModalProps { tracker: CategoryTracker; onClose: () => void; onUpdate: (t: CategoryTracker) => void; onDelete: (trackerCode: string) => void }
 
-const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps) => {
+const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditModalProps) => {
   const [name, setName] = useState(tracker.name)
   const [top10Alert, setTop10Alert] = useState(tracker.tracking_config.top10_alert_enabled)
   const [hourUtc, setHourUtc] = useState(tracker.schedule.hour_utc)
   const [status, setStatus] = useState<TrackerStatus>(tracker.status as TrackerStatus)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -329,6 +331,18 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
     }
   }
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await apiDeleteCategoryTracker(tracker.tracker_code)
+      onDelete(tracker.tracker_code)
+    } catch {
+      setError("Failed to delete tracker.")
+      setDeleting(false)
+      setShowConfirm(false)
+    }
+  }
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
     <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -344,10 +358,7 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
           </div>
           <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
               <label style={labelStyle}>Top 10 Alerts</label>
@@ -375,15 +386,30 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
               <span style={{ fontSize: 12, color: T.red }}>{error}</span>
             </div>
           )}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-            <button type="submit" disabled={submitting} className="btn-primary">
-              {submitting ? "Saving…" : "Save Changes"}
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+            <button type="button" onClick={() => setShowConfirm(true)}
+              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
+              <Trash2 size={12} /> Delete
             </button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+              <button type="submit" disabled={submitting} className="btn-primary">
+                {submitting ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
     </div>
+    <ConfirmDialog
+      open={showConfirm}
+      title="Delete Tracker"
+      message={<>Delete &quot;<b>{tracker.name}</b>&quot; and all its snapshots? This action cannot be undone.</>}
+      confirmLabel="Delete"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => setShowConfirm(false)}
+    />
     </div>
   )
 }
@@ -421,6 +447,21 @@ export const CategoryPageInner = () => {
   const [activeKpiFilter, setActiveKpiFilter] = useState<CategoryKpiFilter>("ALL")
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
   const [justAdded, setJustAdded] = useState<string | null>(null)
+  const [triggering, setTriggering] = useState(false)
+  const [showMetaDetail, setShowMetaDetail] = useState(false)
+
+  const handleTriggerJob = async () => {
+    if (!selectedCode) return
+    setTriggering(true)
+    try {
+      await apiTriggerJob("CATEGORY", selectedCode)
+      setRefreshKey(k => k + 1)
+    } catch {
+      // ignore
+    } finally {
+      setTriggering(false)
+    }
+  }
 
   // Load trackers
   useEffect(() => {
@@ -560,7 +601,7 @@ export const CategoryPageInner = () => {
         />
       )}
       <div className="anim-fade">
-        <PageHeader title="Category Tracker" sub="Top 50 BSR — Daily snapshots from normalized data"
+        <PageHeader title="Category Tracker" sub="Daily BSR movement across selected Amazon categories"
           actions={
             <button className="btn-primary" onClick={() => setShowCreate(true)}
               style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -606,10 +647,11 @@ export const CategoryPageInner = () => {
           tracker={selectedTracker}
           onClose={() => setShowEdit(false)}
           onUpdate={t => { setTrackers(prev => prev.map(x => x.tracker_code === t.tracker_code ? t : x)); setShowEdit(false) }}
+          onDelete={code => { setTrackers(prev => prev.filter(x => x.tracker_code !== code)); setSelectedCode(""); setShowEdit(false) }}
         />
       )}
     <div className="anim-fade">
-      <PageHeader title="Category Tracker" sub="Top 50 BSR — Daily snapshots from normalized data"
+      <PageHeader title="Category Tracker" sub="Daily BSR movement across selected Amazon categories"
         actions={
           <div style={{ display: "flex", gap: 8 }}>
             {selectedTracker && (
@@ -655,38 +697,43 @@ export const CategoryPageInner = () => {
 
       {/* Tracker info card */}
       {selectedTracker && (
-        <div className="card" style={{ marginBottom: 16, padding: "14px 18px", borderLeft: `3px solid ${T.amber}` }}>
+        <div className="card-info">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{selectedTracker.name}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{selectedTracker.name}</span>
                 <Badge type="top10" text={selectedTracker.marketplace.toUpperCase()} />
-                {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
-              </div>
-              <div style={{ display: "flex", gap: 16, marginTop: 6 }}>
-                <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                  Node: <strong style={{ color: T.amber }}>{selectedTracker.scope.browse_node_id}</strong>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: selectedTracker.status === "ACTIVE" ? "#0F2A1A" : "#2A100F", color: selectedTracker.status === "ACTIVE" ? T.green : T.red, border: `1px solid ${selectedTracker.status === "ACTIVE" ? T.greenD : T.redD}`, fontFamily: T.mono }}>
+                  {selectedTracker.status === "ACTIVE" ? "Active" : selectedTracker.status === "PAUSED" ? "Paused" : "Error"}
                 </span>
-                <span style={{ fontSize: 11, color: T.text3 }}>|</span>
-                {selectedTracker.scope.browse_node_url && (
-                  <a href={selectedTracker.scope.browse_node_url} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 11, color: T.blue, fontFamily: T.mono, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
-                    Browse Node URL <ExternalLink size={9} />
-                  </a>
-                )}
               </div>
-              <div style={{ display: "flex", gap: 16, marginTop: 6, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                <span>Schedule: {selectedTracker.schedule.frequency} @ {selectedTracker.schedule.hour_utc}:00 UTC</span>
-                <span>Top N: {selectedTracker.tracking_config.top_n}</span>
-                <span>Top 10 Alerts: {selectedTracker.tracking_config.top10_alert_enabled ? "ON" : "OFF"}</span>
+              {selectedTracker.scope.browse_node_url && (
+                <a href={selectedTracker.scope.browse_node_url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 11, color: T.text3, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 2, transition: "color .15s" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = T.blue }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = T.text3 }}>
+                  <ExternalLink size={10} /> Category URL
+                </a>
+              )}
+              <div style={{ fontSize: 12, color: T.text2, marginTop: 6 }}>
+                Amazon {marketplaceLabel(selectedTracker.marketplace)}
+                {" · Top "}
+                {selectedTracker.tracking_config.top_n}
+                {" · "}
+                {selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()}
+                {" at "}
+                {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
               </div>
             </div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>Last Success: {selectedTracker.stats.last_success_at ? new Date(selectedTracker.stats.last_success_at).toLocaleString() : "—"}</div>
-              <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Snapshots: {selectedTracker.stats.snapshot_count}</div>
-              {selectedTracker.latest_snapshot_summary && (
-                <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Latest: {selectedTracker.latest_snapshot_summary.snapshot_date}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "right" }}>
+              {selectedTracker.stats.last_success_at && (
+                <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  Last capture <span style={{ color: T.text1 }}>{new Date(selectedTracker.stats.last_success_at).toLocaleDateString()}</span>
+                </div>
               )}
+              <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                Snapshots <span style={{ color: T.text1 }}>{selectedTracker.stats.snapshot_count}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -716,12 +763,28 @@ export const CategoryPageInner = () => {
 
       {/* Snapshot metadata */}
       {snapshot && (
-        <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, marginBottom: 8, fontSize: 11, color: T.text3, fontFamily: T.mono, flexWrap: "wrap", alignItems: "center" }}>
           <span>Snapshot: {snapshot.snapshot_date}</span>
+          <span>·</span>
           <span>Captured: {new Date(snapshot.captured_at).toLocaleString()}</span>
+          <span>·</span>
           <span>Compare: {rankTimeframe.toLowerCase()}</span>
-          {snapshot.source_refs?.provider && <span>Provider: {snapshot.source_refs.provider}</span>}
-          {snapshot.source_refs?.apify_run_id && <span>Run: {snapshot.source_refs.apify_run_id}</span>}
+          {(snapshot.source_refs?.provider || snapshot.source_refs?.apify_run_id) && (
+            <span style={{ position: "relative", display: "inline-flex" }}>
+              <button type="button" onClick={() => setShowMetaDetail(v => !v)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: T.text3, display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 4px", borderRadius: 4, transition: "color .15s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = T.text1 }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = T.text3 }}>
+                <Info size={11} /> Details
+              </button>
+              {showMetaDetail && (
+                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, padding: "8px 10px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 10, color: T.text2, fontFamily: T.mono, whiteSpace: "nowrap", zIndex: 20, boxShadow: "0 4px 12px rgba(0,0,0,.4)" }}>
+                  {snapshot.source_refs?.provider && <div>Provider: {snapshot.source_refs.provider}</div>}
+                  {snapshot.source_refs?.apify_run_id && <div>Run: {snapshot.source_refs.apify_run_id}</div>}
+                </div>
+              )}
+            </span>
+          )}
         </div>
       )}
 
@@ -1009,7 +1072,21 @@ export const CategoryPageInner = () => {
           <div style={{ textAlign: "center", padding: "48px 0", color: T.text3, fontSize: 13 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
             <div style={{ fontWeight: 600, color: T.text2, marginBottom: 6 }}>No snapshot yet</div>
-            <div style={{ fontSize: 12 }}>This tracker hasn&apos;t run yet. Trigger a job or wait for the scheduled run.</div>
+            <div style={{ fontSize: 12, marginBottom: 16 }}>This tracker hasn&apos;t run yet.</div>
+            <button
+              type="button"
+              disabled={triggering}
+              onClick={handleTriggerJob}
+              style={{
+                padding: "8px 20px", borderRadius: 8, border: `1px solid ${T.blue}`,
+                background: triggering ? `${T.blue}60` : T.blue, color: "#fff",
+                fontSize: 13, fontWeight: 600, cursor: triggering ? "wait" : "pointer",
+                fontFamily: T.sans, display: "inline-flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <Zap size={14} />
+              {triggering ? "Triggering..." : "Trigger Now"}
+            </button>
           </div>
         )}
         {!loading && snapshot && allVisibleRows.length === 0 && (

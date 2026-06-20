@@ -33,7 +33,7 @@ class NormalizedProductRecord:
     captured_at: datetime
     brand: str
     title: str
-    product_url: str
+    product_url: str | None
     main_image_url: str
     title_hash: str
     main_image_hash: str
@@ -115,11 +115,8 @@ class NormalizationService:
             or "Unknown"
         )
 
-        product_url = (
-            _coerce_string(
-                _pick(payload, "url", "product_url", "productUrl", "productLink")
-            )
-            or f"https://www.amazon.com/dp/{asin}"
+        product_url = _coerce_string(
+            _pick(payload, "url", "product_url", "productUrl", "productLink")
         )
 
         main_image_url = _coerce_image_url(payload)
@@ -148,17 +145,23 @@ class NormalizationService:
             if isinstance(nested_deal_price, dict):
                 price_current = _coerce_float(nested_deal_price.get("amount"))
 
-        price_original = _coerce_float(
-            _pick(payload, "price_original", "originalPrice", "list_price", "list_price")
-        )
-        if price_original is None:
-            nested_list_price = _pick(payload, "list_price")
-            if isinstance(nested_list_price, dict):
-                price_original = _coerce_float(nested_list_price.get("amount"))
-
         currency = _coerce_currency(
             _pick(payload, "currency", "currencyCode", "currency_code")
         )
+        if not currency:
+            price_obj = payload.get("price")
+            if isinstance(price_obj, dict):
+                currency = _coerce_currency(price_obj.get("currency"))
+
+        price_original = _coerce_float(
+            _pick(payload, "price_original", "originalPrice", "list_price", "listPrice")
+        )
+        if price_original is None:
+            nested_list_price = _pick(payload, "list_price", "listPrice")
+            if isinstance(nested_list_price, dict):
+                price_original = _coerce_float(nested_list_price.get("value"))
+                if not currency:
+                    currency = _coerce_currency(nested_list_price.get("currency"))
         coupon_text = _coerce_string(
             _pick(payload, "coupon_text", "coupon", "promotion_text", "promo_text")
         )
@@ -259,6 +262,9 @@ def _coerce_float(value: object | None) -> float | None:
         return None
     if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, dict):
+        nested_value = value.get("value")
+        return _coerce_float(nested_value)
     if isinstance(value, str):
         text = value.strip().replace(",", "")
         if not text:
@@ -458,10 +464,7 @@ def normalize_junglee_item(
 
     title = _coerce_string(_pick(payload, "title")) or asin
     brand = _coerce_string(_pick(payload, "brand")) or "Unknown"
-    product_url = (
-        _coerce_string(_pick(payload, "url"))
-        or f"https://www.amazon.com/dp/{asin}"
-    )
+    product_url = _coerce_string(_pick(payload, "url"))
     main_image_url = _pick_junglee_image_url(payload)
 
     price_current = _extract_nested_price(payload, "price")

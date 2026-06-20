@@ -645,6 +645,7 @@ def build_competitor_summaries(
                     asin=tracked_asin.asin,
                     brand=product.brand,
                     title=product.title_latest,
+                    product_url=product.product_url,
                     current_bsr_position=product.current_state.bsr_position,
                     current_price=product.current_state.price_current,
                     currency=product.current_state.currency,

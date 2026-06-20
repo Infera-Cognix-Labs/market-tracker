@@ -108,6 +108,62 @@ class ActorAdapter(Protocol):
     ) -> CategoryProductRecord | CompetitorProductRecord | DealRecord | None: ...
 
 
+_ASIN_IN_URL_PATTERN = re.compile(r"/dp/([A-Z0-9]{10,12})")
+
+
+def _extract_asin_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    match = _ASIN_IN_URL_PATTERN.search(url)
+    if match:
+        return match.group(1)
+    return None
+
+
+class JungleeBestsellersAdapter:
+    actor_id = "junglee/amazon-bestsellers"
+
+    def to_standard_contract(
+        self,
+        raw_payload: dict[str, object],
+        marketplace: str,
+    ) -> CategoryProductRecord | None:
+        asin = _coerce_asin(_pick(raw_payload, "asin"))
+        if not asin:
+            asin = _extract_asin_from_url(
+                _coerce_string(_pick(raw_payload, "url"))
+            )
+        if not asin:
+            return None
+
+        bsr_position = None
+        bestseller_ranks = raw_payload.get("bestsellerRanks")
+        if isinstance(bestseller_ranks, list) and bestseller_ranks:
+            last_rank = bestseller_ranks[-1]
+            if isinstance(last_rank, dict):
+                bsr_position = _coerce_int(last_rank.get("rank"))
+
+        return CategoryProductRecord(
+            asin=asin,
+            rank_position=_coerce_int(_pick(raw_payload, "position")),
+            title=_coerce_string(_pick(raw_payload, "name")),
+            brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
+            product_url=_coerce_string(_pick(raw_payload, "url")),
+            main_image_url=_coerce_string(_pick(raw_payload, "thumbnail")),
+            price_current=_coerce_float(_pick(raw_payload, "price")),
+            price_original=None,
+            currency=_coerce_string(_pick(raw_payload, "currency")),
+            coupon_text=None,
+            rating_value=_coerce_float(_pick(raw_payload, "stars", "rating")),
+            review_count=_coerce_int(_pick(raw_payload, "reviewsCount")),
+            variation_count=None,
+            availability_status=None,
+            buy_box_status=None,
+            buy_box_seller_name=None,
+            bsr_position=bsr_position,
+        )
+
+
 class SaswaveCategoryAdapter:
     actor_id = "saswave/amazon-product-scraper"
 
@@ -174,58 +230,6 @@ class SaswaveCategoryAdapter:
         )
 
 
-
-
-
-class SaswaveCompetitorAdapter:
-    actor_id = "saswave/amazon-product-scraper"
-
-    def to_standard_contract(
-        self,
-        raw_payload: dict[str, object],
-        marketplace: str,
-    ) -> CompetitorProductRecord | None:
-        asin = _coerce_asin(_pick(raw_payload, "asin", "ASIN", "productAsin"))
-        if not asin:
-            return None
-        return CompetitorProductRecord(
-            asin=asin,
-            title=_coerce_string(_pick(raw_payload, "title", "name")),
-            brand=_coerce_string(_pick(raw_payload, "brand", "manufacturer"))
-            or "Unknown",
-            price_current=_coerce_float(
-                _pick(raw_payload, "price", "price_current")
-            ),
-            price_original=_coerce_float(
-                _pick(raw_payload, "price_original", "originalPrice")
-            ),
-            currency=_coerce_string(
-                _pick(raw_payload, "currency", "currencyCode")
-            ),
-            rating_value=_coerce_float(
-                _pick(raw_payload, "rating", "stars", "rating_value")
-            ),
-            review_count=_coerce_int(
-                _pick(raw_payload, "reviewCount", "reviewsCount", "review_count")
-            ),
-            availability_status=_coerce_string(
-                _pick(raw_payload, "availability_status", "availability")
-            ),
-            buy_box_status=_coerce_string(
-                _pick(raw_payload, "buy_box_status", "buyBoxStatus")
-            ),
-            buy_box_seller_name=_coerce_string(
-                _pick(
-                    raw_payload,
-                    "buy_box_seller_name",
-                    "buyBoxSellerName",
-                    "seller_name",
-                )
-            ),
-            variation_count=_coerce_int(
-                _pick(raw_payload, "variation_count", "variationCount")
-            ),
-        )
 
 
 

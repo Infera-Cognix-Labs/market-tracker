@@ -104,6 +104,10 @@ export const apiUpdateCategoryTracker = async (
   })
 }
 
+export const apiDeleteCategoryTracker = async (trackerCode: string): Promise<void> => {
+  await apiFetch<void>(`/category-trackers/${trackerCode}`, { method: "DELETE" })
+}
+
 // ── Competitor Trackers ──────────────────────────────────────────────────────
 
 export const apiListCompetitorTrackers = async (page = 1, pageSize = 20): Promise<PagedResponse<CompetitorTracker>> => {
@@ -129,6 +133,10 @@ export const apiUpdateCompetitorTracker = async (
     method: "PATCH",
     body: JSON.stringify(payload),
   })
+}
+
+export const apiDeleteCompetitorTracker = async (trackerCode: string): Promise<void> => {
+  await apiFetch<void>(`/competitor-trackers/${trackerCode}`, { method: "DELETE" })
 }
 
 export const apiReplaceTrackedAsins = async (

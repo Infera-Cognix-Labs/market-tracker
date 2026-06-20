@@ -241,8 +241,8 @@ export interface CategoryTracker {
 }
 
 export interface CategoryScope {
+  browse_node_url: string
   browse_node_id?: string
-  browse_node_url?: string
 }
 
 export interface CategoryTrackingConfig {
@@ -364,6 +364,7 @@ export interface TrackedProductSummary {
   asin: string
   brand: string
   title: string
+  product_url?: string | null
   current_bsr_position: number | null
   current_price: number | null
   currency: string | null
@@ -541,6 +542,12 @@ export interface JobError {
 
 // ── Weekly Digest ─────────────────────────────────────────────────────────────
 
+export interface DigestInsights {
+  executive_summary: string
+  key_trends: string[]
+  risk_assessment: string
+}
+
 export interface WeeklyDigest {
   digest_code: string
   week_start: string
@@ -549,6 +556,7 @@ export interface WeeklyDigest {
   summary: WeeklyDigestSummary
   threats: Threat[]
   report_storage_uri?: string | null
+  insights?: DigestInsights | null
   created_at: string
 }
 
