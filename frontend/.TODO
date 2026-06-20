@@ -73,14 +73,14 @@ These two pages are ~70-80% structurally identical. Consider:
 
 ---
 
-## P2 — Inline Styles → CSS Classes
+## P2 — Inline Styles → CSS Classes ✅ DONE
 
-- [ ] Replace `inputStyle` with `className="input"` (6+ occurrences, class already exists in DesignTokens)
-- [ ] Export `labelStyle` from DesignTokens.ts (5+ occurrences)
-- [ ] Add `.th` class for table headers (4 occurrences)
-- [ ] Extract image thumbnail cell as `<ThumbnailImage src alt size />` (5 occurrences)
-- [ ] Extract price display as `<PriceDisplay current original currency />` (3 occurrences)
-- [ ] Extract deal/coupon popover as `<ExpandableList items label openKey onToggle />` (6 occurrences)
+- [x] Replace `inputStyle` with `className="input"` (6+ occurrences, class already exists in DesignTokens)
+- [x] Export `labelStyle` from DesignTokens.ts (5+ occurrences)
+- [x] Add `.th` class for table headers (4 occurrences)
+- [x] Extract image thumbnail cell as `<ThumbnailImage src alt size />` (5 occurrences)
+- [x] Extract price display as `<PriceDisplay current original currency />` (3 occurrences)
+- [x] Extract deal/coupon popover as `<ExpandableList items label openKey onToggle />` (6 occurrences)
 
 ---
 
@@ -104,3 +104,10 @@ These two pages are ~70-80% structurally identical. Consider:
 5. Refactor CompetitorPage
 6. Replace inline styles with CSS classes
 7. Run `npm run lint` + `npx tsc --noEmit` after each step
+8. Run `npm run lint` + `npx tsc --noEmit` (final check) ✅ PASSED
+
+---
+
+## Summary
+
+All tasks (P0, P1, P2) are complete. ✅

@@ -19,7 +19,7 @@ import {
   apiTriggerJob,
   apiUpdateKeywordTracker,
 } from "../shared/api"
-import { HOURS, inputStyle, labelStyle, MARKETPLACES } from "../shared/formatting"
+import { HOURS, MARKETPLACES } from "../shared/formatting"
 import { handleApiError, useTrackerPage } from "../shared/hooks"
 import type {
   KeywordTracker,
@@ -71,18 +71,18 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
           </div>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Search Keyword</label>
+              <label className="label">Search Keyword</label>
               <div style={{ position: "relative" }}>
                 <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
                 <input type="text" value={keyword} onChange={e => setKeyword(e.target.value)}
                   placeholder="e.g. baby bottle warmer"
-                  style={{ ...inputStyle, paddingLeft: 32 }} />
+                  className="input" style={{ paddingLeft: 32 }} />
               </div>
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Tracker Name</label>
+              <label className="label">Tracker Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="e.g. Baby Bottle Warmers" maxLength={120} style={inputStyle} />
+                placeholder="e.g. Baby Bottle Warmers" maxLength={120} className="input" />
             </div>
             <div style={{ marginBottom: 16 }}>
               <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
@@ -157,14 +157,14 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
           </div>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
+              <label className="label">Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} className="input" />
             </div>
             <div style={{ marginBottom: 20 }}>
               <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Status</label>
+              <label className="label">Status</label>
               <div style={{ display: "flex", gap: 8 }}>
                 {(["ACTIVE", "PAUSED", "ARCHIVED"] as TrackerStatus[]).map(s => (
                   <button key={s} type="button" onClick={() => setStatus(s)}

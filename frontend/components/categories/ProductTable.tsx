@@ -3,11 +3,14 @@
 import { ExternalLink, TrendingDown, TrendingUp } from "lucide-react"
 import { Badge } from "../shared/Badge"
 import { T } from "../shared/DesignTokens"
+import { ExpandableList } from "../shared/ExpandableList"
 import { extractBrandName, getEventImageUrl, parseCouponItems, parseDealItems, rankTrendMeta } from "../shared/formatting"
 import type { TableRow } from "../shared/hooks"
 import { InfoBanner } from "../shared/InfoBanner"
 import { NoSnapshotPlaceholder } from "../shared/NoSnapshotPlaceholder"
+import { PriceDisplay } from "../shared/PriceDisplay"
 import { SearchInput } from "../shared/SearchInput"
+import { ThumbnailImage } from "../shared/ThumbnailImage"
 
 interface ProductTableProps {
   search: string
@@ -79,7 +82,7 @@ export const ProductTable = ({
               <thead>
                 <tr style={{ borderBottom: `1px solid ${T.border}` }}>
                   {["#", "Change", "Img", "ASIN", "Title", "Brand", "Price", "Rating", "Reviews", "Availability", "Deal", "Coupon"].map(h => (
-                    <th key={h} style={{ padding: "9px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
+                    <th key={h} className="th">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -99,14 +102,7 @@ export const ProductTable = ({
                           {event.event_type.replaceAll("_", " ")}
                         </td>
                         <td style={{ padding: "6px 10px" }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            {imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={imageUrl} alt={event.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-                            ) : (
-                              <span style={{ fontSize: 10, color: T.text3, fontFamily: T.mono }}>N/A</span>
-                            )}
-                          </div>
+                          <ThumbnailImage src={imageUrl} alt={event.asin} />
                         </td>
                         <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.amber }}>{event.asin}</td>
                         <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0, maxWidth: 240 }}>
@@ -118,16 +114,7 @@ export const ProductTable = ({
                           ) : <span style={{ color: T.text3 }}>—</span>}
                         </td>
                         <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
-                          {prev?.price_current != null && prev.price_current > 0 ? (
-                            <>
-                              {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_current.toFixed(2)}
-                              {prev.price_original != null && prev.price_original > prev.price_current && (
-                                <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
-                                  {event.marketplace === "amazon_us" ? "$" : event.marketplace === "amazon_uk" ? "£" : "€"}{prev.price_original.toFixed(2)}
-                                </span>
-                              )}
-                            </>
-                          ) : <span style={{ color: T.text3 }}>—</span>}
+                          <PriceDisplay current={prev?.price_current ?? 0} original={prev?.price_original} marketplace={event.marketplace} />
                         </td>
                         <td style={{ padding: "9px 10px", fontSize: 12, color: T.text3 }}>—</td>
                         <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11, color: T.text3 }}>—</td>
@@ -164,10 +151,7 @@ export const ProductTable = ({
                         })()}
                       </td>
                       <td style={{ padding: "6px 10px" }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 6, background: T.bg3, border: `1px solid ${T.border}`, overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={p.image_url} alt={p.asin} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-                        </div>
+                        <ThumbnailImage src={p.image_url} alt={p.asin} />
                       </td>
                       <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 11 }}>
                         <a href={resolveProductUrl(p)} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
@@ -181,16 +165,7 @@ export const ProductTable = ({
                         {p.brand ? renderBrand(p.brand) : <span style={{ color: T.text3 }}>—</span>}
                       </td>
                       <td style={{ padding: "9px 10px", fontFamily: T.mono, fontSize: 12, color: T.text1, whiteSpace: "nowrap" }}>
-                        {p.price_current > 0 ? (
-                          <>
-                            {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_current.toFixed(2)}
-                            {p.price_original && p.price_original > p.price_current && (
-                              <span style={{ fontSize: 10, color: T.text3, textDecoration: "line-through", marginLeft: 4 }}>
-                                {p.currency === "USD" ? "$" : p.currency === "GBP" ? "£" : "€"}{p.price_original.toFixed(2)}
-                              </span>
-                            )}
-                          </>
-                        ) : <span style={{ color: T.text3 }}>—</span>}
+                        <PriceDisplay current={p.price_current} original={p.price_original} currency={p.currency} />
                       </td>
                       <td style={{ padding: "9px 10px", fontSize: 12, color: T.green }}>
                         {p.rating_value > 0 ? `${p.rating_value}★` : <span style={{ color: T.text3 }}>—</span>}
@@ -206,21 +181,13 @@ export const ProductTable = ({
                           const dealItems = parseDealItems(p.deal_info)
                           if (dealItems.length === 0) return "—"
                           const dealKey = `${p.asin}-${p.rank_position}`
-                          const isOpen = openDealKey === dealKey
                           return (
-                            <div style={{ minWidth: 160 }}>
-                              <button type="button" onClick={() => onOpenDealKeyChange(prev => prev === dealKey ? null : dealKey)}
-                                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.blue}`, background: `${T.blue}16`, color: T.blue, fontSize: 10, fontFamily: T.mono, fontWeight: 600, cursor: "pointer" }}>
-                                {isOpen ? "Hide" : "View"} Deal
-                              </button>
-                              {isOpen && (
-                                <div style={{ marginTop: 6, padding: "6px 8px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, color: T.text1, lineHeight: 1.4 }}>
-                                  {dealItems.map((deal, idx) => (
-                                    <div key={`${deal}-${idx}`} style={{ marginBottom: idx < dealItems.length - 1 ? 4 : 0 }}>• {deal}</div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <ExpandableList
+                              items={dealItems}
+                              label="Deal"
+                              isOpen={openDealKey === dealKey}
+                              onToggle={() => onOpenDealKeyChange(prev => prev === dealKey ? null : dealKey)}
+                            />
                           )
                         })()}
                       </td>
@@ -229,21 +196,16 @@ export const ProductTable = ({
                           const couponItems = parseCouponItems(p.coupon_text)
                           if (couponItems.length === 0) return "—"
                           const couponKey = `${p.asin}-${p.rank_position}`
-                          const isOpen = openCouponKey === couponKey
                           return (
-                            <div style={{ minWidth: 160 }}>
-                              <button type="button" onClick={() => onOpenCouponKeyChange(prev => prev === couponKey ? null : couponKey)}
-                                style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${T.amberD}`, background: `${T.amber}14`, color: T.amber, fontSize: 10, fontFamily: T.mono, fontWeight: 600, cursor: "pointer" }}>
-                                {isOpen ? "Hide" : "View"} {couponItems.length} Coupon{couponItems.length > 1 ? "s" : ""}
-                              </button>
-                              {isOpen && (
-                                <div style={{ marginTop: 6, padding: "6px 8px", background: T.bg3, border: `1px solid ${T.border}`, borderRadius: 6, color: T.text1, lineHeight: 1.4 }}>
-                                  {couponItems.map((coupon, idx) => (
-                                    <div key={`${coupon}-${idx}`} style={{ marginBottom: idx < couponItems.length - 1 ? 4 : 0 }}>• {coupon}</div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <ExpandableList
+                              items={couponItems}
+                              label={`${couponItems.length} Coupon${couponItems.length > 1 ? "s" : ""}`}
+                              isOpen={openCouponKey === couponKey}
+                              onToggle={() => onOpenCouponKeyChange(prev => prev === couponKey ? null : couponKey)}
+                              color={T.amber}
+                              colorBorder={T.amberD}
+                              colorBg={`${T.amber}14`}
+                            />
                           )
                         })()}
                       </td>

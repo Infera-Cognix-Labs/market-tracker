@@ -12,7 +12,7 @@ import { StatusToggle } from "../shared/StatusToggle"
 import { TrackerInfoCard, TrackerStat } from "../shared/TrackerInfoCard"
 import { TrackerPageLayout } from "../shared/TrackerPageLayout"
 import { apiCreateCategoryTracker, apiDeleteCategoryTracker, apiGetLatestCategorySnapshot, apiListCategoryTrackers, apiListEvents, apiTriggerJob, apiUpdateCategoryTracker } from "../shared/api"
-import { HOURS, MARKETPLACES, inputStyle, labelStyle, parseBestsellerUrl } from "../shared/formatting"
+import { HOURS, MARKETPLACES, parseBestsellerUrl } from "../shared/formatting"
 import { handleApiError, useTrackerPage } from "../shared/hooks"
 import type { CategoryTracker, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus } from "../shared/types"
 import { ProductTable } from "./ProductTable"
@@ -64,12 +64,12 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
           </div>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Best-sellers Category URL</label>
+              <label className="label">Best-sellers Category URL</label>
               <div style={{ position: "relative" }}>
                 <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
                 <input type="text" value={urlInput} onChange={e => setUrlInput(e.target.value)}
                   placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
-                  style={{ ...inputStyle, paddingLeft: 32 }} />
+                  className="input" style={{ paddingLeft: 32 }} />
               </div>
               {urlInput.trim() && (
                 <div style={{ marginTop: 5, display: "flex", alignItems: "center", gap: 6 }}>
@@ -87,9 +87,9 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
               )}
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Tracker Name</label>
+              <label className="label">Tracker Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="e.g. Baby Bottle Warmers - US" maxLength={120} style={inputStyle} />
+                placeholder="e.g. Baby Bottle Warmers - US" maxLength={120} className="input" />
             </div>
             <div style={{ marginBottom: 16 }}>
               <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
@@ -99,7 +99,7 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
                 <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                <label style={labelStyle}>Top 10 Alerts</label>
+                <label className="label">Top 10 Alerts</label>
                 <button type="button" onClick={() => setTop10Alert(v => !v)}
                   style={{ padding: "9px 12px", borderRadius: 8, border: `1px solid ${top10Alert ? T.amber : T.border}`, background: top10Alert ? T.bg4 : T.bg3, color: top10Alert ? T.amber : T.text2, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "all .15s" }}>
                   <span style={{ width: 12, height: 12, borderRadius: "50%", background: top10Alert ? T.amber : T.text3, display: "inline-block", flexShrink: 0 }} />
@@ -176,15 +176,15 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
           </div>
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
+              <label className="label">Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} className="input" />
             </div>
             <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
               <div style={{ flex: 1 }}>
                 <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-                <label style={labelStyle}>Top 10 Alerts</label>
+                <label className="label">Top 10 Alerts</label>
                 <button type="button" onClick={() => setTop10Alert(v => !v)}
                   style={{ padding: "9px 12px", borderRadius: 8, border: `1px solid ${top10Alert ? T.amber : T.border}`, background: top10Alert ? T.bg4 : T.bg3, color: top10Alert ? T.amber : T.text2, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "all .15s" }}>
                   <span style={{ width: 12, height: 12, borderRadius: "50%", background: top10Alert ? T.amber : T.text3, display: "inline-block", flexShrink: 0 }} />
@@ -193,7 +193,7 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: Edit
               </div>
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Status</label>
+              <label className="label">Status</label>
               <StatusToggle value={status} onChange={setStatus} />
             </div>
             {error && <ErrorBanner message={error} />}

@@ -13,7 +13,9 @@ import { StatusFilterTabs } from "../shared/StatusFilterTabs"
 import { TrackerInfoCard, TrackerStat } from "../shared/TrackerInfoCard"
 import { apiCreateCompetitorTracker, apiDeleteCompetitorTracker, apiGetCompetitorTracker, apiGetProductDetail, apiGetProductTimeline, apiListCompetitorTrackers, apiListEvents, apiReplaceTrackedAsins, apiUpdateCompetitorTracker } from "../shared/api"
 import { MARKETPLACES, parseCouponItems, parseDealItems, HOURS as SHARED_HOURS } from "../shared/formatting"
+import { ExpandableList } from "../shared/ExpandableList"
 import { handleApiError } from "../shared/hooks"
+import { ThumbnailImage } from "../shared/ThumbnailImage"
 import type { CompetitorTrackerCreateRequest, CompetitorTrackerDetail, CompetitorTrackerUpdateRequest, CompetitorTrackFields, Event, ProductDetail, ProductTimelineResponse, Timeframe, TrackedProductSummary, TrackerStatus } from "../shared/types"
 
 const HOURS = SHARED_HOURS
@@ -74,12 +76,6 @@ const ManageAsinsModal = ({
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%", padding: "9px 12px", borderRadius: 8,
-    border: `1px solid ${T.border}`, background: T.bg3,
-    color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none",
-  }
-
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", zIndex: 1000, overflowY: "auto" }}>
       <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -101,7 +97,7 @@ const ManageAsinsModal = ({
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addAsin() } }}
                   placeholder="B0ABC12345"
                   maxLength={10}
-                  style={{ ...inputStyle, fontFamily: T.mono, flex: 1 }}
+                  className="input" style={{ fontFamily: T.mono, flex: 1 }}
                 />
                 <button type="button" onClick={addAsin}
                   style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg4, color: T.text0, cursor: "pointer", fontSize: 13, fontFamily: T.sans, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
@@ -196,16 +192,6 @@ const EditTrackerModal = ({
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%", padding: "9px 12px", borderRadius: 8,
-    border: `1px solid ${T.border}`, background: T.bg3,
-    color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none",
-  }
-  const labelStyle: React.CSSProperties = {
-    display: "block", fontSize: 11, fontWeight: 600, color: T.text2,
-    marginBottom: 5, letterSpacing: ".04em", textTransform: "uppercase",
-  }
-
   const STATUS_OPTIONS: TrackerStatus[] = ["ACTIVE", "PAUSED", "ARCHIVED"]
   const STATUS_COLORS: Record<TrackerStatus, string> = { ACTIVE: T.green, PAUSED: T.amber, ARCHIVED: T.text3 }
 
@@ -223,13 +209,13 @@ const EditTrackerModal = ({
           <form onSubmit={handleSubmit} style={{ padding: "20px" }}>
             {/* Name */}
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Tracker Name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
+              <label className="label">Tracker Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} className="input" />
             </div>
 
             {/* Track fields */}
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Track Fields</label>
+              <label className="label">Track Fields</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {(Object.keys(trackFields) as (keyof CompetitorTrackFields)[]).map(key => (
                   <button key={key} type="button" onClick={() => toggleField(key)}
@@ -248,7 +234,7 @@ const EditTrackerModal = ({
 
             {/* Status */}
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Status</label>
+              <label className="label">Status</label>
               <div style={{ display: "flex", gap: 8 }}>
                 {STATUS_OPTIONS.map(s => (
                   <button key={s} type="button" onClick={() => setStatus(s)}
@@ -354,16 +340,6 @@ const CreateTrackerModal = ({
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%", padding: "9px 12px", borderRadius: 8,
-    border: `1px solid ${T.border}`, background: T.bg3,
-    color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none",
-  }
-  const labelStyle: React.CSSProperties = {
-    display: "block", fontSize: 11, fontWeight: 600, color: T.text2,
-    marginBottom: 5, letterSpacing: ".04em", textTransform: "uppercase",
-  }
-
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(7,9,15,.75)", zIndex: 1000, overflowY: "auto" }}>
       <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -377,8 +353,8 @@ const CreateTrackerModal = ({
           <form onSubmit={handleSubmit} style={{ padding: "20px" }}>
             {/* Name */}
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Tracker Name</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} placeholder="e.g. Bottle Warmer Competitors - US" style={inputStyle} />
+              <label className="label">Tracker Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} placeholder="e.g. Bottle Warmer Competitors - US" className="input" />
             </div>
 
             {/* Marketplace */}
@@ -388,7 +364,7 @@ const CreateTrackerModal = ({
 
             {/* ASIN input */}
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>ASINs ({asins.length}/200)</label>
+              <label className="label">ASINs ({asins.length}/200)</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   type="text" value={asinInput}
@@ -396,7 +372,7 @@ const CreateTrackerModal = ({
                   onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addAsin() } }}
                   placeholder="B0ABC12345"
                   maxLength={10}
-                  style={{ ...inputStyle, fontFamily: T.mono, flex: 1 }}
+                  className="input" style={{ fontFamily: T.mono, flex: 1 }}
                 />
                 <button type="button" onClick={addAsin}
                   style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg4, color: T.text0, cursor: "pointer", fontSize: 13, fontFamily: T.sans, flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
@@ -418,7 +394,7 @@ const CreateTrackerModal = ({
 
             {/* Track fields */}
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Track Fields</label>
+              <label className="label">Track Fields</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {(Object.keys(trackFields) as (keyof CompetitorTrackFields)[]).map(key => (
                   <button key={key} type="button" onClick={() => toggleField(key)}
@@ -739,12 +715,12 @@ export const CompetitorPage = () => {
             {/* Top info from ProductDetail */}
             <div className="card" style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <div style={{ width: 52, height: 52, borderRadius: 8, background: T.bg3, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontFamily: T.mono, color: T.text3, flexShrink: 0, overflow: "hidden" }}>
-                  {productDetail?.main_image_url_latest
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={productDetail.main_image_url_latest} alt={productDetail?.title_latest || "Product image"} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-                    : "IMG"}
-                </div>
+                <ThumbnailImage
+                  src={productDetail?.main_image_url_latest}
+                  alt={productDetail?.title_latest || "Product image"}
+                  size={52}
+                  fallback="IMG"
+                />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: T.text0, marginBottom: 3 }}>
                     {productDetail?.title_latest || selectedProduct?.title || "—"}
@@ -894,7 +870,7 @@ export const CompetitorPage = () => {
                       <thead>
                         <tr>
                           {["Date", "Availability", "Buy Box", "Deal", "Coupon", "Variants"].map(h => (
-                            <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, borderBottom: `1px solid ${T.border}` }}>{h}</th>
+                            <th key={h} className="th-border">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -912,47 +888,17 @@ export const CompetitorPage = () => {
                               {(() => {
                                 const items = parseDealItems(r.deal)
                                 if (items.length === 0) return <span style={{ color: T.text3 }}>—</span>
-                                const isOpen = openDealRowKey === r.date
                                 return (
-                                  <div style={{ minWidth: 180 }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenDealRowKey(prev => prev === r.date ? null : r.date)}
-                                      style={{
-                                        padding: "2px 6px",
-                                        borderRadius: 4,
-                                        border: `1px solid ${T.blue}`,
-                                        background: `${T.blue}16`,
-                                        color: T.blue,
-                                        fontSize: 9,
-                                        fontFamily: T.mono,
-                                        fontWeight: 600,
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      {isOpen ? "Hide" : "View"} Deal
-                                    </button>
-                                    {isOpen && (
-                                      <div
-                                        style={{
-                                          marginTop: 4,
-                                          padding: "4px 6px",
-                                          background: T.bg3,
-                                          border: `1px solid ${T.border}`,
-                                          borderRadius: 4,
-                                          color: T.text1,
-                                          fontSize: 10,
-                                          lineHeight: 1.4,
-                                        }}
-                                      >
-                                        {items.map((deal, idx) => (
-                                          <div key={`${deal}-${idx}`} style={{ marginBottom: idx < items.length - 1 ? 3 : 0 }}>
-                                            • {deal}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <ExpandableList
+                                    items={items}
+                                    label="Deal"
+                                    isOpen={openDealRowKey === r.date}
+                                    onToggle={() => setOpenDealRowKey(prev => prev === r.date ? null : r.date)}
+                                    fontSize={9}
+                                    padding="2px 6px"
+                                    borderRadius={4}
+                                    minWidth={180}
+                                  />
                                 )
                               })()}
                             </td>
@@ -960,47 +906,20 @@ export const CompetitorPage = () => {
                               {(() => {
                                 const items = parseCouponItems(r.coupon)
                                 if (items.length === 0) return <span style={{ color: T.text3 }}>—</span>
-                                const isOpen = openCouponRowKey === r.date
                                 return (
-                                  <div style={{ minWidth: 180 }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenCouponRowKey(prev => prev === r.date ? null : r.date)}
-                                      style={{
-                                        padding: "2px 6px",
-                                        borderRadius: 4,
-                                        border: `1px solid ${T.amberD}`,
-                                        background: `${T.amber}14`,
-                                        color: T.amber,
-                                        fontSize: 9,
-                                        fontFamily: T.mono,
-                                        fontWeight: 600,
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      {isOpen ? "Hide" : "View"} {items.length} Coupon{items.length > 1 ? "s" : ""}
-                                    </button>
-                                    {isOpen && (
-                                      <div
-                                        style={{
-                                          marginTop: 4,
-                                          padding: "4px 6px",
-                                          background: T.bg3,
-                                          border: `1px solid ${T.border}`,
-                                          borderRadius: 4,
-                                          color: T.text1,
-                                          fontSize: 10,
-                                          lineHeight: 1.4,
-                                        }}
-                                      >
-                                        {items.map((coupon, idx) => (
-                                          <div key={`${coupon}-${idx}`} style={{ marginBottom: idx < items.length - 1 ? 3 : 0 }}>
-                                            • {coupon}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
+                                  <ExpandableList
+                                    items={items}
+                                    label={`${items.length} Coupon${items.length > 1 ? "s" : ""}`}
+                                    isOpen={openCouponRowKey === r.date}
+                                    onToggle={() => setOpenCouponRowKey(prev => prev === r.date ? null : r.date)}
+                                    color={T.amber}
+                                    colorBorder={T.amberD}
+                                    colorBg={`${T.amber}14`}
+                                    fontSize={9}
+                                    padding="2px 6px"
+                                    borderRadius={4}
+                                    minWidth={180}
+                                  />
                                 )
                               })()}
                             </td>

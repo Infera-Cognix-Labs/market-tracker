@@ -10,28 +10,6 @@ import { MARKETPLACES, parseBestsellerUrl } from "../shared/formatting"
 import { handleApiError } from "../shared/hooks"
 import type { CategoryTracker, CategoryTrackerCreateRequest } from "../shared/types"
 
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: 8,
-  border: `1px solid ${T.border}`,
-  background: T.bg3,
-  color: T.text0,
-  fontSize: 13,
-  fontFamily: T.sans,
-  outline: "none",
-}
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 11,
-  fontWeight: 600,
-  color: T.text2,
-  marginBottom: 6,
-  letterSpacing: ".04em",
-  textTransform: "uppercase",
-}
-
 export const NodeSearchPage = () => {
   // ── Form state ──────────────────────────────────────────────────────────────
   const [nodeInput, setNodeInput] = useState("")
@@ -104,7 +82,7 @@ export const NodeSearchPage = () => {
         <form onSubmit={handleSubmit}>
           {/* Best-sellers URL input */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Best-sellers Category URL</label>
+            <label className="label">Best-sellers Category URL</label>
             <div style={{ position: "relative" }}>
               <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
               <input
@@ -112,7 +90,7 @@ export const NodeSearchPage = () => {
                 value={nodeInput}
                 onChange={e => setNodeInput(e.target.value)}
                 placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
-                style={{ ...inputStyle, paddingLeft: 34 }}
+                className="input" style={{ paddingLeft: 34 }}
               />
             </div>
             {/* Parse preview */}
@@ -149,24 +127,24 @@ export const NodeSearchPage = () => {
 
           {/* Name */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Tracker Name</label>
+            <label className="label">Tracker Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Baby Bottle Warmers - US"
               maxLength={120}
-              style={inputStyle}
+              className="input"
             />
           </div>
 
           {/* Marketplace */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Marketplace</label>
+            <label className="label">Marketplace</label>
             <select
               value={marketplace}
               onChange={e => setMarketplace(e.target.value)}
-              style={{ ...inputStyle, cursor: "pointer" }}
+              className="input" style={{ cursor: "pointer" }}
             >
               {MARKETPLACES.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -177,11 +155,11 @@ export const NodeSearchPage = () => {
           {/* Schedule & config row */}
           <div style={{ display: "flex", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
+              <label className="label">Run at (UTC hour)</label>
               <select
                 value={hourUtc}
                 onChange={e => setHourUtc(Number(e.target.value))}
-                style={{ ...inputStyle, cursor: "pointer" }}
+                className="input" style={{ cursor: "pointer" }}
               >
                 {Array.from({ length: 24 }, (_, i) => (
                   <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>
@@ -190,7 +168,7 @@ export const NodeSearchPage = () => {
             </div>
 
             <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-              <label style={labelStyle}>Top 10 Alerts</label>
+              <label className="label">Top 10 Alerts</label>
               <button
                 type="button"
                 onClick={() => setTop10Alert(v => !v)}

@@ -24,18 +24,6 @@ export const FILTER_TO_EVENT: Record<string, string> = {
   EXIT_TOP10: "EXIT_TOP10",
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-
-export const inputStyle: React.CSSProperties = {
-  width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${T.border}`,
-  background: T.bg3, color: T.text0, fontSize: 13, fontFamily: T.sans, outline: "none", boxSizing: "border-box" as const,
-}
-
-export const labelStyle: React.CSSProperties = {
-  display: "block", fontSize: 11, fontWeight: 600, color: T.text2,
-  marginBottom: 6, letterSpacing: ".04em", textTransform: "uppercase" as const,
-}
-
 // ── Formatting Helpers ─────────────────────────────────────────────────────────
 
 export const formatMoney = (value: number, currency?: string | null): string => {
