@@ -32,6 +32,9 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
 }
 export const marketplaceLabel = (mp: string) => MARKETPLACE_LABELS[mp] ?? mp.replace("amazon_", "").toUpperCase()
 
+export const statusColor = (s?: string) =>
+  s === "ACTIVE" ? T.green : s === "PAUSED" ? T.amber : s === "ARCHIVED" ? T.text3 : T.text3
+
 export const css = `
   *{box-sizing:border-box;margin:0;padding:0}
   :root{font-family:${T.sans};background:${T.bg0};color:${T.text0};-webkit-font-smoothing:antialiased}
@@ -51,7 +54,7 @@ export const css = `
   .btn-primary{border:none;background:${T.amber};color:#000;cursor:pointer;border-radius:7px;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;font-family:${T.sans};padding:7px 14px;transition:all .15s}
   .btn-primary:hover{background:${T.amberL}}
   .badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;letter-spacing:.04em;font-family:${T.mono};white-space:nowrap}
-  .input{background:${T.bg3};border:1px solid ${T.border};color:${T.text0};border-radius:7px;padding:7px 12px;font-size:13px;font-family:${T.sans};outline:none;width:100%;transition:border-color .15s}
+  .input{background:${T.bg3};border:1px solid ${T.border};color:${T.text0};border-radius:8px;padding:9px 12px;font-size:13px;font-family:${T.sans};outline:none;width:100%;transition:border-color .15s;box-sizing:border-box}
   .input:focus{border-color:${T.blue}}
   .input::placeholder{color:${T.text3}}
   .card{background:${T.bg2};border:1px solid ${T.border};border-radius:10px;padding:16px}
@@ -66,6 +69,9 @@ export const css = `
   .tag-stock{background:#200D25;color:${T.purple};border:1px solid #5A2580}
   .tag-listing{background:#0A1A1A;color:${T.teal};border:1px solid #1A4040}
   .tag-info{background:${T.bg3};color:${T.text1};border:1px solid ${T.border}}
+  .label{display:block;font-size:11px;font-weight:600;color:${T.text2};margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
+  .th{padding:9px 10px;text-align:left;font-size:10px;font-weight:600;color:${T.text3};letter-spacing:.06em;text-transform:uppercase;font-family:${T.mono};white-space:nowrap}
+  .th-border{padding:6px 10px;text-align:left;font-size:10px;font-weight:600;color:${T.text3};letter-spacing:.06em;text-transform:uppercase;font-family:${T.mono};border-bottom:1px solid ${T.border}}
   .dot-live{width:6px;height:6px;border-radius:50%;background:${T.green};animation:pulse 2s infinite}
   .dot-warn{width:6px;height:6px;border-radius:50%;background:${T.amber};animation:pulse 2s infinite}
   .dot-dead{width:6px;height:6px;border-radius:50%;background:${T.text3}}

@@ -1,61 +1,14 @@
 "use client"
 
+import { AlertCircle, CheckCircle, ExternalLink, Plus, Search } from "lucide-react"
 import { useState } from "react"
-import { Search, ExternalLink, CheckCircle, AlertCircle, Plus } from "lucide-react"
-import { T, MARKETPLACE_LABELS } from "../shared/DesignTokens"
-import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiCreateCategoryTracker, ApiError } from "../shared/api"
+import { MARKETPLACE_LABELS, T } from "../shared/DesignTokens"
+import { PageHeader } from "../shared/PageHeader"
+import { apiCreateCategoryTracker } from "../shared/api"
+import { MARKETPLACES, parseBestsellerUrl } from "../shared/formatting"
+import { handleApiError } from "../shared/hooks"
 import type { CategoryTracker, CategoryTrackerCreateRequest } from "../shared/types"
-
-// ── Parse and validate Amazon best-sellers URL ────────────────────────────────
-function parseBestsellerUrl(input: string): string | null {
-  const trimmed = input.trim()
-  if (!trimmed.startsWith("http")) return null
-  try {
-    const url = new URL(trimmed)
-    if (url.hostname.includes("amazon.") && (trimmed.includes("/zgbs/") || trimmed.includes("Best-Sellers") || trimmed.includes("best-sellers"))) {
-      return trimmed
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-// ── Marketplace options ───────────────────────────────────────────────────────
-const MARKETPLACES = [
-  { value: "amazon_us", label: "🇺🇸 amazon_us" },
-  { value: "amazon_de", label: "🇩🇪 amazon_de" },
-  { value: "amazon_uk", label: "🇬🇧 amazon_uk" },
-  { value: "amazon_fr", label: "🇫🇷 amazon_fr" },
-  { value: "amazon_it", label: "🇮🇹 amazon_it" },
-  { value: "amazon_es", label: "🇪🇸 amazon_es" },
-  { value: "amazon_ca", label: "🇨🇦 amazon_ca" },
-  { value: "amazon_jp", label: "🇯🇵 amazon_jp" },
-]
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "10px 12px",
-  borderRadius: 8,
-  border: `1px solid ${T.border}`,
-  background: T.bg3,
-  color: T.text0,
-  fontSize: 13,
-  fontFamily: T.sans,
-  outline: "none",
-}
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 11,
-  fontWeight: 600,
-  color: T.text2,
-  marginBottom: 6,
-  letterSpacing: ".04em",
-  textTransform: "uppercase",
-}
 
 export const NodeSearchPage = () => {
   // ── Form state ──────────────────────────────────────────────────────────────
@@ -111,17 +64,7 @@ export const NodeSearchPage = () => {
       setTop10Alert(true)
       setHourUtc(2)
     } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 409) {
-          setError("A tracker for this marketplace and URL already exists.")
-        } else if (err.status === 400 && err.details?.reason) {
-          setError(err.details.reason)
-        } else {
-          setError(err.message || "Failed to create tracker. Please try again.")
-        }
-      } else {
-        setError("Failed to create tracker. Please try again.")
-      }
+      handleApiError(err, setError, "A tracker for this marketplace and URL already exists.")
     } finally {
       setSubmitting(false)
     }
@@ -139,7 +82,7 @@ export const NodeSearchPage = () => {
         <form onSubmit={handleSubmit}>
           {/* Best-sellers URL input */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Best-sellers Category URL</label>
+            <label className="label">Best-sellers Category URL</label>
             <div style={{ position: "relative" }}>
               <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
               <input
@@ -147,7 +90,7 @@ export const NodeSearchPage = () => {
                 value={nodeInput}
                 onChange={e => setNodeInput(e.target.value)}
                 placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
-                style={{ ...inputStyle, paddingLeft: 34 }}
+                className="input" style={{ paddingLeft: 34 }}
               />
             </div>
             {/* Parse preview */}
@@ -184,24 +127,24 @@ export const NodeSearchPage = () => {
 
           {/* Name */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Tracker Name</label>
+            <label className="label">Tracker Name</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Baby Bottle Warmers - US"
               maxLength={120}
-              style={inputStyle}
+              className="input"
             />
           </div>
 
           {/* Marketplace */}
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Marketplace</label>
+            <label className="label">Marketplace</label>
             <select
               value={marketplace}
               onChange={e => setMarketplace(e.target.value)}
-              style={{ ...inputStyle, cursor: "pointer" }}
+              className="input" style={{ cursor: "pointer" }}
             >
               {MARKETPLACES.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -212,11 +155,11 @@ export const NodeSearchPage = () => {
           {/* Schedule & config row */}
           <div style={{ display: "flex", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
+              <label className="label">Run at (UTC hour)</label>
               <select
                 value={hourUtc}
                 onChange={e => setHourUtc(Number(e.target.value))}
-                style={{ ...inputStyle, cursor: "pointer" }}
+                className="input" style={{ cursor: "pointer" }}
               >
                 {Array.from({ length: 24 }, (_, i) => (
                   <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>
@@ -225,7 +168,7 @@ export const NodeSearchPage = () => {
             </div>
 
             <div style={{ flex: 1, minWidth: 160, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
-              <label style={labelStyle}>Top 10 Alerts</label>
+              <label className="label">Top 10 Alerts</label>
               <button
                 type="button"
                 onClick={() => setTop10Alert(v => !v)}
