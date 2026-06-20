@@ -26,6 +26,12 @@ export const T = {
   sans:   "'Space Grotesk', system-ui, sans-serif",
 }
 
+export const MARKETPLACE_LABELS: Record<string, string> = {
+  amazon_us: "US", amazon_de: "Germany", amazon_uk: "UK", amazon_fr: "France",
+  amazon_it: "Italy", amazon_es: "Spain", amazon_ca: "Canada", amazon_jp: "Japan",
+}
+export const marketplaceLabel = (mp: string) => MARKETPLACE_LABELS[mp] ?? mp.replace("amazon_", "").toUpperCase()
+
 export const css = `
   *{box-sizing:border-box;margin:0;padding:0}
   :root{font-family:${T.sans};background:${T.bg0};color:${T.text0};-webkit-font-smoothing:antialiased}

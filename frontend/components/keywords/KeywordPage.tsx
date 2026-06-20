@@ -677,15 +677,15 @@ export const KeywordPageInner = () => {
                   <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{selectedTracker.name}</span>
                   {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
                 </div>
-              <div style={{ fontSize: 12, color: T.text2, marginTop: 4 }}>
-                {selectedTracker.scope.keyword}
-                {" · Top "}
-                {selectedTracker.tracking_config.top_n}
-                {" · "}
-                {selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()}
-                {" at "}
-                {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
-              </div>
+                <div style={{ fontSize: 12, color: T.text2, marginTop: 6 }}>
+                  &quot;{selectedTracker.scope.keyword}&quot;
+                  {" · Top "}
+                  {selectedTracker.tracking_config.top_n}
+                  {" · "}
+                  {selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()}
+                  {" at "}
+                  {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
+                </div>
               </div>
               <div style={{ textAlign: "right" }}>
                 {selectedTracker.stats.last_success_at && (

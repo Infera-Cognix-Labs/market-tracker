@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Search, ExternalLink, CheckCircle, AlertCircle, Plus } from "lucide-react"
-import { T } from "../shared/DesignTokens"
+import { T, MARKETPLACE_LABELS } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { apiCreateCategoryTracker, ApiError } from "../shared/api"
@@ -298,38 +298,32 @@ export const NodeSearchPage = () => {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 640 }}>
             {created.map(t => (
-              <div key={t.tracker_code} className="card" style={{ padding: "14px 18px", borderLeft: `3px solid ${T.green}` }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div key={t.tracker_code} className="card-soft" style={{ padding: "14px 18px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                       <CheckCircle size={13} style={{ color: T.green }} />
-                      <span style={{ fontSize: 14, fontWeight: 700, color: T.text0 }}>{t.name}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{t.name}</span>
                       <Badge type="top10" text={t.marketplace.toUpperCase()} />
                     </div>
-                    <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-                      Code: <strong style={{ color: T.amber }}>{t.tracker_code}</strong>
+                    {t.scope.browse_node_url && (
+                      <a href={t.scope.browse_node_url} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: T.text3, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 2, transition: "color .15s" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = T.blue }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = T.text3 }}>
+                        <ExternalLink size={10} /> Category URL
+                      </a>
+                    )}
+                    <div style={{ fontSize: 12, color: T.text2, marginTop: 6 }}>
+                      {MARKETPLACE_LABELS[t.marketplace] ?? t.marketplace.replace("amazon_", "").toUpperCase()}
                       {" · "}
-                      {t.scope.browse_node_url ? (
-                        <a href={t.scope.browse_node_url} target="_blank" rel="noopener noreferrer" style={{ color: T.blue, textDecoration: "none" }}>
-                          Category URL <ExternalLink size={9} />
-                        </a>
-                      ) : "—"}
-                      {" · "}
-                      {t.schedule.frequency} @ {String(t.schedule.hour_utc).padStart(2, "0")}:00 UTC
-                      {" · "}
-                      Top 10 alerts: {t.tracking_config.top10_alert_enabled ? "ON" : "OFF"}
+                      {t.schedule.frequency.charAt(0) + t.schedule.frequency.slice(1).toLowerCase()}
+                      {" at "}
+                      {String(t.schedule.hour_utc).padStart(2, "0")}:00 UTC
+                      {" · Top 10 alerts: "}
+                      {t.tracking_config.top10_alert_enabled ? "ON" : "OFF"}
                     </div>
                   </div>
-                  {t.scope.browse_node_url && (
-                    <a
-                      href={t.scope.browse_node_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontSize: 11, color: T.blue, display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}
-                    >
-                      Browse <ExternalLink size={10} />
-                    </a>
-                  )}
                 </div>
               </div>
             ))}

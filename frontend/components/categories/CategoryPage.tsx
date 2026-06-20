@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
 import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, CheckCircle, AlertCircle, Info } from "lucide-react"
-import { T } from "../shared/DesignTokens"
+import { T, marketplaceLabel } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
 import { Dropdown } from "../shared/Dropdown"
@@ -93,12 +93,6 @@ const parseDealItems = (dealInfo?: DealInfo | null): string[] => {
 
   return items.length > 0 ? items : ["Deal available"]
 }
-
-const MARKETPLACE_LABELS: Record<string, string> = {
-  amazon_us: "US", amazon_de: "Germany", amazon_uk: "UK", amazon_fr: "France",
-  amazon_it: "Italy", amazon_es: "Spain", amazon_ca: "Canada", amazon_jp: "Japan",
-}
-const marketplaceLabel = (mp: string) => MARKETPLACE_LABELS[mp] ?? mp.replace("amazon_", "").toUpperCase()
 
 const MARKETPLACES = [
   { value: "amazon_us", label: "🇺🇸 amazon_us" },
@@ -711,7 +705,15 @@ export const CategoryPageInner = () => {
                 <Badge type="top10" text={selectedTracker.marketplace.toUpperCase()} />
                 {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
               </div>
-              <div style={{ fontSize: 12, color: T.text2, marginTop: 4 }}>
+              {selectedTracker.scope.browse_node_url && (
+                <a href={selectedTracker.scope.browse_node_url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize: 11, color: T.text3, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 2, transition: "color .15s" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = T.blue }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = T.text3 }}>
+                  <ExternalLink size={10} /> Category URL
+                </a>
+              )}
+              <div style={{ fontSize: 12, color: T.text2, marginTop: 6 }}>
                 Amazon {marketplaceLabel(selectedTracker.marketplace)}
                 {" · Top "}
                 {selectedTracker.tracking_config.top_n}
