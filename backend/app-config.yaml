@@ -31,15 +31,6 @@ apify:
             depthOfCrawl: 1
             language: "en"
     competitor:
-      saswave:
-        actor_id: "saswave/amazon-product-scraper"
-        task_id: ""
-        name: "Saswave Amazon Scraper"
-        adapter: "saswave_competitor"
-        build: "latest"
-        memory_mbytes: 4096
-        enabled: false
-        priority: 1
       junglee_asins:
         actor_id: "junglee/amazon-asins-scraper"
         task_id: ""

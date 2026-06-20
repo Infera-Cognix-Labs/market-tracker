@@ -1117,7 +1117,7 @@ export const CompetitorPage = () => {
             )}
             {/* Link to Amazon */}
             {selectedProduct && (
-              <a href={`https://www.amazon.com/dp/${selectedProduct.asin}`} target="_blank" rel="noopener noreferrer"
+              <a href={selectedProduct.product_url || ""} target="_blank" rel="noopener noreferrer"
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 12, padding: "8px 0", color: T.blue, fontSize: 12, textDecoration: "none" }}>
                 <ExternalLink size={13} /> View on Amazon
               </a>

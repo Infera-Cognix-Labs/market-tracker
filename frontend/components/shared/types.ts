@@ -364,6 +364,7 @@ export interface TrackedProductSummary {
   asin: string
   brand: string
   title: string
+  product_url?: string | null
   current_bsr_position: number | null
   current_price: number | null
   currency: string | null
