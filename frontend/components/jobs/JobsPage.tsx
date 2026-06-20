@@ -87,7 +87,7 @@ export const JobsPage = () => {
             <thead>
               <tr style={{ borderBottom: `1px solid ${T.border}` }}>
                 {["Job Code", "Tracker", "Type", "Date", "Trigger", "Status", "Items", "Events", "Duration", "Error"].map(h => (
-                  <th key={h} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".06em", textTransform: "uppercase", fontFamily: T.mono, whiteSpace: "nowrap" }}>{h}</th>
+                  <th key={h} className="th">{h}</th>
                 ))}
               </tr>
             </thead>
