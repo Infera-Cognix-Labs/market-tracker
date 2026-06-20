@@ -726,7 +726,12 @@ export const CompetitorPage = () => {
                     {productDetail?.title_latest || selectedProduct?.title || "—"}
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3 }}>{selectedProduct?.asin}</span>
+                    {(() => {
+                      const url = productDetail?.product_url || selectedProduct?.product_url
+                      return url
+                        ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontFamily: T.mono, color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>{selectedProduct?.asin}<ExternalLink size={9} /></a>
+                        : <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3 }}>{selectedProduct?.asin}</span>
+                    })()}
                     <span style={{ fontSize: 11, color: T.text2 }}>{productDetail?.brand || selectedProduct?.brand}</span>
                     <Badge type={selectedProduct?.availability_status === "IN_STOCK" ? "listing" : "stock"} text={selectedProduct?.availability_status === "IN_STOCK" ? "In Stock" : "Out of Stock"} />
                   </div>
