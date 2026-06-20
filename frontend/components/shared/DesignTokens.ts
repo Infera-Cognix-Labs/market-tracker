@@ -56,6 +56,7 @@ export const css = `
   .input::placeholder{color:${T.text3}}
   .card{background:${T.bg2};border:1px solid ${T.border};border-radius:10px;padding:16px}
   .card-soft{background:${T.bg2};border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .card-info{background:${T.bg3};border:1px solid ${T.border2};border-radius:10px;padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,.35);margin-bottom:16px}
   .divider{height:1px;background:${T.border};margin:12px 0}
   .tag-new{background:#0F2A1A;color:${T.green};border:1px solid ${T.greenD}}
   .tag-ret{background:#1A2010;color:#90EE90;border:1px solid #3A5A2A}

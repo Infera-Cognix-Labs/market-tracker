@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
-import { Plus, ExternalLink, Calendar, Settings, Clock, X, Trash2, CheckCircle, AlertCircle, Edit2, Package } from "lucide-react"
+import { Plus, ExternalLink, Settings, X, Trash2, CheckCircle, AlertCircle, Edit2, Package } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
@@ -744,27 +744,37 @@ export const CompetitorPage = () => {
 
       {/* Tracker Info Header */}
       {tracker && (
-      <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
+      <div className="card-info">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: T.text0 }}>{tracker.name}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{tracker.name}</span>
               <Badge type="top10" text={tracker.marketplace.toUpperCase()} />
-              {tracker.status === "ACTIVE" && <span className="dot-live" />}
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: tracker.status === "ACTIVE" ? "#0F2A1A" : "#2A100F", color: tracker.status === "ACTIVE" ? T.green : T.red, border: `1px solid ${tracker.status === "ACTIVE" ? T.greenD : T.redD}`, fontFamily: T.mono }}>
+                {tracker.status === "ACTIVE" ? "Active" : tracker.status === "PAUSED" ? "Paused" : "Error"}
+              </span>
             </div>
-            <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-              <span><Calendar size={10} /> {tracker.schedule.frequency} @ {tracker.schedule.hour_utc}:00 UTC</span>
-              <span><Settings size={10} /> {tracker.stats.tracked_asin_count} ASINs</span>
-              <span><Clock size={10} /> Last: {tracker.stats.last_success_at ? new Date(tracker.stats.last_success_at).toLocaleString() : "—"}</span>
+            <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text2, marginTop: 6 }}>
+              <span>{tracker.stats.tracked_asin_count} ASINs</span>
+              <span style={{ color: T.text3 }}>·</span>
+              <span>{tracker.schedule.frequency} @ {tracker.schedule.hour_utc}:00 UTC</span>
             </div>
           </div>
-          {/* Track fields */}
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
-              <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
-                {k.replace(/_/g, " ")}
-              </span>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "right" }}>
+              {tracker.stats.last_success_at && (
+                <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  Last capture <span style={{ color: T.text1 }}>{new Date(tracker.stats.last_success_at).toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {Object.entries(tracker.track_fields).filter(([, v]) => v).map(([k]) => (
+                <span key={k} style={{ fontSize: 9, padding: "2px 6px", background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text2, fontFamily: T.mono }}>
+                  {k.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>

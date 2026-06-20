@@ -697,13 +697,15 @@ export const CategoryPageInner = () => {
 
       {/* Tracker info card */}
       {selectedTracker && (
-        <div className="card-soft" style={{ marginBottom: 16, padding: "14px 18px" }}>
+        <div className="card-info">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: T.text0 }}>{selectedTracker.name}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{selectedTracker.name}</span>
                 <Badge type="top10" text={selectedTracker.marketplace.toUpperCase()} />
-                {selectedTracker.status === "ACTIVE" && <span className="dot-live" />}
+                <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: selectedTracker.status === "ACTIVE" ? "#0F2A1A" : "#2A100F", color: selectedTracker.status === "ACTIVE" ? T.green : T.red, border: `1px solid ${selectedTracker.status === "ACTIVE" ? T.greenD : T.redD}`, fontFamily: T.mono }}>
+                  {selectedTracker.status === "ACTIVE" ? "Active" : selectedTracker.status === "PAUSED" ? "Paused" : "Error"}
+                </span>
               </div>
               {selectedTracker.scope.browse_node_url && (
                 <a href={selectedTracker.scope.browse_node_url} target="_blank" rel="noopener noreferrer"
@@ -723,14 +725,14 @@ export const CategoryPageInner = () => {
                 {String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC
               </div>
             </div>
-            <div style={{ textAlign: "right" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "right" }}>
               {selectedTracker.stats.last_success_at && (
-                <div style={{ fontSize: 11, color: T.text2 }}>
-                  Last captured: <span style={{ color: T.text1 }}>{new Date(selectedTracker.stats.last_success_at).toLocaleDateString()}</span>
+                <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                  Last capture <span style={{ color: T.text1 }}>{new Date(selectedTracker.stats.last_success_at).toLocaleDateString()}</span>
                 </div>
               )}
-              <div style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>
-                Source: Apify · {selectedTracker.stats.snapshot_count} snapshot{selectedTracker.stats.snapshot_count !== 1 ? "s" : ""}
+              <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+                Snapshots <span style={{ color: T.text1 }}>{selectedTracker.stats.snapshot_count}</span>
               </div>
             </div>
           </div>
