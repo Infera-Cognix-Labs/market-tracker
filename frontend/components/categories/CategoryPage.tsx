@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
-import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, CheckCircle, AlertCircle } from "lucide-react"
+import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, CheckCircle, AlertCircle } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
-import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiTriggerJob, apiListEvents, ApiError } from "../shared/api"
+import { Dropdown } from "../shared/Dropdown"
+import { apiListCategoryTrackers, apiGetLatestCategorySnapshot, apiCreateCategoryTracker, apiUpdateCategoryTracker, apiDeleteCategoryTracker, apiTriggerJob, apiListEvents, ApiError } from "../shared/api"
 import type { CategoryTracker, CategorySnapshot, CategorySnapshotProduct, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus, DealInfo, Event, EventType } from "../shared/types"
 
 type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
@@ -179,6 +180,8 @@ const matchesCategoryEventSearch = (search: string, event: Event): boolean => {
 // ── Create Category Tracker Modal ─────────────────────────────────────────────
 interface CreateModalProps { onClose: () => void; onCreate: (t: CategoryTracker) => void }
 
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${String(i).padStart(2, "0")}:00 UTC` }))
+
 const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
   const [urlInput, setUrlInput] = useState("")
   const [name, setName] = useState("")
@@ -260,17 +263,11 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
               placeholder="e.g. Baby Bottle Warmers - US" maxLength={120} style={inputStyle} />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Marketplace</label>
-            <select value={marketplace} onChange={e => setMarketplace(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-              {MARKETPLACES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-            </select>
+            <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
           </div>
           <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
               <label style={labelStyle}>Top 10 Alerts</label>
@@ -301,14 +298,15 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
 }
 
 // ── Edit Category Tracker Modal ───────────────────────────────────────────────
-interface EditModalProps { tracker: CategoryTracker; onClose: () => void; onUpdate: (t: CategoryTracker) => void }
+interface EditModalProps { tracker: CategoryTracker; onClose: () => void; onUpdate: (t: CategoryTracker) => void; onDelete: (trackerCode: string) => void }
 
-const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps) => {
+const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditModalProps) => {
   const [name, setName] = useState(tracker.name)
   const [top10Alert, setTop10Alert] = useState(tracker.tracking_config.top10_alert_enabled)
   const [hourUtc, setHourUtc] = useState(tracker.schedule.hour_utc)
   const [status, setStatus] = useState<TrackerStatus>(tracker.status as TrackerStatus)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -331,6 +329,18 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
     }
   }
 
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this tracker and all its snapshots?")) return
+    setDeleting(true)
+    try {
+      await apiDeleteCategoryTracker(tracker.tracker_code)
+      onDelete(tracker.tracker_code)
+    } catch {
+      setError("Failed to delete tracker.")
+      setDeleting(false)
+    }
+  }
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
     <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -346,10 +356,7 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
           </div>
           <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
               <label style={labelStyle}>Top 10 Alerts</label>
@@ -377,11 +384,17 @@ const EditCategoryTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps
               <span style={{ fontSize: 12, color: T.red }}>{error}</span>
             </div>
           )}
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-            <button type="submit" disabled={submitting} className="btn-primary">
-              {submitting ? "Saving…" : "Save Changes"}
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+            <button type="button" onClick={handleDelete} disabled={deleting}
+              style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: deleting ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans, opacity: deleting ? 0.5 : 1 }}>
+              <Trash2 size={12} /> {deleting ? "Deleting…" : "Delete"}
             </button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+              <button type="submit" disabled={submitting} className="btn-primary">
+                {submitting ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -622,6 +635,7 @@ export const CategoryPageInner = () => {
           tracker={selectedTracker}
           onClose={() => setShowEdit(false)}
           onUpdate={t => { setTrackers(prev => prev.map(x => x.tracker_code === t.tracker_code ? t : x)); setShowEdit(false) }}
+          onDelete={code => { setTrackers(prev => prev.filter(x => x.tracker_code !== code)); setSelectedCode(""); setShowEdit(false) }}
         />
       )}
     <div className="anim-fade">

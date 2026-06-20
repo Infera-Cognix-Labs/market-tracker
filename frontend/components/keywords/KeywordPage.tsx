@@ -1,10 +1,11 @@
 "use client"
 
 import { useState, useEffect, useMemo, useReducer, Suspense } from "react"
-import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, AlertCircle, Trash2 } from "lucide-react"
+import { Search, TrendingUp, TrendingDown, Star, Zap, RefreshCw, ExternalLink, Plus, Edit2, X, Trash2, AlertCircle } from "lucide-react"
 import { T } from "../shared/DesignTokens"
 import { PageHeader } from "../shared/PageHeader"
 import { Badge } from "../shared/Badge"
+import { Dropdown } from "../shared/Dropdown"
 import {
   apiListKeywordTrackers,
   apiGetLatestKeywordSnapshot,
@@ -67,6 +68,8 @@ const MARKETPLACES = [
   { value: "amazon_ca", label: "\u{1F1E8}\u{1F1E6} amazon_ca" },
   { value: "amazon_jp", label: "\u{1F1EF}\u{1F1F5} amazon_jp" },
 ]
+
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${String(i).padStart(2, "0")}:00 UTC` }))
 
 const rankTrendMeta = (product: CategorySnapshotProduct) => {
   if (product.rank_trend === "NEW") return { color: T.green, label: "New" }
@@ -241,16 +244,10 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
                 placeholder="e.g. Baby Bottle Warmers" maxLength={120} style={inputStyle} />
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Marketplace</label>
-              <select value={marketplace} onChange={e => setMarketplace(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-                {MARKETPLACES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
+              <Dropdown label="Marketplace" value={marketplace} onChange={v => setMarketplace(v as string)} options={MARKETPLACES} />
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             {error && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, background: `${T.red}18`, border: `1px solid ${T.red}40`, marginBottom: 14 }}>
@@ -272,13 +269,14 @@ const CreateKeywordTrackerModal = ({ onClose, onCreate }: CreateModalProps) => {
 }
 
 // ── Edit Keyword Tracker Modal ───────────────────────────────────────────
-interface EditModalProps { tracker: KeywordTracker; onClose: () => void; onUpdate: (t: KeywordTracker) => void }
+interface EditModalProps { tracker: KeywordTracker; onClose: () => void; onUpdate: (t: KeywordTracker) => void; onDelete: (trackerCode: string) => void }
 
-const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps) => {
+const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditModalProps) => {
   const [name, setName] = useState(tracker.name)
   const [hourUtc, setHourUtc] = useState(tracker.schedule.hour_utc)
   const [status, setStatus] = useState<TrackerStatus>(tracker.status as TrackerStatus)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -300,6 +298,18 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
     }
   }
 
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this tracker and all its snapshots?")) return
+    setDeleting(true)
+    try {
+      await apiDeleteKeywordTracker(tracker.tracker_code)
+      onDelete(tracker.tracker_code)
+    } catch {
+      setError("Failed to delete tracker.")
+      setDeleting(false)
+    }
+  }
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
       <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -314,10 +324,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
               <input type="text" value={name} onChange={e => setName(e.target.value)} maxLength={120} style={inputStyle} />
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={labelStyle}>Run at (UTC hour)</label>
-              <select value={hourUtc} onChange={e => setHourUtc(Number(e.target.value))} style={{ ...inputStyle, cursor: "pointer" }}>
-                {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")}:00 UTC</option>)}
-              </select>
+              <Dropdown label="Run at (UTC hour)" value={hourUtc} onChange={v => setHourUtc(Number(v))} options={HOURS} />
             </div>
             <div style={{ marginBottom: 20 }}>
               <label style={labelStyle}>Status</label>
@@ -336,11 +343,17 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate }: EditModalProps)
                 <span style={{ fontSize: 12, color: T.red }}>{error}</span>
               </div>
             )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-              <button type="submit" disabled={submitting} className="btn-primary">
-                {submitting ? "Saving…" : "Save Changes"}
+            <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
+              <button type="button" onClick={handleDelete} disabled={deleting}
+                style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: deleting ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans, opacity: deleting ? 0.5 : 1 }}>
+                <Trash2 size={12} /> {deleting ? "Deleting…" : "Delete"}
               </button>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+                <button type="submit" disabled={submitting} className="btn-primary">
+                  {submitting ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -530,19 +543,6 @@ export const KeywordPageInner = () => {
     setRefreshKey(k => k + 1)
   }
 
-  const handleDelete = async () => {
-    if (!selectedCode) return
-    if (!window.confirm("Delete this tracker and all its snapshots?")) return
-    try {
-      await apiDeleteKeywordTracker(selectedCode)
-      setTrackers(prev => prev.filter(t => t.tracker_code !== selectedCode))
-      setSelectedCode("")
-      setSnapshot(null)
-    } catch {
-      setError("Failed to delete tracker.")
-    }
-  }
-
   // KPI counts
   const newEntrantCount = snapshot?.summary.new_entrant_count ?? 0
   const returningCount = snapshot?.summary.returning_count ?? 0
@@ -593,6 +593,12 @@ export const KeywordPageInner = () => {
           tracker={selectedTracker}
           onClose={() => setShowEdit(false)}
           onUpdate={handleUpdate}
+          onDelete={code => {
+            setTrackers(prev => prev.filter(t => t.tracker_code !== code))
+            setSelectedCode("")
+            setSnapshot(null)
+            setShowEdit(false)
+          }}
         />
       )}
       <div className="anim-fade">
@@ -681,9 +687,6 @@ export const KeywordPageInner = () => {
                 {selectedTracker.latest_snapshot_summary && (
                   <div style={{ fontSize: 10, color: T.text3, fontFamily: T.mono, marginTop: 2 }}>Latest: {selectedTracker.latest_snapshot_summary.snapshot_date}</div>
                 )}
-                <button onClick={handleDelete} style={{ marginTop: 8, padding: "4px 10px", borderRadius: 6, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
-                  <Trash2 size={11} /> Delete
-                </button>
               </div>
             </div>
           </div>
