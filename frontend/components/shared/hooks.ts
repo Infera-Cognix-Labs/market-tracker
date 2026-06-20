@@ -352,5 +352,5 @@ export function useTrackerPage<T extends { tracker_code: string; status?: string
     selectedTracker,
     filteredProducts, allVisibleRows, totalFilteredCount,
     handleSelectTracker, handleCreate, handleUpdate, handleDelete,
-  }
+  } as const
 }

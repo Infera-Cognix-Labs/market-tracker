@@ -1,6 +1,6 @@
 "use client"
 
-import { Info, Plus, Search, X } from "lucide-react"
+import { Info, Plus, Search, Trash2, X } from "lucide-react"
 import { Suspense, useState } from "react"
 import { ProductTable } from "../categories/ProductTable"
 import { ConfirmDialog } from "../shared/ConfirmDialog"
@@ -178,7 +178,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
             <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
               <button type="button" onClick={() => setShowConfirm(true)}
                 style={{ padding: "9px 14px", borderRadius: 8, border: `1px solid ${T.red}40`, background: "transparent", color: T.red, fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: T.sans }}>
-                Delete
+                <Trash2 size={12} /> Delete
               </button>
               <div style={{ display: "flex", gap: 10 }}>
                 <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>

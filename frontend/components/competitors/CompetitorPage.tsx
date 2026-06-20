@@ -6,7 +6,7 @@ import { CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Toolti
 import { AlertTypeMeta } from "../shared/AlertTypeMeta"
 import { Badge } from "../shared/Badge"
 import { ConfirmDialog } from "../shared/ConfirmDialog"
-import { T } from "../shared/DesignTokens"
+import { T, statusColor } from "../shared/DesignTokens"
 import { Dropdown } from "../shared/Dropdown"
 import { PageHeader } from "../shared/PageHeader"
 import { StatusFilterTabs } from "../shared/StatusFilterTabs"
@@ -647,8 +647,8 @@ export const CompetitorPage = () => {
                 setOpenCouponRowKey(null)
                 setOpenDealRowKey(null)
               }}
-                style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? T.amber : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? T.amber : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
-                {isSelected && <span className="dot-live" style={{ background: T.amber, boxShadow: `0 0 0 3px ${T.amber}30` }} />}
+                style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${isSelected ? statusColor(t.status) : T.border}`, background: isSelected ? T.bg4 : T.bg2, color: isSelected ? statusColor(t.status) : T.text1, fontSize: 13, fontFamily: T.sans, cursor: "pointer", transition: "all .15s", display: "flex", alignItems: "center", gap: 6 }}>
+                {isSelected && <span className="dot-live" style={{ background: statusColor(t.status), boxShadow: `0 0 0 3px ${statusColor(t.status)}30` }} />}
                 {t.name}
                 <span style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>({t.marketplace})</span>
               </button>

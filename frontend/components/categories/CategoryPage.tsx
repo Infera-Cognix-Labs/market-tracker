@@ -243,6 +243,7 @@ export const CategoryPageInner = () => {
     allVisibleRows, totalFilteredCount,
     handleSelectTracker, handleCreate, handleUpdate, handleDelete,
     setLoading,
+    setRefreshKey,
   } = useTrackerPage<CategoryTracker>({
     trackerType: "CATEGORY",
     apiListTrackers: apiListCategoryTrackers,
@@ -385,7 +386,7 @@ export const CategoryPageInner = () => {
         headerExtra={
           <div style={{ display: "flex", gap: 4 }}>
             {(["WEEKLY", "MONTHLY"] as Timeframe[]).map(t => (
-              <button key={t} onClick={() => { if (t !== rankTimeframe) { setRankTimeframe(t) } }}
+              <button key={t} onClick={() => { if (t !== rankTimeframe) { setRankTimeframe(t); setRefreshKey(k => k + 1) } }}
                 style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${t === rankTimeframe ? T.amber : T.border}`, background: t === rankTimeframe ? T.bg4 : "transparent", color: t === rankTimeframe ? T.amber : T.text3, fontSize: 11, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>
                 {t === "WEEKLY" ? "7 days" : "30 days"}
               </button>
