@@ -6,7 +6,7 @@ import { T } from "./DesignTokens"
 interface ConfirmDialogProps {
   open: boolean
   title: string
-  message: string
+  message: React.ReactNode
   confirmLabel?: string
   onConfirm: () => void
   onCancel: () => void

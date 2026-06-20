@@ -363,7 +363,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
     <ConfirmDialog
       open={showConfirm}
       title="Delete Tracker"
-      message={`Delete "${tracker.name}" and all its snapshots? This action cannot be undone.`}
+      message={<>Delete "<b>{tracker.name}</b>" and all its snapshots? This action cannot be undone.</>}
       confirmLabel="Delete"
       loading={deleting}
       onConfirm={handleDelete}

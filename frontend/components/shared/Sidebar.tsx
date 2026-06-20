@@ -37,13 +37,6 @@ export const Sidebar = ({ page, setPage }: { page: string; setPage: (page: strin
         )
       })}
     </nav>
-    {/* Status footer */}
-    <div style={{ padding: "12px 14px", borderTop: `1px solid ${T.border}` }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span className="dot-live" />
-        <span style={{ fontSize: 11, color: T.text2 }}>System online</span>
-      </div>
-      <div style={{ fontSize: 10, fontFamily: T.mono, color: T.text3 }}>API: mock mode</div>
-    </div>
+
   </div>
 )
