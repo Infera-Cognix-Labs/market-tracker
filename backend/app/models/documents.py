@@ -68,7 +68,7 @@ class CategorySnapshotDocument(WorkspaceDocument):
     browse_node_id: str
     snapshot_date: date
     captured_at: datetime
-    top_n: int = 60
+    top_n: int = 50
     products: list[CategorySnapshotProduct] = Field(default_factory=list)
     summary: CategorySnapshotSummary
     source_refs: dict[str, object] | None = None

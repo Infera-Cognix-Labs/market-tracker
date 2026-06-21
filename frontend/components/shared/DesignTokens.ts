@@ -66,8 +66,8 @@ export const css = `
   .tag-exit{background:#2A100F;color:${T.red};border:1px solid ${T.redD}}
   .tag-top10{background:#1A1500;color:${T.amber};border:1px solid ${T.amberD}}
   .tag-price{background:#0D1A30;color:${T.blue};border:1px solid ${T.blueD}}
-  .tag-stock{background:#200D25;color:${T.purple};border:1px solid #5A2580}
-  .tag-listing{background:#0A1A1A;color:${T.teal};border:1px solid #1A4040}
+  .tag-stock{background:#200D25;color:${T.purple};border:1px solid #5A2580;min-width:56px;height:18px;text-align:center;justify-content:center}
+  .tag-listing{background:#0A1A1A;color:${T.teal};border:1px solid #1A4040;min-width:56px;height:18px;text-align:center;justify-content:center}
   .tag-info{background:${T.bg3};color:${T.text1};border:1px solid ${T.border}}
   .label{display:block;font-size:11px;font-weight:600;color:${T.text2};margin-bottom:6px;letter-spacing:.04em;text-transform:uppercase}
   .th{padding:9px 10px;text-align:left;font-size:10px;font-weight:600;color:${T.text3};letter-spacing:.06em;text-transform:uppercase;font-family:${T.mono};white-space:nowrap}

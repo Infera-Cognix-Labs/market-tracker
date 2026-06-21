@@ -255,10 +255,12 @@ export function useTrackerPage<T extends { tracker_code: string; status?: string
     return snapshot.products.filter(product => matchesProductSearch(search, product))
   }, [snapshot, search])
 
+  const MAX_VISIBLE_PRODUCTS = 50
+
   const allVisibleRows = useMemo<TableRow[]>(() => {
     if (!snapshot) return []
     if (activeKpiFilter === "ALL") {
-      return filteredProducts.map(product => ({
+      return filteredProducts.slice(0, MAX_VISIBLE_PRODUCTS).map(product => ({
         kind: "product",
         key: `${product.asin}-${product.rank_position}`,
         product,
