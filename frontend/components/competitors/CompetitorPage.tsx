@@ -691,19 +691,19 @@ export const CompetitorPage = () => {
                 style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === selectedAsinIdx ? T.bg4 : T.bg2, border: `1px solid ${i === selectedAsinIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
                 <div style={{ fontSize: 11, fontFamily: T.mono, color: T.text3, marginBottom: 3 }}>{p.asin}</div>
                 <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{p.title}</div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: T.mono, fontSize: 12, color: T.amber }}>
                     {p.current_bsr_position ? `#${p.current_bsr_position.toLocaleString()}` : "—"}
                   </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
                     {p.recent_event_count_7d && p.recent_event_count_7d > 0 && (
-                      <span style={{ fontSize: 9, padding: "1px 5px", background: `${T.amber}20`, color: T.amber, borderRadius: 4, fontFamily: T.mono, fontWeight: 700 }}>
+                      <span style={{ fontSize: 9, padding: "1px 5px", background: `${T.amber}20`, color: T.amber, borderRadius: 4, fontFamily: T.mono, fontWeight: 700, minWidth: 42, textAlign: "center" }}>
                         {p.recent_event_count_7d} events
                       </span>
                     )}
                     {p.availability_status === "OUT_OF_STOCK"
                       ? <Badge type="stock" text="OOS" />
-                      : <span className="dot-live" />}
+                      : <span className="dot-live" style={{ display: "inline-block", width: 6, height: 6 }} />}
                   </div>
                 </div>
               </div>
