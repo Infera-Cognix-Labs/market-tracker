@@ -775,10 +775,10 @@ export const CompetitorPage = () => {
                     const sym = currency === "EUR" ? "€" : currency === "GBP" ? "£" : "$"
                     const latestPt = timeline?.points[timeline.points.length - 1]
                     return [
-                      { label: "BSR", v: productDetail?.current_state.bsr_position ? `#${productDetail.current_state.bsr_position.toLocaleString()}` : (selectedProduct?.current_bsr_position ? `#${selectedProduct.current_bsr_position.toLocaleString()}` : "—"), color: T.amber },
-                      { label: "Price", v: `${sym}${(productDetail?.current_state.price_current ?? selectedProduct?.current_price ?? 0).toFixed(2)}`, color: T.text0 },
-                      { label: "Rating", v: latestPt?.rating_value ? `${latestPt.rating_value}★` : "—", color: T.green },
-                      { label: "Reviews", v: latestPt?.review_count ? latestPt.review_count.toLocaleString() : "—", color: T.text2 },
+                      { label: "BSR", v: latestPt?.bsr_position ? `#${latestPt.bsr_position.toLocaleString()}` : (productDetail?.current_state.bsr_position ? `#${productDetail.current_state.bsr_position.toLocaleString()}` : (selectedProduct?.current_bsr_position ? `#${selectedProduct.current_bsr_position.toLocaleString()}` : "—")), color: T.amber },
+                      { label: "Price", v: `${sym}${(latestPt?.price_current ?? productDetail?.current_state.price_current ?? selectedProduct?.current_price ?? 0).toFixed(2)}`, color: T.text0 },
+                  { label: "Rating", v: latestPt?.rating_value ? `${latestPt.rating_value}★` : (productDetail?.current_state.rating_value ? `${productDetail.current_state.rating_value}★` : "—"), color: T.green },
+                  { label: "Reviews", v: latestPt?.review_count ? latestPt.review_count.toLocaleString() : (productDetail?.current_state.review_count ? productDetail.current_state.review_count.toLocaleString() : "—"), color: T.text2 },
                     ].map(s => (
                       <div key={s.label} style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: s.color }}>{s.v}</div>

@@ -287,7 +287,9 @@ def _coerce_int(value: object | None) -> int | None:
 
 
 def _coerce_image_url(payload: dict[str, object]) -> str:
-    direct = _coerce_string(_pick(payload, "image", "main_image_url", "image_url"))
+    direct = _coerce_string(
+        _pick(payload, "image", "main_image_url", "image_url", "thumbnailImage")
+    )
     if direct:
         return direct
 
@@ -298,10 +300,15 @@ def _coerce_image_url(payload: dict[str, object]) -> str:
             if image:
                 return image
 
-    asin = _coerce_asin(_pick(payload, "asin", "ASIN"))
-    if asin:
-        return f"https://www.amazon.com/dp/{asin}"
-    return "https://www.amazon.com"
+    for key in ("galleryThumbnails", "highResolutionImages"):
+        gallery = payload.get(key)
+        if isinstance(gallery, list) and gallery:
+            for item in gallery:
+                url = _coerce_string(item)
+                if url:
+                    return url
+
+    return ""
 
 
 def _normalize_availability_status(payload: dict[str, object]) -> AvailabilityStatus:
@@ -558,7 +565,4 @@ def _pick_junglee_image_url(payload: dict) -> str:
             url = _coerce_string(item)
             if url:
                 return url
-    asin = _coerce_asin(_pick(payload, "asin"))
-    if asin:
-        return f"https://www.amazon.com/dp/{asin}"
-    return "https://www.amazon.com"
+    return ""
