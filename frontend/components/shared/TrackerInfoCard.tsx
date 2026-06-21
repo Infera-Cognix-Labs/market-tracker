@@ -24,7 +24,7 @@ export const TrackerInfoCard = ({ name, marketplace, status, meta, statsRight, c
         {children}
       </div>
       {statsRight && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "right" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           {statsRight}
         </div>
       )}
@@ -33,7 +33,8 @@ export const TrackerInfoCard = ({ name, marketplace, status, meta, statsRight, c
 )
 
 export const TrackerStat = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
-    {label} <span style={{ color: T.text1 }}>{value}</span>
+  <div style={{ display: "grid", gridTemplateColumns: "90px 1fr", gap: 4, fontSize: 11, color: T.text3, fontFamily: T.mono, padding: "2px 0" }}>
+    <span>{label}</span>
+    <span style={{ color: T.text1, textAlign: "right" }}>{value}</span>
   </div>
 )
