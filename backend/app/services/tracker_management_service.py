@@ -4,7 +4,7 @@ import time
 from datetime import timedelta
 
 from beanie.operators import In
-from pymongo import ASCENDING
+from pymongo import ASCENDING, DESCENDING
 
 from app.core.errors import ConflictError, NotFoundError
 from app.core.logging import get_logger
@@ -97,6 +97,17 @@ class TrackerManagementService:
         )
         t_db = (time.monotonic() - t0) * 1000
 
+        # Query latest snapshot per ASIN for fresh BSR/price data
+        snapshot_docs = await ProductSnapshotDocument.find(
+            ProductSnapshotDocument.workspace_id == workspace_id,
+            ProductSnapshotDocument.marketplace == tracker.marketplace,
+            In(ProductSnapshotDocument.asin, tracked_asins),
+        ).sort((ProductSnapshotDocument.snapshot_date, DESCENDING)).to_list()
+        latest_snapshots: dict[str, ProductSnapshotDocument] = {}
+        for doc in snapshot_docs:
+            if doc.asin not in latest_snapshots:
+                latest_snapshots[doc.asin] = doc
+
         t1 = time.monotonic()
         refreshed_tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
@@ -106,6 +117,7 @@ class TrackerManagementService:
             existing=tracker.tracked_products,
             reference_date=reference_date,
             recent_from_date=recent_from_date,
+            latest_snapshots=latest_snapshots,
         )
         t_transform = (time.monotonic() - t1) * 1000
         _logger.info(
@@ -356,6 +368,17 @@ class TrackerManagementService:
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.asin, asin_list),
         ).to_list() if asin_list else []
+
+        # Query latest snapshot per ASIN for fresh BSR/price data
+        snapshot_docs = await ProductSnapshotDocument.find(
+            ProductSnapshotDocument.workspace_id == workspace_id,
+            In(ProductSnapshotDocument.asin, asin_list),
+        ).sort((ProductSnapshotDocument.snapshot_date, DESCENDING)).to_list() if asin_list else []
+        latest_snapshots: dict[str, ProductSnapshotDocument] = {}
+        for doc in snapshot_docs:
+            if doc.asin not in latest_snapshots:
+                latest_snapshots[doc.asin] = doc
+
         tracker = CompetitorTrackerDetail(
             tracker_code=generate_tracker_code(
                 "cmp",
@@ -374,6 +397,7 @@ class TrackerManagementService:
                 tracked_asins=tracked_asins,
                 products=[product_doc_to_model(doc) for doc in product_docs],
                 events=[event_doc_to_model(doc) for doc in event_docs],
+                latest_snapshots=latest_snapshots,
             ),
             created_at=now,
             updated_at=now,
@@ -429,12 +453,24 @@ class TrackerManagementService:
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.asin, asin_list),
         ).to_list() if asin_list else []
+
+        # Query latest snapshot per ASIN for fresh BSR/price data
+        snapshot_docs = await ProductSnapshotDocument.find(
+            ProductSnapshotDocument.workspace_id == workspace_id,
+            In(ProductSnapshotDocument.asin, asin_list),
+        ).sort((ProductSnapshotDocument.snapshot_date, DESCENDING)).to_list() if asin_list else []
+        latest_snapshots: dict[str, ProductSnapshotDocument] = {}
+        for doc in snapshot_docs:
+            if doc.asin not in latest_snapshots:
+                latest_snapshots[doc.asin] = doc
+
         tracker.tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
             products=[product_doc_to_model(doc) for doc in product_docs],
             events=[event_doc_to_model(doc) for doc in event_docs],
             existing=tracker.tracked_products,
+            latest_snapshots=latest_snapshots,
         )
         tracker.updated_at = utc_now()
 
@@ -481,12 +517,24 @@ class TrackerManagementService:
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.asin, asin_list),
         ).to_list() if asin_list else []
+
+        # Query latest snapshot per ASIN for fresh BSR/price data
+        snapshot_docs = await ProductSnapshotDocument.find(
+            ProductSnapshotDocument.workspace_id == workspace_id,
+            In(ProductSnapshotDocument.asin, asin_list),
+        ).sort((ProductSnapshotDocument.snapshot_date, DESCENDING)).to_list() if asin_list else []
+        latest_snapshots: dict[str, ProductSnapshotDocument] = {}
+        for doc in snapshot_docs:
+            if doc.asin not in latest_snapshots:
+                latest_snapshots[doc.asin] = doc
+
         tracker.tracked_products = build_competitor_summaries(
             marketplace=tracker.marketplace,
             tracked_asins=tracker.tracked_asins,
             products=[product_doc_to_model(doc) for doc in product_docs],
             events=[event_doc_to_model(doc) for doc in event_docs],
             existing=tracker.tracked_products,
+            latest_snapshots=latest_snapshots,
         )
 
         for key, value in tracker.model_dump(mode="python").items():
