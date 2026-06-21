@@ -239,6 +239,8 @@ class SnapshotService:
             price_original=record.price_original,
             currency=record.currency,
             bsr_position=record.bsr_position,
+            rating_value=record.rating_value,
+            review_count=record.review_count,
             availability_status=record.availability_status,
             buy_box_status=record.buy_box_status,
             buy_box_seller_name=record.buy_box_seller_name,

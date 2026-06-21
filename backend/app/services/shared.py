@@ -646,6 +646,7 @@ def build_competitor_summaries(
                     brand=product.brand,
                     title=product.title_latest,
                     product_url=product.product_url,
+                    image_url=product.main_image_url_latest,
                     current_bsr_position=product.current_state.bsr_position,
                     current_price=product.current_state.price_current,
                     currency=product.current_state.currency,
