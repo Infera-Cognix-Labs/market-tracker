@@ -36,7 +36,7 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
     e.preventDefault()
     setError(null)
     if (!urlInput.trim()) { setError("Please enter a Best-sellers category URL."); return }
-    if (!parsedUrl) { setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.com/Best-Sellers/zgbs/...)"); return }
+    if (!parsedUrl) { setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.de/-/en/gp/bestsellers/kitchen/3437582031)"); return }
     if (!name.trim()) { setError("Please enter a tracker name."); return }
     const scope = { browse_node_url: parsedUrl }
     const payload: CategoryTrackerCreateRequest = {
@@ -68,7 +68,7 @@ const CreateCategoryTrackerModal = ({ onClose, onCreate }: CreateModalProps) => 
               <div style={{ position: "relative" }}>
                 <Search size={13} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: T.text3, pointerEvents: "none" }} />
                 <input type="text" value={urlInput} onChange={e => setUrlInput(e.target.value)}
-                  placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
+                  placeholder="e.g. https://www.amazon.de/-/en/gp/bestsellers/kitchen/3437582031"
                   className="input" style={{ paddingLeft: 32 }} />
               </div>
               {urlInput.trim() && (
