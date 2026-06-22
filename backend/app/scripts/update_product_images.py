@@ -19,11 +19,11 @@ import sys
 from collections import defaultdict
 
 from apify_client import ApifyClient
+from app.config.config import get_settings
+from app.models.api import TrackerType
+from app.models.documents import DOCUMENT_MODELS, ProductDocument
 from beanie import init_beanie
 from pymongo import AsyncMongoClient
-
-from app.config.config import get_settings
-from app.models.documents import DOCUMENT_MODELS, ProductDocument
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -87,7 +87,9 @@ def _fetch_images_from_apify(
     run = client.actor(ACTOR_ID).call(run_input=run_input, timeout_secs=300)
 
     if run.get("status") != "SUCCEEDED":
-        log.warning("Actor run did not succeed (status=%s), skipping batch", run.get("status"))
+        log.warning(
+            "Actor run did not succeed (status=%s), skipping batch", run.get("status")
+        )
         return {}
 
     dataset_id = run["defaultDatasetId"]
@@ -103,7 +105,13 @@ def _fetch_images_from_apify(
     return result
 
 
-async def main(dry_run: bool, batch_size: int, marketplaces: list[str] | None, skip_marketplaces: list[str]) -> None:
+async def main(
+    dry_run: bool,
+    batch_size: int,
+    marketplaces: list[str] | None,
+    skip_marketplaces: list[str],
+    tracker_type: str | None,
+) -> None:
     client = await _init_db()
     try:
         settings = get_settings()
@@ -115,6 +123,19 @@ async def main(dry_run: bool, batch_size: int, marketplaces: list[str] | None, s
         products = await ProductDocument.find_all().to_list()
         log.info("Found %d total products in database", len(products))
 
+        if tracker_type:
+            target_type = TrackerType(tracker_type)
+            products = [
+                p
+                for p in products
+                if any(ref.tracker_type == target_type for ref in p.tracker_refs)
+            ]
+            log.info(
+                "Filtered to %d products linked to tracker type %s",
+                len(products),
+                tracker_type,
+            )
+
         # Group by marketplace
         by_marketplace: dict[str, list[ProductDocument]] = defaultdict(list)
         for p in products:
@@ -122,9 +143,13 @@ async def main(dry_run: bool, batch_size: int, marketplaces: list[str] | None, s
 
         marketplaces_to_process = sorted(by_marketplace.keys())
         if marketplaces:
-            marketplaces_to_process = [m for m in marketplaces_to_process if m in marketplaces]
+            marketplaces_to_process = [
+                m for m in marketplaces_to_process if m in marketplaces
+            ]
         if skip_marketplaces:
-            marketplaces_to_process = [m for m in marketplaces_to_process if m not in skip_marketplaces]
+            marketplaces_to_process = [
+                m for m in marketplaces_to_process if m not in skip_marketplaces
+            ]
         log.info("Marketplaces to process: %s", marketplaces_to_process)
 
         total_updated = 0
@@ -174,11 +199,18 @@ async def main(dry_run: bool, batch_size: int, marketplaces: list[str] | None, s
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Refresh product image URLs from Apify")
+    parser = argparse.ArgumentParser(
+        description="Refresh product image URLs from Apify"
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print changes without writing to database",
+    )
+    parser.add_argument(
+        "--tracker-type",
+        choices=["CATEGORY", "COMPETITOR", "KEYWORD"],
+        help="Only process products linked to this tracker type",
     )
     parser.add_argument(
         "--marketplace",
@@ -200,4 +232,12 @@ if __name__ == "__main__":
         help="Number of ASINs per Apify actor call (default: 50)",
     )
     args = parser.parse_args()
-    asyncio.run(main(dry_run=args.dry_run, batch_size=args.batch_size, marketplaces=args.marketplaces, skip_marketplaces=args.skip_marketplaces or []))
+    asyncio.run(
+        main(
+            dry_run=args.dry_run,
+            batch_size=args.batch_size,
+            marketplaces=args.marketplaces,
+            skip_marketplaces=args.skip_marketplaces or [],
+            tracker_type=args.tracker_type,
+        )
+    )

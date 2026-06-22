@@ -16,9 +16,16 @@ from app.services.run_orchestrator import coerce_datetime
 
 _ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10,12}$")
 _NUMERIC_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
-_IMAGE_EXT_PATTERN = re.compile(r"\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(?:\?|$)", re.IGNORECASE)
-_AMAZON_PRODUCT_URL_PATTERN = re.compile(r"amazon\.\w+/(?:dp|gp/product|gp/aw/d)/", re.IGNORECASE)
-_AMAZON_IMAGE_HOST = re.compile(r"(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images\.ssl-images-amazon\.com)", re.IGNORECASE)
+_IMAGE_EXT_PATTERN = re.compile(
+    r"\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(?:\?|$)", re.IGNORECASE
+)
+_AMAZON_PRODUCT_URL_PATTERN = re.compile(
+    r"amazon\.\w+/(?:dp|gp/product|gp/aw/d)/", re.IGNORECASE
+)
+_AMAZON_IMAGE_HOST = re.compile(
+    r"(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images\.ssl-images-amazon\.com)",
+    re.IGNORECASE,
+)
 
 
 def _is_image_url(url: str) -> bool:
@@ -196,7 +203,14 @@ class NormalizationService:
 
         rating_value = _coerce_float(_pick(payload, "rating", "stars", "rating_value"))
         review_count = _coerce_int(
-            _pick(payload, "reviewCount", "reviewsCount", "reviews_count", "n_reviews", "review_count")
+            _pick(
+                payload,
+                "reviewCount",
+                "reviewsCount",
+                "reviews_count",
+                "n_reviews",
+                "review_count",
+            )
         )
 
         variation_count = _coerce_int(
@@ -303,7 +317,14 @@ def _coerce_int(value: object | None) -> int | None:
 
 def _coerce_image_url(payload: dict[str, object]) -> str:
     direct = _coerce_string(
-        _pick(payload, "image", "main_image_url", "image_url", "thumbnailImage")
+        _pick(
+            payload,
+            "image",
+            "main_image_url",
+            "image_url",
+            "thumbnailImage",
+            "thumbnailUrl",
+        )
     )
     if direct and _is_image_url(direct):
         return direct
@@ -334,7 +355,13 @@ def _normalize_availability_status(payload: dict[str, object]) -> AvailabilitySt
         )
 
     status_text = _coerce_string(
-        _pick(payload, "availability_status", "availability_text", "availabilityStatus", "availability")
+        _pick(
+            payload,
+            "availability_status",
+            "availability_text",
+            "availabilityStatus",
+            "availability",
+        )
     )
     if status_text:
         normalized = status_text.lower()
@@ -417,7 +444,9 @@ def _extract_variation_count(payload: dict[str, object]) -> int | None:
     return len([value for value in variant_asins.split(",") if value.strip()])
 
 
-def _extract_deal_info(payload: dict[str, object], captured_at: datetime) -> DealInfo | None:
+def _extract_deal_info(
+    payload: dict[str, object], captured_at: datetime
+) -> DealInfo | None:
     deal_id = _coerce_string(_pick(payload, "deal_id"))
     deal_type = _coerce_string(_pick(payload, "deal_type"))
     deal_state = _coerce_string(_pick(payload, "deal_state"))
@@ -511,9 +540,7 @@ def normalize_junglee_item(
     )
     buy_box_status = _normalize_buy_box_status(payload, buy_box_seller_name)
 
-    variation_count = _coerce_int(
-        _pick(payload, "variation_count", "variationCount")
-    )
+    variation_count = _coerce_int(_pick(payload, "variation_count", "variationCount"))
     if variation_count is None:
         variation_count = _extract_variation_count(payload)
 
@@ -566,18 +593,18 @@ def _pick_nested(payload: dict, outer_key: str, inner_key: str) -> object | None
 
 def _pick_junglee_image_url(payload: dict) -> str:
     thumbnail = _coerce_string(payload.get("thumbnailImage"))
-    if thumbnail:
+    if thumbnail and _is_image_url(thumbnail):
         return thumbnail
     gallery = payload.get("galleryThumbnails")
     if isinstance(gallery, list) and gallery:
         for item in gallery:
             url = _coerce_string(item)
-            if url:
+            if url and _is_image_url(url):
                 return url
     hires = payload.get("highResolutionImages")
     if isinstance(hires, list) and hires:
         for item in hires:
             url = _coerce_string(item)
-            if url:
+            if url and _is_image_url(url):
                 return url
     return ""

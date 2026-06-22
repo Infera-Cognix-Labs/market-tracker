@@ -4,20 +4,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 
-from pymongo.errors import DuplicateKeyError
-
 from app.config.config import ApifyConfig, StorageConfig
 from app.core.logging import correlation_context, get_logger
 from app.core.metrics import get_metrics
 from app.core.utils import utc_now
 from app.integrations.apify_gateway import ApifyGateway, ApifyRunStartError
 from app.models.api import (
-    DealInfo,
     ExternalRunStatus,
-    ExternalRunSummary,
     ImportWorkerResult,
     JobError,
-    JobRunStrategy,
     JobStatus,
     TrackerType,
 )
@@ -27,7 +22,6 @@ from app.models.documents import (
     CompetitorTrackerDocument,
     JobDocument,
     KeywordTrackerDocument,
-    ProductDocument,
     RawImportBatchDocument,
 )
 from app.services.event_engine import EventEngine
@@ -72,21 +66,11 @@ class ResultImporterService:
         self.object_storage = object_storage
 
     async def process_pending_jobs(self) -> ImportWorkerResult:
-        import_candidates = await JobDocument.find(
+        candidates = await JobDocument.find(
             JobDocument.status == JobStatus.IMPORTING.value
         ).to_list()
-        deals_candidates = await JobDocument.find(
-            JobDocument.status == JobStatus.DEALS_IMPORTING.value
-        ).to_list()
 
-        seen_codes = set()
-        unique_candidates = []
-        for job in import_candidates + deals_candidates:
-            if job.job_code not in seen_codes:
-                seen_codes.add(job.job_code)
-                unique_candidates.append(job)
-
-        candidates = sorted(unique_candidates, key=lambda item: item.created_at)[
+        candidates = sorted(candidates, key=lambda item: item.created_at)[
             : self.config.import_worker_batch_size
         ]
 
@@ -99,32 +83,6 @@ class ResultImporterService:
 
         for job_document in candidates:
             scanned_jobs += 1
-
-            if job_document.job_code.startswith("deals_"):
-                if job_document.status == JobStatus.DEALS_IMPORTING.value:
-                    processed_jobs += 1
-                    try:
-                        final_status = await _process_deals_import(
-                            job_document, self.gateway, self.config
-                        )
-                    except Exception as exc:
-                        logger.exception("Deals import failed unexpectedly.")
-                        job_document.status = JobStatus.FAILED.value
-                        job_document.error = JobError(
-                            code=type(exc).__name__, message=str(exc)
-                        )
-                        job_document.finished_at = utc_now()
-                        await job_document.save()
-                        failed_jobs += 1
-                        continue
-
-                    if final_status == JobStatus.SUCCESS:
-                        succeeded_jobs += 1
-                    elif final_status == JobStatus.PARTIAL_SUCCESS:
-                        partial_jobs += 1
-                    elif final_status == JobStatus.FAILED:
-                        failed_jobs += 1
-                    continue
 
             run_document = await self._load_latest_run_document(
                 workspace_id=job_document.workspace_id,
@@ -178,14 +136,6 @@ class ResultImporterService:
 
             if final_status == JobStatus.SUCCESS:
                 succeeded_jobs += 1
-                # TODO: re-enable when DE deals actor is fixed (Amazon returns 503)
-                # if job_document.tracker_type == TrackerType.CATEGORY.value:
-                #     try:
-                #         await _trigger_deals_job_after_category(
-                #             job_document, self.config, self.gateway
-                #         )
-                #     except Exception:
-                #         pass
             elif final_status == JobStatus.PARTIAL_SUCCESS:
                 partial_jobs += 1
             elif final_status == JobStatus.FAILED:
@@ -844,330 +794,6 @@ def _apify_run_sort_key(run_document: ApifyRunDocument) -> tuple[datetime, datet
     return created_at, updated_at
 
 
-async def _trigger_deals_job_after_category(
-    category_job: JobDocument,
-    config: ApifyConfig,
-    gateway: ApifyGateway,
-) -> JobDocument | None:
-    if category_job.tracker_type != TrackerType.CATEGORY.value:
-        return None
-
-    if category_job.status not in {JobStatus.SUCCESS.value, JobStatus.PARTIAL_SUCCESS.value}:
-        return None
-
-    tracker_document = await CategoryTrackerDocument.find_one(
-        CategoryTrackerDocument.workspace_id == category_job.workspace_id,
-        CategoryTrackerDocument.tracker_code == category_job.tracker_code,
-    )
-    if tracker_document is None:
-        return None
-
-    existing = await JobDocument.find_one(
-        JobDocument.workspace_id == category_job.workspace_id,
-        JobDocument.tracker_code == category_job.tracker_code,
-        JobDocument.snapshot_date == category_job.snapshot_date,
-    )
-    if existing is not None:
-        logger.info(
-            "Skipping deals trigger — job already exists for this tracker+snapshot_date.",
-            extra={
-                "context": correlation_context(
-                    tracker_code=category_job.tracker_code,
-                    snapshot_date=str(category_job.snapshot_date),
-                    existing_job_code=existing.job_code,
-                    existing_status=existing.status,
-                )
-            },
-        )
-        return None
-
-    now = utc_now()
-    deals_job_code = f"deals_{category_job.tracker_code}_{now.strftime('%Y%m%d%H%M%S')}"
-
-    run_strategy = JobRunStrategy(
-        provider="APIFY",
-        pool_code="deals",
-    )
-
-    deals_job = JobDocument(
-        workspace_id=category_job.workspace_id,
-        job_code=deals_job_code,
-        tracker_type=TrackerType.CATEGORY.value,
-        tracker_code=category_job.tracker_code,
-        snapshot_date=category_job.snapshot_date,
-        trigger_mode="DEALS_FOLLOWUP",
-        status=JobStatus.DEALS_IMPORTING.value,
-        run_strategy=run_strategy,
-        summary={"expected_items": 0, "imported_items": 0, "events_emitted": 0},
-        created_at=now,
-    )
-    try:
-        await deals_job.insert()
-    except DuplicateKeyError:
-        logger.info(
-            "Deals job already exists for this tracker+snapshot_date.",
-            extra={
-                "context": correlation_context(
-                    tracker_code=category_job.tracker_code,
-                    snapshot_date=str(category_job.snapshot_date),
-                )
-            },
-        )
-        return None
-
-    logger.info(
-        "Created deals followup job after category scrape.",
-        extra={
-            "context": correlation_context(
-                category_job_code=category_job.job_code,
-                deals_job_code=deals_job_code,
-                tracker_code=category_job.tracker_code,
-            )
-        },
-    )
-
-    return deals_job
-
-
-async def _process_deals_job(
-    job_document: JobDocument,
-    gateway: ApifyGateway,
-    config: ApifyConfig,
-) -> JobStatus:
-    if job_document.job_code.startswith("deals_"):
-        return await _process_deals_import(job_document, gateway, config)
-    return JobStatus.SUCCESS
-
-
-async def _process_deals_import(
-    job_document: JobDocument,
-    gateway: ApifyGateway,
-    config: ApifyConfig,
-) -> JobStatus:
-    workspace_id = job_document.workspace_id
-    tracker_code = job_document.tracker_code
-
-    tracker_document = await CategoryTrackerDocument.find_one(
-        CategoryTrackerDocument.workspace_id == workspace_id,
-        CategoryTrackerDocument.tracker_code == tracker_code,
-    )
-    if tracker_document is None:
-        job_document.status = JobStatus.SUCCESS.value
-        job_document.finished_at = utc_now()
-        await job_document.save()
-        return JobStatus.SUCCESS
-
-    marketplace = tracker_document.marketplace
-
-    products = await ProductDocument.find(
-        ProductDocument.workspace_id == workspace_id,
-        ProductDocument.marketplace == marketplace,
-    ).to_list()
-
-    target_asins = {p.asin for p in products}
-    if not target_asins:
-        logger.info(
-            "No products found for deals enrichment.",
-            extra={"context": correlation_context(tracker_code=tracker_code)},
-        )
-        job_document.status = JobStatus.SUCCESS.value
-        job_document.finished_at = utc_now()
-        await job_document.save()
-        return JobStatus.SUCCESS
-
-    run_document = await _load_deals_run_document(
-        workspace_id=workspace_id,
-        job_code=job_document.job_code,
-    )
-
-    if run_document is None or not run_document.default_dataset_id:
-        logger.info(
-            "Deals run document not found, dispatching deals scrape.",
-            extra={"context": correlation_context(job_code=job_document.job_code)},
-        )
-        return await _dispatch_deals_run(job_document, gateway, config, marketplace)
-
-    if run_document.status != ExternalRunStatus.SUCCEEDED.value:
-        logger.info(
-            "Deals run not completed yet.",
-            extra={
-                "context": correlation_context(
-                    job_code=job_document.job_code,
-                    apify_run_id=run_document.apify_run_id,
-                    status=run_document.status,
-                )
-            },
-        )
-        return JobStatus.RUNNING_EXTERNAL
-
-    dataset_id = run_document.default_dataset_id
-    raw_items, _ = await _load_deals_dataset(gateway, dataset_id)
-
-    normalization_service = NormalizationService()
-    normalized = normalization_service.normalize_items(
-        tracker_type=TrackerType.CATEGORY,
-        marketplace=marketplace,
-        raw_items=raw_items,
-    )
-
-    deals_by_asin: dict[str, DealInfo] = {}
-    for record in normalized.records:
-        if record.deal_info and record.deal_info.deal_state == "AVAILABLE":
-            deals_by_asin[record.asin] = record.deal_info
-
-    matched_count = 0
-    for product in products:
-        asin = product.asin
-        if asin in deals_by_asin:
-            product.current_state.deal_info = deals_by_asin[asin]
-            product.last_seen_at = utc_now()
-            await product.save()
-            matched_count += 1
-
-    logger.info(
-        "Deals enrichment completed.",
-        extra={
-            "context": correlation_context(
-                job_code=job_document.job_code,
-                total_products=len(products),
-                matched_deals=matched_count,
-                available_deals=len(deals_by_asin),
-            )
-        },
-    )
-
-    job_document.status = JobStatus.SUCCESS.value
-    job_document.finished_at = utc_now()
-    await job_document.save()
-
-    metrics.increment(
-        "deals_enrichment_total",
-        1.0,
-        workspace_id=workspace_id,
-        tracker_code=tracker_code,
-    )
-
-    return JobStatus.SUCCESS
-
-
-async def _dispatch_deals_run(
-    job_document: JobDocument,
-    gateway: ApifyGateway,
-    config: ApifyConfig,
-    marketplace: str = "amazon_us",
-) -> JobStatus:
-    workspace_id = job_document.workspace_id
-
-    run_input = {
-        "maxResults": config.deals_max_results,
-        "geo": _marketplace_to_geo(marketplace),
-    }
-
-    binding_code = "deals:0"
-
-    launch = await gateway.start_run(
-        binding_code,
-        run_input,
-    )
-
-    apify_run = ApifyRunDocument(
-        workspace_id=workspace_id,
-        tracking_job_code=job_document.job_code,
-        provider="APIFY",
-        binding_code=binding_code,
-        actor_ref=launch.binding.actor_id,
-        task_ref=launch.binding.task_id,
-        apify_run_id=launch.provider_run_id,
-        default_dataset_id=launch.default_dataset_id,
-        run_input=launch.run_input,
-        input_hash=launch.input_hash,
-        status=(launch.status or ExternalRunStatus.READY).value,
-        apify_status_raw=launch.raw_status,
-        origin="DEALS_FOLLOWUP",
-        started_at=coerce_datetime(launch.started_at),
-        finished_at=coerce_datetime(launch.finished_at),
-        poll_count=0,
-        created_at=utc_now(),
-        updated_at=utc_now(),
-    )
-    await apify_run.insert()
-
-    job_document.external_run = ExternalRunSummary(
-        provider_run_id=launch.provider_run_id,
-        status=launch.status or ExternalRunStatus.READY,
-        started_at=coerce_datetime(launch.started_at) or utc_now(),
-        finished_at=coerce_datetime(launch.finished_at),
-    )
-
-    if launch.status == ExternalRunStatus.SUCCEEDED:
-        job_document.status = JobStatus.DEALS_IMPORTING.value
-    elif launch.status in {ExternalRunStatus.FAILED, ExternalRunStatus.TIMED_OUT, ExternalRunStatus.ABORTED}:
-        job_document.status = JobStatus.FAILED.value
-        job_document.error = JobError(
-            code=launch.status.value,
-            message=f"Deals run finished with status `{launch.status.value}`.",
-        )
-        job_document.finished_at = coerce_datetime(launch.finished_at) or utc_now()
-    else:
-        job_document.status = JobStatus.RUNNING_EXTERNAL.value
-
-    await job_document.save()
-    return JobStatus(job_document.status)
-
-
-async def _load_deals_run_document(
-    workspace_id: str,
-    job_code: str,
-) -> ApifyRunDocument | None:
-    runs = await ApifyRunDocument.find(
-        ApifyRunDocument.workspace_id == workspace_id,
-        ApifyRunDocument.tracking_job_code == job_code,
-    ).to_list()
-    if not runs:
-        return None
-    return max(runs, key=_apify_run_sort_key)
-
-
-async def _load_deals_dataset(
-    gateway: ApifyGateway,
-    dataset_id: str,
-) -> tuple[list[RawImportedItem], int]:
-    batch_size = 200
-    offset = 0
-    imported_items: list[RawImportedItem] = []
-    total_items: int | None = None
-
-    while True:
-        response = await gateway.list_dataset_items(
-            dataset_id,
-            limit=batch_size,
-            offset=offset,
-        )
-        if response.total is not None:
-            total_items = response.total
-
-        payload_items = response.items
-        if not payload_items:
-            break
-
-        imported_items.extend(
-            RawImportedItem(
-                batch_no=1,
-                item_index=item_index,
-                payload=item,
-            )
-            for item_index, item in enumerate(payload_items)
-        )
-
-        if len(payload_items) < batch_size:
-            break
-
-        offset += len(payload_items)
-
-    expected_items = total_items if total_items is not None else len(imported_items)
-    return imported_items, expected_items
-
-
 def _detect_asins_with_nulls(
     records: list[NormalizedProductRecord],
 ) -> list[str]:
@@ -1247,19 +873,3 @@ def _marketplace_to_amazon_domain(marketplace: str) -> str:
         "amazon_in": "www.amazon.in",
     }
     return mapping.get(marketplace, "www.amazon.com")
-
-
-def _marketplace_to_geo(marketplace: str) -> str:
-    mapping = {
-        "amazon_us": "US",
-        "amazon_uk": "UK",
-        "amazon_de": "DE",
-        "amazon_fr": "FR",
-        "amazon_es": "ES",
-        "amazon_it": "IT",
-        "amazon_ca": "CA",
-        "amazon_jp": "JP",
-        "amazon_au": "AU",
-        "amazon_in": "IN",
-    }
-    return mapping.get(marketplace, "US")
