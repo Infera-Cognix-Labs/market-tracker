@@ -35,7 +35,7 @@ export const NodeSearchPage = () => {
       return
     }
     if (!parsedUrl) {
-      setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.com/Best-Sellers/zgbs/...)")
+      setError("Please enter a valid Amazon Best-sellers URL (e.g. https://www.amazon.de/-/en/gp/bestsellers/kitchen/3437582031)")
       return
     }
     if (!name.trim()) {
@@ -89,7 +89,7 @@ export const NodeSearchPage = () => {
                 type="text"
                 value={nodeInput}
                 onChange={e => setNodeInput(e.target.value)}
-                placeholder="e.g. https://www.amazon.com/Best-Sellers/zgbs/electronics/"
+                placeholder="e.g. https://www.amazon.de/-/en/gp/bestsellers/kitchen/3437582031"
                 className="input" style={{ paddingLeft: 34 }}
               />
             </div>
