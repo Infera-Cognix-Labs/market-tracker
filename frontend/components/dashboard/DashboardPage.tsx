@@ -355,6 +355,7 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
                       <span style={{ color: T.green }}>+{top10.length + firstTimeUnique.length} new</span>
                       <span style={{ color: T.red }}>−{h.exit_count} exits</span>
                       <span style={{ color: T.amber }}>★{top10.length} top10</span>
+                      {h.top10_exit_count > 0 && <span style={{ color: T.red }}>↓{h.top10_exit_count} top10 out</span>}
                     </div>
                   </div>
                   {hasItems && <ChevronDown size={12} style={{ color: T.text3, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0, marginTop: 4 }} />}
@@ -564,6 +565,8 @@ export const DashboardPage = ({ setPage }: { setPage: (page: string) => void }) 
                     <div style={{ display: "flex", gap: 12, fontSize: 11 }}>
                       <span style={{ color: T.green }}>+{top10.length + firstTimeUnique.length} new</span>
                       <span style={{ color: T.red }}>−{h.exit_count} exits</span>
+                      <span style={{ color: T.amber }}>★{top10.length} top10</span>
+                      {h.top10_exit_count > 0 && <span style={{ color: T.red }}>↓{h.top10_exit_count} top10 out</span>}
                     </div>
                   </div>
                   {hasItems && <ChevronDown size={12} style={{ color: T.text3, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0, marginTop: 4 }} />}

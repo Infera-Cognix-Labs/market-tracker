@@ -25,6 +25,7 @@ import type {
   KeywordTracker,
   KeywordTrackerCreateRequest,
   KeywordTrackerUpdateRequest,
+  Timeframe,
   TrackerStatus
 } from "../shared/types"
 
@@ -204,6 +205,8 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
 }
 
 export const KeywordPageInner = () => {
+  const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
+
   const {
     trackers, selectedCode,
     loading, error,
@@ -222,10 +225,11 @@ export const KeywordPageInner = () => {
     allVisibleRows, totalFilteredCount,
     handleSelectTracker, handleCreate, handleUpdate, handleDelete,
     setLoading,
+    setRefreshKey,
   } = useTrackerPage<KeywordTracker>({
     trackerType: "KEYWORD",
     apiListTrackers: apiListKeywordTrackers,
-    apiGetSnapshot: apiGetLatestKeywordSnapshot,
+    apiGetSnapshot: (code) => apiGetLatestKeywordSnapshot(code, rankTimeframe),
     apiListEvents,
     apiTriggerJob,
     listErrorMsg: "Failed to load keyword trackers",
@@ -347,6 +351,16 @@ export const KeywordPageInner = () => {
         triggering={triggering}
         onTrigger={handleTriggerJob}
         productUrlResolver={(p) => p.product_url || `https://www.amazon.com/dp/${p.asin}`}
+        headerExtra={
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["WEEKLY", "MONTHLY"] as Timeframe[]).map(t => (
+              <button key={t} onClick={() => { if (t !== rankTimeframe) { setRankTimeframe(t); setRefreshKey(k => k + 1) } }}
+                style={{ padding: "5px 10px", borderRadius: 6, border: `1px solid ${t === rankTimeframe ? T.amber : T.border}`, background: t === rankTimeframe ? T.bg4 : "transparent", color: t === rankTimeframe ? T.amber : T.text3, fontSize: 11, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>
+                {t === "WEEKLY" ? "7 days" : "30 days"}
+              </button>
+            ))}
+          </div>
+        }
       />
     </>
   )

@@ -51,6 +51,7 @@ class CategoryTrackerDocument(WorkspaceDocument):
     status: str
     stats: CategoryTrackerStats
     latest_snapshot_summary: CategoryTrackerLatestSnapshotSummary | None = None
+    asins_last_seen: dict[str, date] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -93,6 +94,7 @@ class KeywordTrackerDocument(WorkspaceDocument):
     status: str
     stats: KeywordTrackerStats
     latest_snapshot_summary: KeywordTrackerLatestSnapshotSummary | None = None
+    asins_last_seen: dict[str, date] | None = None
     created_at: datetime
     updated_at: datetime
 

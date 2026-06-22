@@ -342,18 +342,22 @@ class SnapshotService:
         new_entrants = current_asins - previous_asins
         exits = previous_asins - current_asins
 
-        # Distinguish truly new ASINs from returning ones by checking historical snapshots.
+        # Distinguish truly new ASINs from returning ones by checking cached history.
         returning_asins = set()
         if new_entrants:
-            history_snapshots = await CategorySnapshotDocument.find(
-                CategorySnapshotDocument.workspace_id == workspace_id,
-                CategorySnapshotDocument.tracker_code == tracker_code,
-                CategorySnapshotDocument.snapshot_date < snapshot_date,
-            ).to_list()
-            historical_asins: set[str] = set()
-            for snap in history_snapshots:
-                for p in snap.products:
-                    historical_asins.add(p.asin)
+            if tracker_document.asins_last_seen is not None:
+                historical_asins = set(tracker_document.asins_last_seen.keys())
+            else:
+                # Backward compat: load historical snapshots for old trackers
+                history_snapshots = await CategorySnapshotDocument.find(
+                    CategorySnapshotDocument.workspace_id == workspace_id,
+                    CategorySnapshotDocument.tracker_code == tracker_code,
+                    CategorySnapshotDocument.snapshot_date < snapshot_date,
+                ).to_list()
+                historical_asins: set[str] = set()
+                for snap in history_snapshots:
+                    for p in snap.products:
+                        historical_asins.add(p.asin)
             returning_asins = new_entrants & historical_asins
             new_entrants = new_entrants - returning_asins
 
@@ -476,15 +480,19 @@ class SnapshotService:
 
         returning_asins = set()
         if new_entrants:
-            history_snapshots = await KeywordSnapshotDocument.find(
-                KeywordSnapshotDocument.workspace_id == workspace_id,
-                KeywordSnapshotDocument.tracker_code == tracker_code,
-                KeywordSnapshotDocument.snapshot_date < snapshot_date,
-            ).to_list()
-            historical_asins: set[str] = set()
-            for snap in history_snapshots:
-                for p in snap.products:
-                    historical_asins.add(p.asin)
+            if tracker_document.asins_last_seen is not None:
+                historical_asins = set(tracker_document.asins_last_seen.keys())
+            else:
+                # Backward compat: load historical snapshots for old trackers
+                history_snapshots = await KeywordSnapshotDocument.find(
+                    KeywordSnapshotDocument.workspace_id == workspace_id,
+                    KeywordSnapshotDocument.tracker_code == tracker_code,
+                    KeywordSnapshotDocument.snapshot_date < snapshot_date,
+                ).to_list()
+                historical_asins: set[str] = set()
+                for snap in history_snapshots:
+                    for p in snap.products:
+                        historical_asins.add(p.asin)
             returning_asins = new_entrants & historical_asins
             new_entrants = new_entrants - returning_asins
 

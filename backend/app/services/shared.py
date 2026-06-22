@@ -421,15 +421,7 @@ def build_dashboard_overview(
     keyword_trackers: list[KeywordTracker] | None = None,
     events: list[Event],
 ) -> DashboardOverview:
-    reference_date = max(
-        (event.snapshot_date for event in events), default=utc_now().date()
-    )
-    from_date, to_date = timeframe_bounds(timeframe, reference_date)
-    filtered_events = [
-        event
-        for event in events
-        if within_range(event.snapshot_date, from_date, to_date)
-    ]
+    filtered_events = events
     sorted_events = sort_events(filtered_events)
     tracker_name_map = build_tracker_name_map(
         category_trackers, competitor_trackers, keyword_trackers
@@ -489,6 +481,11 @@ def build_dashboard_overview(
                 for event in category_event_groups.get(tracker.tracker_code, [])
                 if event.event_type == EventType.ENTER_TOP10
             ),
+            top10_exit_count=sum(
+                1
+                for event in category_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.EXIT_TOP10
+            ),
         )
         for tracker in active_category_trackers
     ]
@@ -535,6 +532,11 @@ def build_dashboard_overview(
                 for event in keyword_event_groups.get(tracker.tracker_code, [])
                 if event.event_type == EventType.ENTER_TOP10
             ),
+            top10_exit_count=sum(
+                1
+                for event in keyword_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.EXIT_TOP10
+            ),
         )
         for tracker in active_keyword_trackers
     ]
@@ -561,6 +563,11 @@ def build_dashboard_overview(
                 1
                 for event in filtered_events
                 if event.event_type == EventType.ENTER_TOP10
+            ),
+            top10_exit_count=sum(
+                1
+                for event in filtered_events
+                if event.event_type == EventType.EXIT_TOP10
             ),
             price_change_count=sum(
                 1

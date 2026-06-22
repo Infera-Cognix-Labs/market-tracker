@@ -111,7 +111,7 @@ export function useFilteredEvents(
     to_date?: string
     page?: number
     page_size?: number
-  }) => Promise<{ items: Event[] }>
+  }) => Promise<{ items: Event[]; total: number }>
 ) {
   const [eventsState, dispatchEvents] = useReducer(eventsReducer, { events: [], loading: false, error: null })
 
@@ -128,18 +128,33 @@ export function useFilteredEvents(
     let cancelled = false
     dispatchEvents({ type: "FETCH_START" })
 
-    apiListEvents({
-      tracker_type: trackerType,
-      tracker_code: trackerCode,
-      from_date: snapshotDate,
-      to_date: snapshotDate,
-      page_size: 200,
-    })
-      .then(res => {
+    const pageSize = 200
+    const fetchAllEvents = async (): Promise<Event[]> => {
+      const allItems: Event[] = []
+      let page = 1
+      while (true) {
+        const res = await apiListEvents({
+          tracker_type: trackerType,
+          tracker_code: trackerCode,
+          from_date: snapshotDate,
+          to_date: snapshotDate,
+          page,
+          page_size: pageSize,
+        })
+        if (cancelled) return allItems
+        allItems.push(...res.items)
+        if (allItems.length >= res.total || res.items.length < pageSize) break
+        page++
+      }
+      return allItems
+    }
+
+    fetchAllEvents()
+      .then(allItems => {
         if (cancelled) return
         dispatchEvents({
           type: "FETCH_OK",
-          events: res.items.filter(event => Object.values(filterToEvent).includes(event.event_type)),
+          events: allItems.filter(event => Object.values(filterToEvent).includes(event.event_type)),
         })
       })
       .catch(() => {
@@ -203,7 +218,7 @@ interface UseTrackerPageOptions<T> {
     to_date?: string
     page?: number
     page_size?: number
-  }) => Promise<{ items: Event[] }>
+  }) => Promise<{ items: Event[]; total: number }>
   apiTriggerJob: (trackerType: TrackerType, code: string) => Promise<unknown>
   listErrorMsg: string
 }

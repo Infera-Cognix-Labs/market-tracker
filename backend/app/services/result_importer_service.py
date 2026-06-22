@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from time import perf_counter
 
 from app.config.config import ApifyConfig, StorageConfig
@@ -18,9 +18,11 @@ from app.models.api import (
 )
 from app.models.documents import (
     ApifyRunDocument,
+    CategorySnapshotDocument,
     CategoryTrackerDocument,
     CompetitorTrackerDocument,
     JobDocument,
+    KeywordSnapshotDocument,
     KeywordTrackerDocument,
     RawImportBatchDocument,
 )
@@ -324,6 +326,7 @@ class ResultImporterService:
             tracker_type=tracker_context.tracker_type,
             tracker_code=job_document.tracker_code,
             final_status=final_status,
+            snapshot_date=job_document.snapshot_date,
         )
 
         logger.info(
@@ -708,6 +711,7 @@ class ResultImporterService:
         tracker_type: TrackerType,
         tracker_code: str,
         final_status: JobStatus,
+        snapshot_date: date,
     ) -> None:
         now = utc_now()
 
@@ -722,6 +726,13 @@ class ResultImporterService:
             if final_status in {JobStatus.SUCCESS, JobStatus.PARTIAL_SUCCESS}:
                 tracker_document.stats.last_success_at = now
                 tracker_document.stats.snapshot_count += 1
+                await self._update_asin_cache(
+                    tracker_document=tracker_document,
+                    workspace_id=workspace_id,
+                    tracker_code=tracker_code,
+                    snapshot_date=snapshot_date,
+                    snapshot_doc_class=CategorySnapshotDocument,
+                )
             await tracker_document.save()
             return
 
@@ -736,6 +747,13 @@ class ResultImporterService:
             if final_status in {JobStatus.SUCCESS, JobStatus.PARTIAL_SUCCESS}:
                 tracker_document.stats.last_success_at = now
                 tracker_document.stats.snapshot_count += 1
+                await self._update_asin_cache(
+                    tracker_document=tracker_document,
+                    workspace_id=workspace_id,
+                    tracker_code=tracker_code,
+                    snapshot_date=snapshot_date,
+                    snapshot_doc_class=KeywordSnapshotDocument,
+                )
             await tracker_document.save()
             return
 
@@ -749,6 +767,30 @@ class ResultImporterService:
         if final_status in {JobStatus.SUCCESS, JobStatus.PARTIAL_SUCCESS}:
             tracker_document.stats.last_success_at = now
         await tracker_document.save()
+
+    async def _update_asin_cache(
+        self,
+        *,
+        tracker_document: CategoryTrackerDocument | KeywordTrackerDocument,
+        workspace_id: str,
+        tracker_code: str,
+        snapshot_date: date,
+        snapshot_doc_class: type,
+    ) -> None:
+        """Update the asins_last_seen cache on the tracker document from the
+        latest snapshot. Called after snapshot + event processing is complete
+        so that diff_service sees the pre-import cache state."""
+        snapshot = await snapshot_doc_class.find_one(
+            snapshot_doc_class.workspace_id == workspace_id,
+            snapshot_doc_class.tracker_code == tracker_code,
+            snapshot_doc_class.snapshot_date == snapshot_date,
+        )
+        if snapshot is None:
+            return
+        if tracker_document.asins_last_seen is None:
+            tracker_document.asins_last_seen = {}
+        for product in snapshot.products:
+            tracker_document.asins_last_seen[product.asin] = snapshot_date
 
     async def _mark_failed(
         self,

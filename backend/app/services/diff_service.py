@@ -4,7 +4,13 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from app.models.api import EventType, TrackerType
-from app.models.documents import CategorySnapshotDocument, KeywordSnapshotDocument, ProductSnapshotDocument
+from app.models.documents import (
+    CategorySnapshotDocument,
+    CategoryTrackerDocument,
+    KeywordSnapshotDocument,
+    KeywordTrackerDocument,
+    ProductSnapshotDocument,
+)
 
 
 @dataclass(frozen=True)
@@ -82,14 +88,6 @@ class DiffService:
             },
             sort=[("snapshot_date", -1)],
         )
-        # Get all older snapshots for historical_last_seen tracking
-        history_snapshots = await CategorySnapshotDocument.find(
-            {
-                "workspace_id": workspace_id,
-                "tracker_code": tracker_code,
-                "snapshot_date": {"$lt": snapshot_date},
-            }
-        ).to_list()
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
@@ -112,13 +110,30 @@ class DiffService:
             product.asin: product for product in previous_products
         }
 
-        # Keep the most recent observed date for each ASIN in historical snapshots.
-        historical_last_seen: dict[str, date] = {}
-        for snapshot in history_snapshots:
-            for product in _dedupe_category_snapshot_products(snapshot.products):
-                last_seen = historical_last_seen.get(product.asin)
-                if last_seen is None or snapshot.snapshot_date > last_seen:
-                    historical_last_seen[product.asin] = snapshot.snapshot_date
+        # Read cached last-seen dates from tracker document (avoids loading all
+        # historical snapshots on every import).
+        tracker_doc = await CategoryTrackerDocument.find_one(
+            CategoryTrackerDocument.workspace_id == workspace_id,
+            CategoryTrackerDocument.tracker_code == tracker_code,
+        )
+        if tracker_doc is not None and tracker_doc.asins_last_seen is not None:
+            historical_last_seen: dict[str, date] = dict(tracker_doc.asins_last_seen)
+        else:
+            # Backward compat: load historical snapshots for old trackers
+            # without the asins_last_seen cache.
+            history_snapshots = await CategorySnapshotDocument.find(
+                {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker_code,
+                    "snapshot_date": {"$lt": snapshot_date},
+                }
+            ).to_list()
+            historical_last_seen = {}
+            for snapshot in history_snapshots:
+                for product in _dedupe_category_snapshot_products(snapshot.products):
+                    last_seen = historical_last_seen.get(product.asin)
+                    if last_seen is None or snapshot.snapshot_date > last_seen:
+                        historical_last_seen[product.asin] = snapshot.snapshot_date
 
         candidates: list[DiffCandidate] = []
         event_time = current_snapshot.captured_at
@@ -310,13 +325,6 @@ class DiffService:
             },
             sort=[("snapshot_date", -1)],
         )
-        history_snapshots = await KeywordSnapshotDocument.find(
-            {
-                "workspace_id": workspace_id,
-                "tracker_code": tracker_code,
-                "snapshot_date": {"$lt": snapshot_date},
-            }
-        ).to_list()
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
@@ -339,12 +347,30 @@ class DiffService:
             product.asin: product for product in previous_products
         }
 
-        historical_last_seen: dict[str, date] = {}
-        for snapshot in history_snapshots:
-            for product in _dedupe_category_snapshot_products(snapshot.products):
-                last_seen = historical_last_seen.get(product.asin)
-                if last_seen is None or snapshot.snapshot_date > last_seen:
-                    historical_last_seen[product.asin] = snapshot.snapshot_date
+        # Read cached last-seen dates from tracker document (avoids loading all
+        # historical snapshots on every import).
+        tracker_doc = await KeywordTrackerDocument.find_one(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            KeywordTrackerDocument.tracker_code == tracker_code,
+        )
+        if tracker_doc is not None and tracker_doc.asins_last_seen is not None:
+            historical_last_seen: dict[str, date] = dict(tracker_doc.asins_last_seen)
+        else:
+            # Backward compat: load historical snapshots for old trackers
+            # without the asins_last_seen cache.
+            history_snapshots = await KeywordSnapshotDocument.find(
+                {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker_code,
+                    "snapshot_date": {"$lt": snapshot_date},
+                }
+            ).to_list()
+            historical_last_seen = {}
+            for snapshot in history_snapshots:
+                for product in _dedupe_category_snapshot_products(snapshot.products):
+                    last_seen = historical_last_seen.get(product.asin)
+                    if last_seen is None or snapshot.snapshot_date > last_seen:
+                        historical_last_seen[product.asin] = snapshot.snapshot_date
 
         candidates: list[DiffCandidate] = []
         event_time = current_snapshot.captured_at

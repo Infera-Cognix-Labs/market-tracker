@@ -28,7 +28,6 @@ from app.models.documents import (
     EventDocument,
     KeywordTrackerDocument,
     ProductDocument,
-    ProductSnapshotDocument,
 )
 from app.services.shared import (
     event_doc_to_model,
@@ -58,7 +57,7 @@ class InsightsQueryService:
         self, workspace_id: str, timeframe: Timeframe
     ) -> CategoryInsights:
         t0 = time.monotonic()
-        cutoff_date = date.today() - timedelta(days=30)
+        cutoff_date = date.today() - timedelta(days=60)
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
             In(EventDocument.event_type, list(CATEGORY_ENTRANT_EVENT_TYPES)),
@@ -85,22 +84,14 @@ class InsightsQueryService:
         product_map = {
             (doc.marketplace, doc.asin): doc for doc in product_docs
         }
-
-        if asin_keys:
-            snapshot_docs = await ProductSnapshotDocument.find(
-                ProductSnapshotDocument.workspace_id == workspace_id,
-                In(ProductSnapshotDocument.asin, [k[1] for k in asin_keys]),
-            ).to_list()
-        else:
-            snapshot_docs = []
         t_db = (time.monotonic() - t0) * 1000
 
         t1 = time.monotonic()
-        first_seen_map: dict[tuple[str, str], date] = {}
-        for doc in sorted(snapshot_docs, key=lambda d: d.snapshot_date):
-            key = (doc.marketplace, doc.asin)
-            if key not in first_seen_map:
-                first_seen_map[key] = doc.snapshot_date
+        new_entrant_keys = {
+            (e.asin, e.tracker_code, e.snapshot_date)
+            for e in events
+            if e.event_type == EventType.NEW_ENTRANT_TOP50
+        }
 
         reference_date = max(
             (event.snapshot_date for event in events), default=utc_now().date()
@@ -115,6 +106,8 @@ class InsightsQueryService:
         new_top10_entrants: list[CategoryEntrantItem] = []
         first_time_entrants: list[CategoryEntrantItem] = []
         returning_entrants: list[ReturningEntrantItem] = []
+        seen_top10: set[tuple[str, str]] = set()
+        seen_first_time: set[tuple[str, str]] = set()
 
         for event in filtered_events:
             product = product_map.get((event.marketplace, event.asin))
@@ -128,11 +121,14 @@ class InsightsQueryService:
 
             current_rank = event.payload.current_rank or 0
             previous_rank = event.payload.previous_rank
+            dedup_key = (event.asin, event.tracker_code)
 
             if event.event_type == EventType.ENTER_TOP10:
-                is_first_time = first_seen_map.get(
-                    (event.marketplace, event.asin)
-                ) == event.snapshot_date
+                is_first_time = (
+                    event.asin,
+                    event.tracker_code,
+                    event.snapshot_date,
+                ) in new_entrant_keys
 
                 item = CategoryEntrantItem(
                     asin=event.asin,
@@ -146,15 +142,14 @@ class InsightsQueryService:
                     tracker_code=event.tracker_code,
                     tracker_name=tracker_name,
                 )
-                new_top10_entrants.append(item)
-                if is_first_time:
+                if dedup_key not in seen_top10:
+                    seen_top10.add(dedup_key)
+                    new_top10_entrants.append(item)
+                if is_first_time and dedup_key not in seen_first_time:
+                    seen_first_time.add(dedup_key)
                     first_time_entrants.append(item)
 
             elif event.event_type == EventType.NEW_ENTRANT_TOP50:
-                is_first_time = first_seen_map.get(
-                    (event.marketplace, event.asin)
-                ) == event.snapshot_date
-
                 item = CategoryEntrantItem(
                     asin=event.asin,
                     title=title,
@@ -163,13 +158,15 @@ class InsightsQueryService:
                     current_rank=current_rank,
                     previous_rank=previous_rank,
                     entered_at=event.snapshot_date,
-                    is_first_time_entrant=is_first_time,
+                    is_first_time_entrant=True,
                     tracker_code=event.tracker_code,
                     tracker_name=tracker_name,
                 )
-                if is_first_time:
+                if dedup_key not in seen_first_time:
+                    seen_first_time.add(dedup_key)
                     first_time_entrants.append(item)
-                if current_rank > 0 and current_rank <= 10:
+                if current_rank > 0 and current_rank <= 10 and dedup_key not in seen_top10:
+                    seen_top10.add(dedup_key)
                     new_top10_entrants.append(item)
 
             elif event.event_type == EventType.RETURNING_TOP50:
@@ -199,7 +196,6 @@ class InsightsQueryService:
                     "transform_ms": round(t_transform, 2),
                     "event_count": len(event_docs),
                     "product_count": len(product_docs),
-                    "snapshot_count": len(snapshot_docs),
                 }
             },
         )
@@ -438,7 +434,7 @@ class InsightsQueryService:
         self, workspace_id: str, timeframe: Timeframe
     ) -> KeywordInsights:
         t0 = time.monotonic()
-        cutoff_date = date.today() - timedelta(days=30)
+        cutoff_date = date.today() - timedelta(days=60)
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
             EventDocument.tracker_type == "KEYWORD",
@@ -466,22 +462,14 @@ class InsightsQueryService:
         product_map = {
             (doc.marketplace, doc.asin): doc for doc in product_docs
         }
-
-        if asin_keys:
-            snapshot_docs = await ProductSnapshotDocument.find(
-                ProductSnapshotDocument.workspace_id == workspace_id,
-                In(ProductSnapshotDocument.asin, [k[1] for k in asin_keys]),
-            ).to_list()
-        else:
-            snapshot_docs = []
         t_db = (time.monotonic() - t0) * 1000
 
         t1 = time.monotonic()
-        first_seen_map: dict[tuple[str, str], date] = {}
-        for doc in sorted(snapshot_docs, key=lambda d: d.snapshot_date):
-            key = (doc.marketplace, doc.asin)
-            if key not in first_seen_map:
-                first_seen_map[key] = doc.snapshot_date
+        new_entrant_keys = {
+            (e.asin, e.tracker_code, e.snapshot_date)
+            for e in events
+            if e.event_type == EventType.NEW_ENTRANT_TOP50
+        }
 
         reference_date = max(
             (event.snapshot_date for event in events), default=utc_now().date()
@@ -496,6 +484,8 @@ class InsightsQueryService:
         new_top10_entrants: list[CategoryEntrantItem] = []
         first_time_entrants: list[CategoryEntrantItem] = []
         returning_entrants: list[ReturningEntrantItem] = []
+        seen_top10: set[tuple[str, str]] = set()
+        seen_first_time: set[tuple[str, str]] = set()
 
         for event in filtered_events:
             product = product_map.get((event.marketplace, event.asin))
@@ -509,11 +499,14 @@ class InsightsQueryService:
 
             current_rank = event.payload.current_rank or 0
             previous_rank = event.payload.previous_rank
+            dedup_key = (event.asin, event.tracker_code)
 
             if event.event_type == EventType.ENTER_TOP10:
-                is_first_time = first_seen_map.get(
-                    (event.marketplace, event.asin)
-                ) == event.snapshot_date
+                is_first_time = (
+                    event.asin,
+                    event.tracker_code,
+                    event.snapshot_date,
+                ) in new_entrant_keys
 
                 item = CategoryEntrantItem(
                     asin=event.asin,
@@ -527,15 +520,14 @@ class InsightsQueryService:
                     tracker_code=event.tracker_code,
                     tracker_name=tracker_name,
                 )
-                new_top10_entrants.append(item)
-                if is_first_time:
+                if dedup_key not in seen_top10:
+                    seen_top10.add(dedup_key)
+                    new_top10_entrants.append(item)
+                if is_first_time and dedup_key not in seen_first_time:
+                    seen_first_time.add(dedup_key)
                     first_time_entrants.append(item)
 
             elif event.event_type == EventType.NEW_ENTRANT_TOP50:
-                is_first_time = first_seen_map.get(
-                    (event.marketplace, event.asin)
-                ) == event.snapshot_date
-
                 item = CategoryEntrantItem(
                     asin=event.asin,
                     title=title,
@@ -544,13 +536,15 @@ class InsightsQueryService:
                     current_rank=current_rank,
                     previous_rank=previous_rank,
                     entered_at=event.snapshot_date,
-                    is_first_time_entrant=is_first_time,
+                    is_first_time_entrant=True,
                     tracker_code=event.tracker_code,
                     tracker_name=tracker_name,
                 )
-                if is_first_time:
+                if dedup_key not in seen_first_time:
+                    seen_first_time.add(dedup_key)
                     first_time_entrants.append(item)
-                if current_rank > 0 and current_rank <= 10:
+                if current_rank > 0 and current_rank <= 10 and dedup_key not in seen_top10:
+                    seen_top10.add(dedup_key)
                     new_top10_entrants.append(item)
 
             elif event.event_type == EventType.RETURNING_TOP50:
@@ -580,7 +574,6 @@ class InsightsQueryService:
                     "transform_ms": round(t_transform, 2),
                     "event_count": len(event_docs),
                     "product_count": len(product_docs),
-                    "snapshot_count": len(snapshot_docs),
                 }
             },
         )
