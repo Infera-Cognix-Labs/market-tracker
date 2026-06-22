@@ -88,6 +88,9 @@ class DiffService:
             },
             sort=[("snapshot_date", -1)],
         )
+        if previous_snapshot is None:
+            return []
+
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
@@ -325,6 +328,9 @@ class DiffService:
             },
             sort=[("snapshot_date", -1)],
         )
+        if previous_snapshot is None:
+            return []
+
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
