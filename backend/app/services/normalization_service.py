@@ -16,6 +16,21 @@ from app.services.run_orchestrator import coerce_datetime
 
 _ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10,12}$")
 _NUMERIC_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
+_IMAGE_EXT_PATTERN = re.compile(r"\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(?:\?|$)", re.IGNORECASE)
+_AMAZON_PRODUCT_URL_PATTERN = re.compile(r"amazon\.\w+/(?:dp|gp/product|gp/aw/d)/", re.IGNORECASE)
+_AMAZON_IMAGE_HOST = re.compile(r"(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images\.ssl-images-amazon\.com)", re.IGNORECASE)
+
+
+def _is_image_url(url: str) -> bool:
+    if not url or not url.startswith(("http://", "https://")):
+        return False
+    if _IMAGE_EXT_PATTERN.search(url):
+        return True
+    if _AMAZON_IMAGE_HOST.search(url):
+        return True
+    if _AMAZON_PRODUCT_URL_PATTERN.search(url):
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -290,14 +305,14 @@ def _coerce_image_url(payload: dict[str, object]) -> str:
     direct = _coerce_string(
         _pick(payload, "image", "main_image_url", "image_url", "thumbnailImage")
     )
-    if direct:
+    if direct and _is_image_url(direct):
         return direct
 
     images = payload.get("images")
     if isinstance(images, list):
         for item in images:
             image = _coerce_string(item)
-            if image:
+            if image and _is_image_url(image):
                 return image
 
     for key in ("galleryThumbnails", "highResolutionImages"):
@@ -305,7 +320,7 @@ def _coerce_image_url(payload: dict[str, object]) -> str:
         if isinstance(gallery, list) and gallery:
             for item in gallery:
                 url = _coerce_string(item)
-                if url:
+                if url and _is_image_url(url):
                     return url
 
     return ""

@@ -343,8 +343,6 @@ class ReportPDFGenerator:
         y = pdf.get_y()
         self._set_fill_color(pdf, SURFACE)
         pdf.set_draw_color(*_pdf_rgb(BORDER))
-        content_height = 12 + len(insights.key_trends) * 5 + 14
-        pdf.rect(pdf.l_margin, y, page_width, content_height, "DF")
 
         cursor_y = y + 4
         pdf.set_xy(pdf.l_margin + 4, cursor_y)
@@ -381,7 +379,12 @@ class ReportPDFGenerator:
         pdf.set_font("Helvetica", "", 8)
         pdf.multi_cell(page_width - 8, 4, _safe_pdf_text(insights.risk_assessment))
 
-        pdf.set_y(y + content_height + 4)
+        actual_height = pdf.get_y() - y + 4
+        pdf.set_y(y)
+        self._set_fill_color(pdf, SURFACE)
+        pdf.rect(pdf.l_margin, y, page_width, actual_height, "DF")
+
+        pdf.set_y(y + actual_height + 4)
 
     def _draw_trackers(self, pdf: FPDF) -> None:
         self._section_title(pdf, "Trackers Included")
