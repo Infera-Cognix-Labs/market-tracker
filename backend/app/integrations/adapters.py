@@ -13,12 +13,17 @@ from app.models.contracts import (
 
 _ASIN_PATTERN = re.compile(r"^[A-Z0-9]{10,12}$")
 _NUMERIC_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
-_ISO_DATETIME_PATTERN = re.compile(
-    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
+_ISO_DATETIME_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+_IMAGE_EXT_PATTERN = re.compile(
+    r"\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(?:\?|$)", re.IGNORECASE
 )
-_IMAGE_EXT_PATTERN = re.compile(r"\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(?:\?|$)", re.IGNORECASE)
-_AMAZON_PRODUCT_URL_PATTERN = re.compile(r"amazon\.\w+/(?:dp|gp/product|gp/aw/d)/", re.IGNORECASE)
-_AMAZON_IMAGE_HOST = re.compile(r"(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images\.ssl-images-amazon\.com)", re.IGNORECASE)
+_AMAZON_PRODUCT_URL_PATTERN = re.compile(
+    r"amazon\.\w+/(?:dp|gp/product|gp/aw/d)/", re.IGNORECASE
+)
+_AMAZON_IMAGE_HOST = re.compile(
+    r"(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images\.ssl-images-amazon\.com)",
+    re.IGNORECASE,
+)
 
 
 def _is_image_url(url: str) -> bool:
@@ -152,9 +157,7 @@ class JungleeBestsellersAdapter:
     ) -> CategoryProductRecord | None:
         asin = _coerce_asin(_pick(raw_payload, "asin"))
         if not asin:
-            asin = _extract_asin_from_url(
-                _coerce_string(_pick(raw_payload, "url"))
-            )
+            asin = _extract_asin_from_url(_coerce_string(_pick(raw_payload, "url")))
         if not asin:
             return None
 
@@ -171,7 +174,7 @@ class JungleeBestsellersAdapter:
             title=_coerce_string(_pick(raw_payload, "name")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_pick_image_url(raw_payload, "thumbnail"),
+            main_image_url=_pick_image_url(raw_payload, "thumbnailUrl", "thumbnail"),
             price_current=_coerce_float(_pick(raw_payload, "price")),
             price_original=None,
             currency=_coerce_string(_pick(raw_payload, "currency")),
@@ -208,16 +211,16 @@ class SaswaveCategoryAdapter:
             product_url=_coerce_string(
                 _pick(raw_payload, "url", "product_url", "productUrl")
             ),
-            main_image_url=_pick_image_url(raw_payload, "image", "main_image_url", "image_url"),
+            main_image_url=_pick_image_url(
+                raw_payload, "image", "main_image_url", "image_url"
+            ),
             price_current=_coerce_float(
                 _pick(raw_payload, "price", "price_current", "deal_price")
             ),
             price_original=_coerce_float(
                 _pick(raw_payload, "price_original", "originalPrice", "list_price")
             ),
-            currency=_coerce_string(
-                _pick(raw_payload, "currency", "currencyCode")
-            ),
+            currency=_coerce_string(_pick(raw_payload, "currency", "currencyCode")),
             coupon_text=_coerce_string(
                 _pick(raw_payload, "coupon_text", "coupon", "promotion_text")
             ),
@@ -248,11 +251,6 @@ class SaswaveCategoryAdapter:
                 _pick(raw_payload, "best_seller_rank", "bsr_position")
             ),
         )
-
-
-
-
-
 
 
 class ProdigerCategoryAdapter:
@@ -352,9 +350,7 @@ class JungleeAsinsAdapter:
             price_current=price_value,
             price_original=list_price_value,
             currency=currency,
-            rating_value=_coerce_float(
-                _pick(raw_payload, "stars", "rating")
-            ),
+            rating_value=_coerce_float(_pick(raw_payload, "stars", "rating")),
             review_count=_coerce_int(_pick(raw_payload, "reviewsCount")),
             availability_status="IN_STOCK"
             if raw_payload.get("inStock") is True
@@ -365,9 +361,7 @@ class JungleeAsinsAdapter:
                 _pick_nested(raw_payload, "seller", "name")
             ),
             bsr_position=bsr_position,
-            variation_count=_coerce_int(
-                _pick(raw_payload, "variation_count")
-            ),
+            variation_count=_coerce_int(_pick(raw_payload, "variation_count")),
         )
 
 
@@ -379,9 +373,7 @@ class DealsScraperAdapter:
         raw_payload: dict[str, object],
         marketplace: str,
     ) -> DealRecord | None:
-        asin = _coerce_asin(
-            _pick(raw_payload, "asin", "ASIN", "product_asin")
-        )
+        asin = _coerce_asin(_pick(raw_payload, "asin", "ASIN", "product_asin"))
         if not asin:
             return None
 
@@ -406,8 +398,8 @@ class DealsScraperAdapter:
         else:
             list_price = _coerce_float(list_price_raw)
 
-        savings_amount_raw = (
-            raw_payload.get("savings_amount") or raw_payload.get("savingsAmount")
+        savings_amount_raw = raw_payload.get("savings_amount") or raw_payload.get(
+            "savingsAmount"
         )
         if isinstance(savings_amount_raw, dict):
             savings_amount = _coerce_float(savings_amount_raw.get("amount"))
