@@ -321,7 +321,7 @@ class JungleeAsinsAdapter:
         self,
         raw_payload: dict[str, object],
         marketplace: str,
-    ) -> CategoryProductRecord | None:
+    ) -> CompetitorProductRecord | None:
         asin = _coerce_asin(_pick(raw_payload, "asin", "originalAsin"))
         if not asin:
             return None
@@ -338,9 +338,8 @@ class JungleeAsinsAdapter:
             if isinstance(last_rank, dict):
                 bsr_position = _coerce_int(last_rank.get("rank"))
 
-        return CategoryProductRecord(
+        return CompetitorProductRecord(
             asin=asin,
-            rank_position=bsr_position,
             title=_coerce_string(_pick(raw_payload, "title")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url")),

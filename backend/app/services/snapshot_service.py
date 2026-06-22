@@ -173,9 +173,7 @@ class SnapshotService:
         )
 
         bsr_position = (
-            record.bsr_position
-            if snapshot_date >= tracker_created_date
-            else None
+            record.bsr_position if snapshot_date >= tracker_created_date else None
         )
 
         payload = {
@@ -328,37 +326,52 @@ class SnapshotService:
         current_asins = {p.asin for p in products}
         current_top10_asins = {p.asin for p in products[:10]}
 
-        previous_snapshot = await CategorySnapshotDocument.find(
-            CategorySnapshotDocument.workspace_id == workspace_id,
-            CategorySnapshotDocument.tracker_code == tracker_code,
-            CategorySnapshotDocument.snapshot_date < snapshot_date,
-        ).sort((CategorySnapshotDocument.snapshot_date, DESCENDING)).first_or_none()
+        previous_snapshot = (
+            await CategorySnapshotDocument.find(
+                CategorySnapshotDocument.workspace_id == workspace_id,
+                CategorySnapshotDocument.tracker_code == tracker_code,
+                CategorySnapshotDocument.snapshot_date < snapshot_date,
+            )
+            .sort((CategorySnapshotDocument.snapshot_date, DESCENDING))
+            .first_or_none()
+        )
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:
             previous_asins = {p.asin for p in previous_snapshot.products}
             previous_top10_asins = {p.asin for p in previous_snapshot.products[:10]}
 
-        new_entrants = current_asins - previous_asins
-        exits = previous_asins - current_asins
+        if previous_snapshot is None:
+            new_entrants = set()
+            returning_asins = set()
+            exits = set()
+            enter_top10 = set()
+            exit_top10 = set()
+        else:
+            new_entrants = current_asins - previous_asins
+            exits = previous_asins - current_asins
 
-        # Distinguish truly new ASINs from returning ones by checking historical snapshots.
-        returning_asins = set()
-        if new_entrants:
-            history_snapshots = await CategorySnapshotDocument.find(
-                CategorySnapshotDocument.workspace_id == workspace_id,
-                CategorySnapshotDocument.tracker_code == tracker_code,
-                CategorySnapshotDocument.snapshot_date < snapshot_date,
-            ).to_list()
-            historical_asins: set[str] = set()
-            for snap in history_snapshots:
-                for p in snap.products:
-                    historical_asins.add(p.asin)
-            returning_asins = new_entrants & historical_asins
-            new_entrants = new_entrants - returning_asins
+            # Distinguish truly new ASINs from returning ones by checking cached history.
+            returning_asins = set()
+            if new_entrants:
+                if tracker_document.asins_last_seen is not None:
+                    historical_asins = set(tracker_document.asins_last_seen.keys())
+                else:
+                    # Backward compat: load historical snapshots for old trackers
+                    history_snapshots = await CategorySnapshotDocument.find(
+                        CategorySnapshotDocument.workspace_id == workspace_id,
+                        CategorySnapshotDocument.tracker_code == tracker_code,
+                        CategorySnapshotDocument.snapshot_date < snapshot_date,
+                    ).to_list()
+                    historical_asins: set[str] = set()
+                    for snap in history_snapshots:
+                        for p in snap.products:
+                            historical_asins.add(p.asin)
+                returning_asins = new_entrants & historical_asins
+                new_entrants = new_entrants - returning_asins
 
-        enter_top10 = current_top10_asins - previous_top10_asins
-        exit_top10 = previous_top10_asins - current_top10_asins
+            enter_top10 = current_top10_asins - previous_top10_asins
+            exit_top10 = previous_top10_asins - current_top10_asins
 
         payload = {
             "tracker_code": tracker_code,
@@ -414,7 +427,9 @@ class SnapshotService:
         workspace_id: str,
         snapshot_date,
         tracker_code: str,
-        tracker_document: CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument,
+        tracker_document: CategoryTrackerDocument
+        | CompetitorTrackerDocument
+        | KeywordTrackerDocument,
         records: list[NormalizedProductRecord],
         apify_run_id: str,
         dataset_id: str,
@@ -460,36 +475,51 @@ class SnapshotService:
         current_asins = {p.asin for p in products}
         current_top10_asins = {p.asin for p in products[:10]}
 
-        previous_snapshot = await KeywordSnapshotDocument.find(
-            KeywordSnapshotDocument.workspace_id == workspace_id,
-            KeywordSnapshotDocument.tracker_code == tracker_code,
-            KeywordSnapshotDocument.snapshot_date < snapshot_date,
-        ).sort((KeywordSnapshotDocument.snapshot_date, DESCENDING)).first_or_none()
+        previous_snapshot = (
+            await KeywordSnapshotDocument.find(
+                KeywordSnapshotDocument.workspace_id == workspace_id,
+                KeywordSnapshotDocument.tracker_code == tracker_code,
+                KeywordSnapshotDocument.snapshot_date < snapshot_date,
+            )
+            .sort((KeywordSnapshotDocument.snapshot_date, DESCENDING))
+            .first_or_none()
+        )
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:
             previous_asins = {p.asin for p in previous_snapshot.products}
             previous_top10_asins = {p.asin for p in previous_snapshot.products[:10]}
 
-        new_entrants = current_asins - previous_asins
-        exits = previous_asins - current_asins
+        if previous_snapshot is None:
+            new_entrants = set()
+            returning_asins = set()
+            exits = set()
+            enter_top10 = set()
+            exit_top10 = set()
+        else:
+            new_entrants = current_asins - previous_asins
+            exits = previous_asins - current_asins
 
-        returning_asins = set()
-        if new_entrants:
-            history_snapshots = await KeywordSnapshotDocument.find(
-                KeywordSnapshotDocument.workspace_id == workspace_id,
-                KeywordSnapshotDocument.tracker_code == tracker_code,
-                KeywordSnapshotDocument.snapshot_date < snapshot_date,
-            ).to_list()
-            historical_asins: set[str] = set()
-            for snap in history_snapshots:
-                for p in snap.products:
-                    historical_asins.add(p.asin)
-            returning_asins = new_entrants & historical_asins
-            new_entrants = new_entrants - returning_asins
+            returning_asins = set()
+            if new_entrants:
+                if tracker_document.asins_last_seen is not None:
+                    historical_asins = set(tracker_document.asins_last_seen.keys())
+                else:
+                    # Backward compat: load historical snapshots for old trackers
+                    history_snapshots = await KeywordSnapshotDocument.find(
+                        KeywordSnapshotDocument.workspace_id == workspace_id,
+                        KeywordSnapshotDocument.tracker_code == tracker_code,
+                        KeywordSnapshotDocument.snapshot_date < snapshot_date,
+                    ).to_list()
+                    historical_asins: set[str] = set()
+                    for snap in history_snapshots:
+                        for p in snap.products:
+                            historical_asins.add(p.asin)
+                returning_asins = new_entrants & historical_asins
+                new_entrants = new_entrants - returning_asins
 
-        enter_top10 = current_top10_asins - previous_top10_asins
-        exit_top10 = previous_top10_asins - current_top10_asins
+            enter_top10 = current_top10_asins - previous_top10_asins
+            exit_top10 = previous_top10_asins - current_top10_asins
 
         payload = {
             "tracker_code": tracker_code,
@@ -528,9 +558,7 @@ class SnapshotService:
             KeywordSnapshotDocument.snapshot_date == snapshot_date,
         )
         if existing is None:
-            await KeywordSnapshotDocument(
-                workspace_id=workspace_id, **payload
-            ).insert()
+            await KeywordSnapshotDocument(workspace_id=workspace_id, **payload).insert()
             return True
 
         return False
@@ -601,7 +629,7 @@ def _dedupe_category_records(
 ) -> list[NormalizedProductRecord]:
     unique_records: list[NormalizedProductRecord] = []
     seen_asins: set[str] = set()
-    
+
     for record in records:
         if record.asin in seen_asins:
             continue

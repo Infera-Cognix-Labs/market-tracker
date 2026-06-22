@@ -59,14 +59,20 @@ class DashboardQueryService:
         # Compute timeframe bounds to limit event query
         from app.services.shared import timeframe_bounds
         from datetime import date as _date
+
         reference_date = _date.today()
         from_date, to_date = timeframe_bounds(timeframe, reference_date)
 
-        event_docs = await EventDocument.find(
-            EventDocument.workspace_id == workspace_id,
-            EventDocument.snapshot_date >= from_date,
-            EventDocument.snapshot_date <= to_date,
-        ).sort(("event_time", -1)).limit(1000).to_list()
+        event_docs = (
+            await EventDocument.find(
+                EventDocument.workspace_id == workspace_id,
+                EventDocument.snapshot_date >= from_date,
+                EventDocument.snapshot_date <= to_date,
+            )
+            .sort(("event_time", -1))
+            .limit(1000)
+            .to_list()
+        )
         t_db = (time.monotonic() - t0) * 1000
         t1 = time.monotonic()
         result = build_dashboard_overview(

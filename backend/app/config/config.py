@@ -283,7 +283,9 @@ def _actor_pools_config() -> dict[str, list[ActorPoolEntryConfig]]:
                 raw_marketplace_map = input_adapter_raw.get("marketplace_map")
                 marketplace_map: dict[str, str] = {}
                 if isinstance(raw_marketplace_map, dict):
-                    marketplace_map = {str(k): str(v) for k, v in raw_marketplace_map.items()}
+                    marketplace_map = {
+                        str(k): str(v) for k, v in raw_marketplace_map.items()
+                    }
                 static_fields_raw = input_adapter_raw.get("static_fields")
                 input_adapter = InputAdapterConfig(
                     field_map=field_map if isinstance(field_map, dict) else {},
@@ -352,25 +354,21 @@ class WorkerConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    enabled: bool = _config_bool(
-        ("llm", "enabled"), False, "LLM_ENABLED"
-    )
+    enabled: bool = _config_bool(("llm", "enabled"), False, "LLM_ENABLED")
     api_key: str | None = _read_secret(env_name="OPENAI_API_KEY")
     model: str = (
         _config_str(("llm", "model"), "gpt-4o-mini", "LLM_MODEL") or "gpt-4o-mini"
     )
-    max_tokens: int = _config_int(
-        ("llm", "max_tokens"), 2500, "LLM_MAX_TOKENS"
-    ) or 2500
+    max_tokens: int = _config_int(("llm", "max_tokens"), 2500, "LLM_MAX_TOKENS") or 2500
     temperature: float = float(
         _config_str(("llm", "temperature"), "0.3", "LLM_TEMPERATURE") or "0.3"
     )
-    timeout_secs: int = _config_int(
-        ("llm", "timeout_secs"), 30, "LLM_TIMEOUT_SECS"
-    ) or 30
-    retry_attempts: int = _config_int(
-        ("llm", "retry_attempts"), 2, "LLM_RETRY_ATTEMPTS"
-    ) or 2
+    timeout_secs: int = (
+        _config_int(("llm", "timeout_secs"), 30, "LLM_TIMEOUT_SECS") or 30
+    )
+    retry_attempts: int = (
+        _config_int(("llm", "retry_attempts"), 2, "LLM_RETRY_ATTEMPTS") or 2
+    )
 
 
 class Config(BaseModel):

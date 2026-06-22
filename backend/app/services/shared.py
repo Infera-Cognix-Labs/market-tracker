@@ -78,13 +78,17 @@ THREAT_SCORE_WEIGHT = {
 
 def category_doc_to_model(document: CategoryTrackerDocument) -> CategoryTracker:
     return CategoryTracker.model_validate(
-        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+        document.model_dump(
+            exclude={"id", "workspace_id", "asins_last_seen"}, mode="python"
+        )
     )
 
 
 def keyword_doc_to_model(document: KeywordTrackerDocument) -> KeywordTracker:
     return KeywordTracker.model_validate(
-        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+        document.model_dump(
+            exclude={"id", "workspace_id", "asins_last_seen"}, mode="python"
+        )
     )
 
 
@@ -421,15 +425,7 @@ def build_dashboard_overview(
     keyword_trackers: list[KeywordTracker] | None = None,
     events: list[Event],
 ) -> DashboardOverview:
-    reference_date = max(
-        (event.snapshot_date for event in events), default=utc_now().date()
-    )
-    from_date, to_date = timeframe_bounds(timeframe, reference_date)
-    filtered_events = [
-        event
-        for event in events
-        if within_range(event.snapshot_date, from_date, to_date)
-    ]
+    filtered_events = events
     sorted_events = sort_events(filtered_events)
     tracker_name_map = build_tracker_name_map(
         category_trackers, competitor_trackers, keyword_trackers
@@ -489,6 +485,11 @@ def build_dashboard_overview(
                 for event in category_event_groups.get(tracker.tracker_code, [])
                 if event.event_type == EventType.ENTER_TOP10
             ),
+            top10_exit_count=sum(
+                1
+                for event in category_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.EXIT_TOP10
+            ),
         )
         for tracker in active_category_trackers
     ]
@@ -535,6 +536,11 @@ def build_dashboard_overview(
                 for event in keyword_event_groups.get(tracker.tracker_code, [])
                 if event.event_type == EventType.ENTER_TOP10
             ),
+            top10_exit_count=sum(
+                1
+                for event in keyword_event_groups.get(tracker.tracker_code, [])
+                if event.event_type == EventType.EXIT_TOP10
+            ),
         )
         for tracker in active_keyword_trackers
     ]
@@ -561,6 +567,11 @@ def build_dashboard_overview(
                 1
                 for event in filtered_events
                 if event.event_type == EventType.ENTER_TOP10
+            ),
+            top10_exit_count=sum(
+                1
+                for event in filtered_events
+                if event.event_type == EventType.EXIT_TOP10
             ),
             price_change_count=sum(
                 1
@@ -650,11 +661,21 @@ def build_competitor_summaries(
                     title=product.title_latest,
                     product_url=product.product_url,
                     image_url=product.main_image_url_latest,
-                    current_bsr_position=snapshot.bsr_position if snapshot else product.current_state.bsr_position,
-                    current_price=snapshot.price_current if snapshot else product.current_state.price_current,
-                    currency=snapshot.currency if snapshot else product.current_state.currency,
-                    availability_status=snapshot.availability_status if snapshot else product.current_state.availability_status,
-                    last_snapshot_date=snapshot.snapshot_date if snapshot else product.current_state.last_snapshot_date,
+                    current_bsr_position=snapshot.bsr_position
+                    if snapshot
+                    else product.current_state.bsr_position,
+                    current_price=snapshot.price_current
+                    if snapshot
+                    else product.current_state.price_current,
+                    currency=snapshot.currency
+                    if snapshot
+                    else product.current_state.currency,
+                    availability_status=snapshot.availability_status
+                    if snapshot
+                    else product.current_state.availability_status,
+                    last_snapshot_date=snapshot.snapshot_date
+                    if snapshot
+                    else product.current_state.last_snapshot_date,
                     recent_event_count_7d=recent_event_count,
                 )
             )

@@ -13,7 +13,11 @@ from app.models.api import (
     TrackerType,
     TriggerMode,
 )
-from app.models.documents import CategoryTrackerDocument, CompetitorTrackerDocument, KeywordTrackerDocument
+from app.models.documents import (
+    CategoryTrackerDocument,
+    CompetitorTrackerDocument,
+    KeywordTrackerDocument,
+)
 from app.services.job_service import JobService
 
 logger = get_logger(__name__)
