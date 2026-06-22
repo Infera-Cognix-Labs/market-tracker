@@ -392,6 +392,7 @@ class TrackedProductSummary(ApiModel):
     brand: str
     title: str
     product_url: str | None = None
+    image_url: str | None = None
     current_bsr_position: int | None = None
     current_price: float | None = None
     currency: str | None = None
@@ -490,6 +491,8 @@ class ProductCurrentState(ApiModel):
     price_original: float | None = None
     currency: str | None = None
     bsr_position: int | None = None
+    rating_value: float | None = None
+    review_count: int | None = None
     availability_status: AvailabilityStatus
     buy_box_status: BuyBoxStatus
     buy_box_seller_name: str | None = None

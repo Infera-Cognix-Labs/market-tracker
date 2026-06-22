@@ -365,6 +365,7 @@ export interface TrackedProductSummary {
   brand: string
   title: string
   product_url?: string | null
+  image_url?: string | null
   current_bsr_position: number | null
   current_price: number | null
   currency: string | null
@@ -394,6 +395,8 @@ export interface ProductCurrentState {
   price_original?: number | null
   currency?: string | null
   bsr_position?: number | null
+  rating_value?: number | null
+  review_count?: number | null
   availability_status: AvailabilityStatus
   buy_box_status: BuyBoxStatus
   buy_box_seller_name?: string | null
