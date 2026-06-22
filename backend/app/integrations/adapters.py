@@ -16,6 +16,28 @@ _NUMERIC_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
 _ISO_DATETIME_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
 )
+_IMAGE_EXT_PATTERN = re.compile(r"\.(jpe?g|png|gif|webp|bmp|svg|tiff?)(?:\?|$)", re.IGNORECASE)
+_AMAZON_PRODUCT_URL_PATTERN = re.compile(r"amazon\.\w+/(?:dp|gp/product|gp/aw/d)/", re.IGNORECASE)
+_AMAZON_IMAGE_HOST = re.compile(r"(?:m\.media-amazon\.com|images-na\.ssl-images-amazon\.com|images\.ssl-images-amazon\.com)", re.IGNORECASE)
+
+
+def _is_image_url(url: str) -> bool:
+    if not url or not url.startswith(("http://", "https://")):
+        return False
+    if _IMAGE_EXT_PATTERN.search(url):
+        return True
+    if _AMAZON_IMAGE_HOST.search(url):
+        return True
+    if _AMAZON_PRODUCT_URL_PATTERN.search(url):
+        return False
+    return True
+
+
+def _pick_image_url(payload: dict[str, object], *keys: str) -> str:
+    candidate = _coerce_string(_pick(payload, *keys))
+    if candidate and _is_image_url(candidate):
+        return candidate
+    return ""
 
 
 def _coerce_asin(value: object | None) -> str | None:
@@ -149,7 +171,7 @@ class JungleeBestsellersAdapter:
             title=_coerce_string(_pick(raw_payload, "name")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(_pick(raw_payload, "thumbnail")),
+            main_image_url=_pick_image_url(raw_payload, "thumbnail"),
             price_current=_coerce_float(_pick(raw_payload, "price")),
             price_original=None,
             currency=_coerce_string(_pick(raw_payload, "currency")),
@@ -186,9 +208,7 @@ class SaswaveCategoryAdapter:
             product_url=_coerce_string(
                 _pick(raw_payload, "url", "product_url", "productUrl")
             ),
-            main_image_url=_coerce_string(
-                _pick(raw_payload, "image", "main_image_url", "image_url")
-            ),
+            main_image_url=_pick_image_url(raw_payload, "image", "main_image_url", "image_url"),
             price_current=_coerce_float(
                 _pick(raw_payload, "price", "price_current", "deal_price")
             ),
@@ -254,7 +274,7 @@ class ProdigerCategoryAdapter:
             title=_coerce_string(_pick(raw_payload, "title")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(_pick(raw_payload, "thumbnail")),
+            main_image_url=_pick_image_url(raw_payload, "thumbnail"),
             price_current=_coerce_float(_pick(raw_payload, "price")),
             price_original=_coerce_float(_pick(raw_payload, "listPriceValue")),
             currency=_coerce_string(_pick(raw_payload, "currency")),
@@ -285,7 +305,7 @@ class HarvestlabKeywordAdapter:
             title=_coerce_string(_pick(raw_payload, "title")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url", "product_url")),
-            main_image_url=_coerce_string(_pick(raw_payload, "image_url")),
+            main_image_url=_pick_image_url(raw_payload, "image_url"),
             price_current=_coerce_float(_pick(raw_payload, "price")),
             price_original=_coerce_float(_pick(raw_payload, "original_price")),
             currency=_coerce_string(_pick(raw_payload, "currency")),
@@ -328,9 +348,7 @@ class JungleeAsinsAdapter:
             title=_coerce_string(_pick(raw_payload, "title")),
             brand=_coerce_string(_pick(raw_payload, "brand")) or "Unknown",
             product_url=_coerce_string(_pick(raw_payload, "url")),
-            main_image_url=_coerce_string(
-                _pick(raw_payload, "thumbnailImage")
-            ),
+            main_image_url=_pick_image_url(raw_payload, "thumbnailImage"),
             price_current=price_value,
             price_original=list_price_value,
             currency=currency,
