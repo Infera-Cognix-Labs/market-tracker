@@ -24,6 +24,20 @@ async function handler(
   }
 
   const upstream = await fetch(dest, init);
+
+  // 204/304 responses must not have a body — passing one (even an empty
+  // ArrayBuffer) makes the Response constructor throw, which surfaces as a
+  // 500 to the client even though the upstream call succeeded.
+  if (upstream.status === 204 || upstream.status === 304) {
+    return new NextResponse(null, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: {
+        "content-type": upstream.headers.get("content-type") || "application/json",
+      },
+    });
+  }
+
   const body = await upstream.arrayBuffer();
 
   return new NextResponse(body, {
