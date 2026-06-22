@@ -5,7 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.v1.deps import get_store
-from app.models.api import CategoryInsights, CompetitorAlertCounts, CompetitorInsights, KeywordInsights, Timeframe
+from app.models.api import (
+    CategoryInsights,
+    CompetitorAlertCounts,
+    CompetitorInsights,
+    KeywordInsights,
+    Timeframe,
+)
 from app.store import BaseStore
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/summaries", tags=["summaries"])

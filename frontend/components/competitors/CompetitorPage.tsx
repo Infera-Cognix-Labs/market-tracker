@@ -42,7 +42,9 @@ const ManageAsinsModal = ({
   onClose: () => void
   onUpdate: (updated: CompetitorTrackerDetail) => void
 }) => {
-  const [asins, setAsins] = useState<string[]>(tracker.tracked_asins.map(a => a.asin))
+  const [asins, setAsins] = useState<{ asin: string; enabled: boolean }[]>(
+    tracker.tracked_asins.map(a => ({ asin: a.asin, enabled: a.enabled }))
+  )
   const [asinInput, setAsinInput] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,14 +53,16 @@ const ManageAsinsModal = ({
     const raw = asinInput.trim().toUpperCase()
     if (!raw) return
     if (!/^[A-Z0-9]{10}$/.test(raw)) { setError("Invalid ASIN — must be 10 alphanumeric characters."); return }
-    if (asins.includes(raw)) { setError("ASIN already in list."); return }
+    if (asins.some(a => a.asin === raw)) { setError("ASIN already in list."); return }
     if (asins.length >= 200) { setError("Maximum 200 ASINs per tracker."); return }
-    setAsins(prev => [...prev, raw])
+    setAsins(prev => [...prev, { asin: raw, enabled: true }])
     setAsinInput("")
     setError(null)
   }
 
-  const removeAsin = (asin: string) => setAsins(prev => prev.filter(a => a !== asin))
+  const removeAsin = (asin: string) => setAsins(prev => prev.filter(a => a.asin !== asin))
+  const toggleAsin = (asin: string) =>
+    setAsins(prev => prev.map(a => a.asin === asin ? { ...a, enabled: !a.enabled } : a))
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,7 +71,7 @@ const ManageAsinsModal = ({
     try {
       const updated = await apiReplaceTrackedAsins(
         tracker.tracker_code,
-        asins.map(asin => ({ asin, enabled: true }))
+        asins.map(({ asin, enabled }) => ({ asin, enabled }))
       )
       onUpdate(updated)
     } catch {
@@ -89,7 +93,7 @@ const ManageAsinsModal = ({
           </div>
           <form onSubmit={handleSave} style={{ padding: "20px" }}>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: T.text2, marginBottom: 5, letterSpacing: ".04em", textTransform: "uppercase" }}>ASINs ({asins.length}/200)</label>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: T.text2, marginBottom: 5, letterSpacing: ".04em", textTransform: "uppercase" }}>ASINs ({asins.length}/200{asins.some(a => !a.enabled) ? ` · ${asins.filter(a => a.enabled).length} active` : ""})</label>
               <div style={{ display: "flex", gap: 8 }}>
                 <input
                   type="text" value={asinInput}
@@ -106,10 +110,12 @@ const ManageAsinsModal = ({
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16, maxHeight: 200, overflowY: "auto" }}>
-              {asins.map(asin => (
-                <span key={asin} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: T.bg4, border: `1px solid ${T.border2}`, borderRadius: 6, fontSize: 11, fontFamily: T.mono, color: T.amber }}>
+              {asins.map(({ asin, enabled }) => (
+                <span key={asin} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: enabled ? T.bg4 : T.bg3, border: `1px solid ${enabled ? T.border2 : T.border}`, borderRadius: 6, fontSize: 11, fontFamily: T.mono, color: enabled ? T.amber : T.text3, cursor: "pointer", opacity: enabled ? 1 : 0.6 }}
+                  onClick={() => toggleAsin(asin)} title={enabled ? "Click to disable" : "Click to enable"}>
                   {asin}
-                  <button type="button" onClick={() => removeAsin(asin)} style={{ background: "none", border: "none", color: T.text3, cursor: "pointer", padding: 0, display: "flex", lineHeight: 1 }}><Trash2 size={10} /></button>
+                  {!enabled && <span style={{ fontSize: 8, color: T.text3 }}>off</span>}
+                  <button type="button" onClick={(e) => { e.stopPropagation(); removeAsin(asin) }} style={{ background: "none", border: "none", color: T.text3, cursor: "pointer", padding: 0, display: "flex", lineHeight: 1 }}><Trash2 size={10} /></button>
                 </span>
               ))}
             </div>
@@ -335,7 +341,7 @@ const CreateTrackerModal = ({
       const tracker = await apiCreateCompetitorTracker(payload)
       onCreate(tracker)
     } catch (err) {
-      handleApiError(err, setError, "A tracker for this marketplace and ASINs already exists.")
+      handleApiError(err, setError, "Failed to create tracker. Please try again.")
       setSubmitting(false)
     }
   }
@@ -495,7 +501,8 @@ export const CompetitorPage = () => {
 
   const tracker = trackerDetail ?? trackers.find(t => t.tracker_code === selectedCode) ?? null
   const products = tracker?.tracked_products || []
-  const selectedProduct = products[selectedAsinIdx]
+  const effectiveAsinIdx = products.length === 0 ? 0 : Math.min(selectedAsinIdx, products.length - 1)
+  const selectedProduct = products[effectiveAsinIdx]
 
   // Load product detail and timeline when ASIN selection changes
   useEffect(() => {
@@ -563,10 +570,8 @@ export const CompetitorPage = () => {
     rating: pt.rating_value,
     reviews: pt.review_count,
     availability: pt.availability_status,
-    buyBox: pt.buy_box_status,
     coupon: pt.coupon_text,
     deal: pt.deal_info,
-    variations: pt.variation_count,
   })) || []
 
   return (
@@ -594,17 +599,21 @@ export const CompetitorPage = () => {
           }}
         />
       )}
-      {showManageAsins && tracker && (
-        <ManageAsinsModal
-          tracker={tracker}
-          onClose={() => setShowManageAsins(false)}
-          onUpdate={updated => {
-            setTrackers(prev => prev.map(t => t.tracker_code === updated.tracker_code ? updated : t))
-            setTrackerDetail(updated)
-            setShowManageAsins(false)
-          }}
-        />
-      )}
+        {showManageAsins && tracker && (
+          <ManageAsinsModal
+            tracker={tracker}
+            onClose={() => setShowManageAsins(false)}
+            onUpdate={updated => {
+              setTrackers(prev => prev.map(t => t.tracker_code === updated.tracker_code ? updated : t))
+              setTrackerDetail(updated)
+              setSelectedAsinIdx(0)
+              setProductDetail(null)
+              setTimeline(null)
+              setEvents([])
+              setShowManageAsins(false)
+            }}
+          />
+        )}
       <div className="anim-fade">
         <PageHeader title="Competitor Tracker" sub="Deep dive analysis of manually tracked ASINs"
           actions={
@@ -874,7 +883,7 @@ export const CompetitorPage = () => {
                     <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
                       <thead>
                         <tr>
-                          {["Date", "Availability", "Buy Box", "Deal", "Coupon", "Variants"].map(h => (
+                          {["Date", "Availability", "Deal", "Coupon"].map(h => (
                             <th key={h} className="th-border">{h}</th>
                           ))}
                         </tr>
@@ -885,9 +894,6 @@ export const CompetitorPage = () => {
                             <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.date}</td>
                             <td style={{ padding: "6px 10px" }}>
                               <Badge type={r.availability === "IN_STOCK" ? "listing" : "stock"} text={r.availability === "IN_STOCK" ? "In Stock" : r.availability === "OUT_OF_STOCK" ? "OOS" : r.availability ?? "—"} />
-                            </td>
-                            <td style={{ padding: "6px 10px" }}>
-                              <Badge type={r.buyBox === "HAS_BUY_BOX" ? "listing" : r.buyBox === "NO_BUY_BOX" ? "stock" : "info"} text={r.buyBox === "HAS_BUY_BOX" ? "Has BB" : r.buyBox === "NO_BUY_BOX" ? "No BB" : "—"} />
                             </td>
                             <td style={{ padding: "6px 10px" }}>
                               {(() => {
@@ -928,7 +934,6 @@ export const CompetitorPage = () => {
                                 )
                               })()}
                             </td>
-                            <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.variations != null ? r.variations : "—"}</td>
                           </tr>
                         ))}
                       </tbody>

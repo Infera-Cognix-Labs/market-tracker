@@ -92,6 +92,7 @@ export interface DashboardOverviewSummary {
   new_entrant_count: number
   returning_count: number
   top10_enter_count: number
+  top10_exit_count: number
   price_change_count: number
   listing_change_count: number
 }
@@ -102,6 +103,7 @@ export interface CategoryHighlight {
   new_entrant_count: number
   exit_count: number
   top10_enter_count: number
+  top10_exit_count: number
 }
 
 export interface CompetitorHighlight {
@@ -666,6 +668,8 @@ export interface KeywordHighlight {
   tracker_name: string
   new_entrant_count: number
   exit_count: number
+  top10_enter_count: number
+  top10_exit_count: number
 }
 
 export interface KeywordInsights {

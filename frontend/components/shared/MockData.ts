@@ -18,6 +18,7 @@ export const MOCK_DASHBOARD_OVERVIEW: DashboardOverview = {
     new_entrant_count: 4,
     returning_count: 2,
     top10_enter_count: 1,
+    top10_exit_count: 0,
     price_change_count: 9,
     listing_change_count: 5,
   },
@@ -151,8 +152,8 @@ export const MOCK_DASHBOARD_OVERVIEW: DashboardOverview = {
     },
   ],
   category_highlights: [
-    { tracker_code: "ct_baby_bottle_warmers_us", tracker_name: "Baby Bottle Warmers - US", new_entrant_count: 3, exit_count: 2, top10_enter_count: 1 },
-    { tracker_code: "ct_bottle_sterilizers_us", tracker_name: "Bottle Sterilizers - US", new_entrant_count: 1, exit_count: 1, top10_enter_count: 0 },
+    { tracker_code: "ct_baby_bottle_warmers_us", tracker_name: "Baby Bottle Warmers - US", new_entrant_count: 3, exit_count: 2, top10_enter_count: 1, top10_exit_count: 0 },
+    { tracker_code: "ct_bottle_sterilizers_us", tracker_name: "Bottle Sterilizers - US", new_entrant_count: 1, exit_count: 1, top10_enter_count: 0, top10_exit_count: 0 },
   ],
   competitor_highlights: [
     { tracker_code: "cmp_baby_bottle_warmers_us", tracker_name: "Bottle Warmer Competitors - US", price_change_count: 9, availability_change_count: 1, listing_change_count: 5 },

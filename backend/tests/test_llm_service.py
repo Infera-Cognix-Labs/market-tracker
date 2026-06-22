@@ -198,7 +198,10 @@ class TestLLMService:
         )
 
         with patch.object(
-            service._client.chat.completions, "create", new_callable=AsyncMock, return_value=mock_response
+            service._client.chat.completions,
+            "create",
+            new_callable=AsyncMock,
+            return_value=mock_response,
         ):
             result = await service.generate_digest_insights(
                 digest=_make_digest(),
@@ -220,7 +223,10 @@ class TestLLMService:
         )
 
         with patch.object(
-            service._client.chat.completions, "create", new_callable=AsyncMock, return_value=mock_response
+            service._client.chat.completions,
+            "create",
+            new_callable=AsyncMock,
+            return_value=mock_response,
         ):
             result = await service.generate_digest_insights(
                 digest=_make_digest(),
@@ -299,7 +305,10 @@ class TestLLMService:
         )
 
         with patch.object(
-            service._client.chat.completions, "create", new_callable=AsyncMock, return_value=mock_response
+            service._client.chat.completions,
+            "create",
+            new_callable=AsyncMock,
+            return_value=mock_response,
         ):
             result = await service.generate_digest_insights(
                 digest=_make_digest(),

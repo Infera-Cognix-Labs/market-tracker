@@ -4,7 +4,13 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from app.models.api import EventType, TrackerType
-from app.models.documents import CategorySnapshotDocument, KeywordSnapshotDocument, ProductSnapshotDocument
+from app.models.documents import (
+    CategorySnapshotDocument,
+    CategoryTrackerDocument,
+    KeywordSnapshotDocument,
+    KeywordTrackerDocument,
+    ProductSnapshotDocument,
+)
 
 
 @dataclass(frozen=True)
@@ -82,14 +88,9 @@ class DiffService:
             },
             sort=[("snapshot_date", -1)],
         )
-        # Get all older snapshots for historical_last_seen tracking
-        history_snapshots = await CategorySnapshotDocument.find(
-            {
-                "workspace_id": workspace_id,
-                "tracker_code": tracker_code,
-                "snapshot_date": {"$lt": snapshot_date},
-            }
-        ).to_list()
+        if previous_snapshot is None:
+            return []
+
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
@@ -100,25 +101,38 @@ class DiffService:
         current_rank_map = {
             product.asin: product.rank_position for product in current_products
         }
-        current_product_map = {
-            product.asin: product for product in current_products
-        }
+        current_product_map = {product.asin: product for product in current_products}
         previous_rank_map = (
             {product.asin: product.rank_position for product in previous_products}
             if previous_snapshot is not None
             else {}
         )
-        previous_product_map = {
-            product.asin: product for product in previous_products
-        }
+        previous_product_map = {product.asin: product for product in previous_products}
 
-        # Keep the most recent observed date for each ASIN in historical snapshots.
-        historical_last_seen: dict[str, date] = {}
-        for snapshot in history_snapshots:
-            for product in _dedupe_category_snapshot_products(snapshot.products):
-                last_seen = historical_last_seen.get(product.asin)
-                if last_seen is None or snapshot.snapshot_date > last_seen:
-                    historical_last_seen[product.asin] = snapshot.snapshot_date
+        # Read cached last-seen dates from tracker document (avoids loading all
+        # historical snapshots on every import).
+        tracker_doc = await CategoryTrackerDocument.find_one(
+            CategoryTrackerDocument.workspace_id == workspace_id,
+            CategoryTrackerDocument.tracker_code == tracker_code,
+        )
+        if tracker_doc is not None and tracker_doc.asins_last_seen is not None:
+            historical_last_seen: dict[str, date] = dict(tracker_doc.asins_last_seen)
+        else:
+            # Backward compat: load historical snapshots for old trackers
+            # without the asins_last_seen cache.
+            history_snapshots = await CategorySnapshotDocument.find(
+                {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker_code,
+                    "snapshot_date": {"$lt": snapshot_date},
+                }
+            ).to_list()
+            historical_last_seen = {}
+            for snapshot in history_snapshots:
+                for product in _dedupe_category_snapshot_products(snapshot.products):
+                    last_seen = historical_last_seen.get(product.asin)
+                    if last_seen is None or snapshot.snapshot_date > last_seen:
+                        historical_last_seen[product.asin] = snapshot.snapshot_date
 
         candidates: list[DiffCandidate] = []
         event_time = current_snapshot.captured_at
@@ -196,28 +210,68 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": current_rank,
-                            "previous_title": prev_product.title if prev_product else None,
-                            "previous_brand": prev_product.brand if prev_product else None,
-                            "previous_image_url": prev_product.image_url if prev_product else None,
-                            "previous_price_current": prev_product.price_current if prev_product else None,
-                            "previous_price_original": prev_product.price_original if prev_product else None,
-                            "previous_currency": prev_product.currency if prev_product else None,
-                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
-                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
-                            "previous_rating_value": prev_product.rating_value if prev_product else None,
-                            "previous_review_count": prev_product.review_count if prev_product else None,
-                            "previous_product_url": prev_product.product_url if prev_product else None,
-                            "previous_availability_status": prev_product.availability_status if prev_product else None,
-                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                            "previous_title": prev_product.title
+                            if prev_product
+                            else None,
+                            "previous_brand": prev_product.brand
+                            if prev_product
+                            else None,
+                            "previous_image_url": prev_product.image_url
+                            if prev_product
+                            else None,
+                            "previous_price_current": prev_product.price_current
+                            if prev_product
+                            else None,
+                            "previous_price_original": prev_product.price_original
+                            if prev_product
+                            else None,
+                            "previous_currency": prev_product.currency
+                            if prev_product
+                            else None,
+                            "previous_coupon_text": prev_product.coupon_text
+                            if prev_product
+                            else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump()
+                            if prev_product and prev_product.deal_info
+                            else None,
+                            "previous_rating_value": prev_product.rating_value
+                            if prev_product
+                            else None,
+                            "previous_review_count": prev_product.review_count
+                            if prev_product
+                            else None,
+                            "previous_product_url": prev_product.product_url
+                            if prev_product
+                            else None,
+                            "previous_availability_status": prev_product.availability_status
+                            if prev_product
+                            else None,
+                            "previous_buy_box_status": prev_product.buy_box_status
+                            if prev_product
+                            else None,
                             "current_title": cur_product.title if cur_product else None,
                             "current_brand": cur_product.brand if cur_product else None,
-                            "current_image_url": cur_product.image_url if cur_product else None,
-                            "current_price_current": cur_product.price_current if cur_product else None,
-                            "current_price_original": cur_product.price_original if cur_product else None,
-                            "current_coupon_text": cur_product.coupon_text if cur_product else None,
-                            "current_deal_info": cur_product.deal_info.model_dump() if cur_product and cur_product.deal_info else None,
-                            "current_availability_status": cur_product.availability_status if cur_product else None,
-                            "current_buy_box_status": cur_product.buy_box_status if cur_product else None,
+                            "current_image_url": cur_product.image_url
+                            if cur_product
+                            else None,
+                            "current_price_current": cur_product.price_current
+                            if cur_product
+                            else None,
+                            "current_price_original": cur_product.price_original
+                            if cur_product
+                            else None,
+                            "current_coupon_text": cur_product.coupon_text
+                            if cur_product
+                            else None,
+                            "current_deal_info": cur_product.deal_info.model_dump()
+                            if cur_product and cur_product.deal_info
+                            else None,
+                            "current_availability_status": cur_product.availability_status
+                            if cur_product
+                            else None,
+                            "current_buy_box_status": cur_product.buy_box_status
+                            if cur_product
+                            else None,
                         },
                     )
                 )
@@ -241,17 +295,39 @@ class DiffService:
                         "present_today": False,
                         "previous_title": prev_product.title if prev_product else None,
                         "previous_brand": prev_product.brand if prev_product else None,
-                        "previous_image_url": prev_product.image_url if prev_product else None,
-                        "previous_price_current": prev_product.price_current if prev_product else None,
-                        "previous_price_original": prev_product.price_original if prev_product else None,
-                        "previous_currency": prev_product.currency if prev_product else None,
-                        "previous_coupon_text": prev_product.coupon_text if prev_product else None,
-                        "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
-                        "previous_rating_value": prev_product.rating_value if prev_product else None,
-                        "previous_review_count": prev_product.review_count if prev_product else None,
-                        "previous_product_url": prev_product.product_url if prev_product else None,
-                        "previous_availability_status": prev_product.availability_status if prev_product else None,
-                        "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                        "previous_image_url": prev_product.image_url
+                        if prev_product
+                        else None,
+                        "previous_price_current": prev_product.price_current
+                        if prev_product
+                        else None,
+                        "previous_price_original": prev_product.price_original
+                        if prev_product
+                        else None,
+                        "previous_currency": prev_product.currency
+                        if prev_product
+                        else None,
+                        "previous_coupon_text": prev_product.coupon_text
+                        if prev_product
+                        else None,
+                        "previous_deal_info": prev_product.deal_info.model_dump()
+                        if prev_product and prev_product.deal_info
+                        else None,
+                        "previous_rating_value": prev_product.rating_value
+                        if prev_product
+                        else None,
+                        "previous_review_count": prev_product.review_count
+                        if prev_product
+                        else None,
+                        "previous_product_url": prev_product.product_url
+                        if prev_product
+                        else None,
+                        "previous_availability_status": prev_product.availability_status
+                        if prev_product
+                        else None,
+                        "previous_buy_box_status": prev_product.buy_box_status
+                        if prev_product
+                        else None,
                     },
                 )
             )
@@ -268,17 +344,39 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": None,
-                            "previous_title": prev_product.title if prev_product else None,
-                            "previous_brand": prev_product.brand if prev_product else None,
-                            "previous_image_url": prev_product.image_url if prev_product else None,
-                            "previous_price_current": prev_product.price_current if prev_product else None,
-                            "previous_price_original": prev_product.price_original if prev_product else None,
-                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
-                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
-                            "previous_rating_value": prev_product.rating_value if prev_product else None,
-                            "previous_review_count": prev_product.review_count if prev_product else None,
-                            "previous_availability_status": prev_product.availability_status if prev_product else None,
-                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                            "previous_title": prev_product.title
+                            if prev_product
+                            else None,
+                            "previous_brand": prev_product.brand
+                            if prev_product
+                            else None,
+                            "previous_image_url": prev_product.image_url
+                            if prev_product
+                            else None,
+                            "previous_price_current": prev_product.price_current
+                            if prev_product
+                            else None,
+                            "previous_price_original": prev_product.price_original
+                            if prev_product
+                            else None,
+                            "previous_coupon_text": prev_product.coupon_text
+                            if prev_product
+                            else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump()
+                            if prev_product and prev_product.deal_info
+                            else None,
+                            "previous_rating_value": prev_product.rating_value
+                            if prev_product
+                            else None,
+                            "previous_review_count": prev_product.review_count
+                            if prev_product
+                            else None,
+                            "previous_availability_status": prev_product.availability_status
+                            if prev_product
+                            else None,
+                            "previous_buy_box_status": prev_product.buy_box_status
+                            if prev_product
+                            else None,
                         },
                     )
                 )
@@ -310,13 +408,9 @@ class DiffService:
             },
             sort=[("snapshot_date", -1)],
         )
-        history_snapshots = await KeywordSnapshotDocument.find(
-            {
-                "workspace_id": workspace_id,
-                "tracker_code": tracker_code,
-                "snapshot_date": {"$lt": snapshot_date},
-            }
-        ).to_list()
+        if previous_snapshot is None:
+            return []
+
         current_products = _dedupe_category_snapshot_products(current_snapshot.products)
         previous_products = (
             _dedupe_category_snapshot_products(previous_snapshot.products)
@@ -327,24 +421,38 @@ class DiffService:
         current_rank_map = {
             product.asin: product.rank_position for product in current_products
         }
-        current_product_map = {
-            product.asin: product for product in current_products
-        }
+        current_product_map = {product.asin: product for product in current_products}
         previous_rank_map = (
             {product.asin: product.rank_position for product in previous_products}
             if previous_snapshot is not None
             else {}
         )
-        previous_product_map = {
-            product.asin: product for product in previous_products
-        }
+        previous_product_map = {product.asin: product for product in previous_products}
 
-        historical_last_seen: dict[str, date] = {}
-        for snapshot in history_snapshots:
-            for product in _dedupe_category_snapshot_products(snapshot.products):
-                last_seen = historical_last_seen.get(product.asin)
-                if last_seen is None or snapshot.snapshot_date > last_seen:
-                    historical_last_seen[product.asin] = snapshot.snapshot_date
+        # Read cached last-seen dates from tracker document (avoids loading all
+        # historical snapshots on every import).
+        tracker_doc = await KeywordTrackerDocument.find_one(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            KeywordTrackerDocument.tracker_code == tracker_code,
+        )
+        if tracker_doc is not None and tracker_doc.asins_last_seen is not None:
+            historical_last_seen: dict[str, date] = dict(tracker_doc.asins_last_seen)
+        else:
+            # Backward compat: load historical snapshots for old trackers
+            # without the asins_last_seen cache.
+            history_snapshots = await KeywordSnapshotDocument.find(
+                {
+                    "workspace_id": workspace_id,
+                    "tracker_code": tracker_code,
+                    "snapshot_date": {"$lt": snapshot_date},
+                }
+            ).to_list()
+            historical_last_seen = {}
+            for snapshot in history_snapshots:
+                for product in _dedupe_category_snapshot_products(snapshot.products):
+                    last_seen = historical_last_seen.get(product.asin)
+                    if last_seen is None or snapshot.snapshot_date > last_seen:
+                        historical_last_seen[product.asin] = snapshot.snapshot_date
 
         candidates: list[DiffCandidate] = []
         event_time = current_snapshot.captured_at
@@ -422,28 +530,68 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": current_rank,
-                            "previous_title": prev_product.title if prev_product else None,
-                            "previous_brand": prev_product.brand if prev_product else None,
-                            "previous_image_url": prev_product.image_url if prev_product else None,
-                            "previous_price_current": prev_product.price_current if prev_product else None,
-                            "previous_price_original": prev_product.price_original if prev_product else None,
-                            "previous_currency": prev_product.currency if prev_product else None,
-                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
-                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
-                            "previous_rating_value": prev_product.rating_value if prev_product else None,
-                            "previous_review_count": prev_product.review_count if prev_product else None,
-                            "previous_product_url": prev_product.product_url if prev_product else None,
-                            "previous_availability_status": prev_product.availability_status if prev_product else None,
-                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                            "previous_title": prev_product.title
+                            if prev_product
+                            else None,
+                            "previous_brand": prev_product.brand
+                            if prev_product
+                            else None,
+                            "previous_image_url": prev_product.image_url
+                            if prev_product
+                            else None,
+                            "previous_price_current": prev_product.price_current
+                            if prev_product
+                            else None,
+                            "previous_price_original": prev_product.price_original
+                            if prev_product
+                            else None,
+                            "previous_currency": prev_product.currency
+                            if prev_product
+                            else None,
+                            "previous_coupon_text": prev_product.coupon_text
+                            if prev_product
+                            else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump()
+                            if prev_product and prev_product.deal_info
+                            else None,
+                            "previous_rating_value": prev_product.rating_value
+                            if prev_product
+                            else None,
+                            "previous_review_count": prev_product.review_count
+                            if prev_product
+                            else None,
+                            "previous_product_url": prev_product.product_url
+                            if prev_product
+                            else None,
+                            "previous_availability_status": prev_product.availability_status
+                            if prev_product
+                            else None,
+                            "previous_buy_box_status": prev_product.buy_box_status
+                            if prev_product
+                            else None,
                             "current_title": cur_product.title if cur_product else None,
                             "current_brand": cur_product.brand if cur_product else None,
-                            "current_image_url": cur_product.image_url if cur_product else None,
-                            "current_price_current": cur_product.price_current if cur_product else None,
-                            "current_price_original": cur_product.price_original if cur_product else None,
-                            "current_coupon_text": cur_product.coupon_text if cur_product else None,
-                            "current_deal_info": cur_product.deal_info.model_dump() if cur_product and cur_product.deal_info else None,
-                            "current_availability_status": cur_product.availability_status if cur_product else None,
-                            "current_buy_box_status": cur_product.buy_box_status if cur_product else None,
+                            "current_image_url": cur_product.image_url
+                            if cur_product
+                            else None,
+                            "current_price_current": cur_product.price_current
+                            if cur_product
+                            else None,
+                            "current_price_original": cur_product.price_original
+                            if cur_product
+                            else None,
+                            "current_coupon_text": cur_product.coupon_text
+                            if cur_product
+                            else None,
+                            "current_deal_info": cur_product.deal_info.model_dump()
+                            if cur_product and cur_product.deal_info
+                            else None,
+                            "current_availability_status": cur_product.availability_status
+                            if cur_product
+                            else None,
+                            "current_buy_box_status": cur_product.buy_box_status
+                            if cur_product
+                            else None,
                         },
                     )
                 )
@@ -467,17 +615,39 @@ class DiffService:
                         "present_today": False,
                         "previous_title": prev_product.title if prev_product else None,
                         "previous_brand": prev_product.brand if prev_product else None,
-                        "previous_image_url": prev_product.image_url if prev_product else None,
-                        "previous_price_current": prev_product.price_current if prev_product else None,
-                        "previous_price_original": prev_product.price_original if prev_product else None,
-                        "previous_currency": prev_product.currency if prev_product else None,
-                        "previous_coupon_text": prev_product.coupon_text if prev_product else None,
-                        "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
-                        "previous_rating_value": prev_product.rating_value if prev_product else None,
-                        "previous_review_count": prev_product.review_count if prev_product else None,
-                        "previous_product_url": prev_product.product_url if prev_product else None,
-                        "previous_availability_status": prev_product.availability_status if prev_product else None,
-                        "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                        "previous_image_url": prev_product.image_url
+                        if prev_product
+                        else None,
+                        "previous_price_current": prev_product.price_current
+                        if prev_product
+                        else None,
+                        "previous_price_original": prev_product.price_original
+                        if prev_product
+                        else None,
+                        "previous_currency": prev_product.currency
+                        if prev_product
+                        else None,
+                        "previous_coupon_text": prev_product.coupon_text
+                        if prev_product
+                        else None,
+                        "previous_deal_info": prev_product.deal_info.model_dump()
+                        if prev_product and prev_product.deal_info
+                        else None,
+                        "previous_rating_value": prev_product.rating_value
+                        if prev_product
+                        else None,
+                        "previous_review_count": prev_product.review_count
+                        if prev_product
+                        else None,
+                        "previous_product_url": prev_product.product_url
+                        if prev_product
+                        else None,
+                        "previous_availability_status": prev_product.availability_status
+                        if prev_product
+                        else None,
+                        "previous_buy_box_status": prev_product.buy_box_status
+                        if prev_product
+                        else None,
                     },
                 )
             )
@@ -494,17 +664,39 @@ class DiffService:
                         metadata={
                             "previous_rank": previous_rank,
                             "current_rank": None,
-                            "previous_title": prev_product.title if prev_product else None,
-                            "previous_brand": prev_product.brand if prev_product else None,
-                            "previous_image_url": prev_product.image_url if prev_product else None,
-                            "previous_price_current": prev_product.price_current if prev_product else None,
-                            "previous_price_original": prev_product.price_original if prev_product else None,
-                            "previous_coupon_text": prev_product.coupon_text if prev_product else None,
-                            "previous_deal_info": prev_product.deal_info.model_dump() if prev_product and prev_product.deal_info else None,
-                            "previous_rating_value": prev_product.rating_value if prev_product else None,
-                            "previous_review_count": prev_product.review_count if prev_product else None,
-                            "previous_availability_status": prev_product.availability_status if prev_product else None,
-                            "previous_buy_box_status": prev_product.buy_box_status if prev_product else None,
+                            "previous_title": prev_product.title
+                            if prev_product
+                            else None,
+                            "previous_brand": prev_product.brand
+                            if prev_product
+                            else None,
+                            "previous_image_url": prev_product.image_url
+                            if prev_product
+                            else None,
+                            "previous_price_current": prev_product.price_current
+                            if prev_product
+                            else None,
+                            "previous_price_original": prev_product.price_original
+                            if prev_product
+                            else None,
+                            "previous_coupon_text": prev_product.coupon_text
+                            if prev_product
+                            else None,
+                            "previous_deal_info": prev_product.deal_info.model_dump()
+                            if prev_product and prev_product.deal_info
+                            else None,
+                            "previous_rating_value": prev_product.rating_value
+                            if prev_product
+                            else None,
+                            "previous_review_count": prev_product.review_count
+                            if prev_product
+                            else None,
+                            "previous_availability_status": prev_product.availability_status
+                            if prev_product
+                            else None,
+                            "previous_buy_box_status": prev_product.buy_box_status
+                            if prev_product
+                            else None,
                         },
                     )
                 )
@@ -531,8 +723,7 @@ class DiffService:
 
         # Batch query: find all previous snapshots for these products in one query
         asin_pairs = [
-            {"marketplace": cs.marketplace, "asin": cs.asin}
-            for cs in current_snapshots
+            {"marketplace": cs.marketplace, "asin": cs.asin} for cs in current_snapshots
         ]
         previous_docs = await ProductSnapshotDocument.find(
             {

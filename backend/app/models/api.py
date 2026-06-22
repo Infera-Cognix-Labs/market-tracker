@@ -302,6 +302,7 @@ class KeywordHighlight(ApiModel):
     new_entrant_count: int
     exit_count: int
     top10_enter_count: int
+    top10_exit_count: int = 0
 
 
 class KeywordTrackerListResponse(ApiModel):
@@ -698,6 +699,7 @@ class DashboardOverviewSummary(ApiModel):
     new_entrant_count: int
     returning_count: int
     top10_enter_count: int
+    top10_exit_count: int = 0
     price_change_count: int
     listing_change_count: int
 
@@ -708,6 +710,7 @@ class CategoryHighlight(ApiModel):
     new_entrant_count: int
     exit_count: int
     top10_enter_count: int
+    top10_exit_count: int = 0
 
 
 class CompetitorHighlight(ApiModel):

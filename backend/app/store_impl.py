@@ -304,9 +304,7 @@ class BaseStore:
     ) -> NotificationRule:
         raise NotImplementedError
 
-    async def delete_notification_rule(
-        self, workspace_id: str, rule_code: str
-    ) -> None:
+    async def delete_notification_rule(self, workspace_id: str, rule_code: str) -> None:
         raise NotImplementedError
 
     async def get_job(self, workspace_id: str, job_code: str) -> Job:
@@ -336,9 +334,7 @@ class BaseStore:
     ) -> CompetitorInsights:
         raise NotImplementedError
 
-    async def get_competitor_alerts(
-        self, workspace_id: str
-    ) -> CompetitorAlertCounts:
+    async def get_competitor_alerts(self, workspace_id: str) -> CompetitorAlertCounts:
         raise NotImplementedError
 
     async def delete_category_tracker(
@@ -688,9 +684,7 @@ class MongoStore(BaseStore):
             workspace_id, rule_code, payload
         )
 
-    async def delete_notification_rule(
-        self, workspace_id: str, rule_code: str
-    ) -> None:
+    async def delete_notification_rule(self, workspace_id: str, rule_code: str) -> None:
         await self.notification_service.delete_rule(workspace_id, rule_code)
 
     async def list_weekly_digests(
@@ -719,9 +713,7 @@ class MongoStore(BaseStore):
     ) -> CompetitorInsights:
         return await self._insights.get_competitor_insights(workspace_id, timeframe)
 
-    async def get_competitor_alerts(
-        self, workspace_id: str
-    ) -> CompetitorAlertCounts:
+    async def get_competitor_alerts(self, workspace_id: str) -> CompetitorAlertCounts:
         return await self._insights.get_competitor_alerts(workspace_id)
 
     async def delete_category_tracker(
@@ -737,9 +729,7 @@ class MongoStore(BaseStore):
     async def list_keyword_trackers(
         self, workspace_id: str, page: int, page_size: int
     ) -> KeywordTrackerListResponse:
-        return await self._trackers.list_keyword_trackers(
-            workspace_id, page, page_size
-        )
+        return await self._trackers.list_keyword_trackers(workspace_id, page, page_size)
 
     async def create_keyword_tracker(
         self, workspace_id: str, payload: KeywordTrackerCreateRequest

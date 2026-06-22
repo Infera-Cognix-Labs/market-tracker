@@ -326,8 +326,11 @@ export const apiGetKeywordTracker = async (trackerCode: string): Promise<Keyword
   return apiFetch<KeywordTracker>(`/keyword-trackers/${trackerCode}`)
 }
 
-export const apiGetLatestKeywordSnapshot = async (trackerCode: string): Promise<CategorySnapshot | null> => {
-  return apiFetch<CategorySnapshot>(`/keyword-trackers/${trackerCode}/snapshots/latest`)
+export const apiGetLatestKeywordSnapshot = async (
+  trackerCode: string,
+  timeframe: Timeframe = "WEEKLY"
+): Promise<CategorySnapshot | null> => {
+  return apiFetch<CategorySnapshot>(`/keyword-trackers/${trackerCode}/snapshots/latest${qs({ timeframe })}`)
 }
 
 export const apiCreateKeywordTracker = async (payload: KeywordTrackerCreateRequest): Promise<KeywordTracker> => {
