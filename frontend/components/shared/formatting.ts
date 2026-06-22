@@ -38,7 +38,7 @@ export function parseBestsellerUrl(input: string): string | null {
   if (!trimmed.startsWith("http")) return null
   try {
     const url = new URL(trimmed)
-    if (url.hostname.includes("amazon.") && (trimmed.includes("/zgbs/") || trimmed.includes("Best-Sellers") || trimmed.includes("best-sellers"))) {
+    if (url.hostname.includes("amazon") && trimmed.toLowerCase().includes("bestsellers")) {
       return trimmed
     }
     return null
