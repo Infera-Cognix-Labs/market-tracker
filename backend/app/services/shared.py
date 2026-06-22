@@ -618,9 +618,11 @@ def build_competitor_summaries(
     existing: list[TrackedProductSummary] | None = None,
     reference_date: date | None = None,
     recent_from_date: date | None = None,
+    latest_snapshots: dict[str, ProductSnapshotDocument] | None = None,
 ) -> list[TrackedProductSummary]:
     product_map = {product.asin: product for product in products}
     existing_map = {item.asin: item for item in existing or []}
+    snapshots = latest_snapshots or {}
 
     if reference_date is None:
         reference_date = max(
@@ -632,6 +634,7 @@ def build_competitor_summaries(
     summaries: list[TrackedProductSummary] = []
     for tracked_asin in tracked_asins:
         product = product_map.get(tracked_asin.asin)
+        snapshot = snapshots.get(tracked_asin.asin)
         recent_event_count = sum(
             1
             for event in events
@@ -647,11 +650,11 @@ def build_competitor_summaries(
                     title=product.title_latest,
                     product_url=product.product_url,
                     image_url=product.main_image_url_latest,
-                    current_bsr_position=product.current_state.bsr_position,
-                    current_price=product.current_state.price_current,
-                    currency=product.current_state.currency,
-                    availability_status=product.current_state.availability_status,
-                    last_snapshot_date=product.current_state.last_snapshot_date,
+                    current_bsr_position=snapshot.bsr_position if snapshot else product.current_state.bsr_position,
+                    current_price=snapshot.price_current if snapshot else product.current_state.price_current,
+                    currency=snapshot.currency if snapshot else product.current_state.currency,
+                    availability_status=snapshot.availability_status if snapshot else product.current_state.availability_status,
+                    last_snapshot_date=snapshot.snapshot_date if snapshot else product.current_state.last_snapshot_date,
                     recent_event_count_7d=recent_event_count,
                 )
             )
