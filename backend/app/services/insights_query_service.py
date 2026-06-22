@@ -19,6 +19,7 @@ from app.models.api import (
     PromotionItem,
     ReturningEntrantItem,
     Timeframe,
+    TrackerType,
     VariationChangeItem,
     AvailabilityChangeItem,
 )
@@ -214,6 +215,7 @@ class InsightsQueryService:
         cutoff_date = date.today() - timedelta(days=30)
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
+            EventDocument.tracker_type == TrackerType.COMPETITOR.value,
             In(EventDocument.event_type, list(COMPETITOR_CHANGE_EVENT_TYPES)),
             EventDocument.snapshot_date >= cutoff_date,
         ).to_list()
@@ -374,6 +376,7 @@ class InsightsQueryService:
         today = utc_now().date()
         event_docs = await EventDocument.find(
             EventDocument.workspace_id == workspace_id,
+            EventDocument.tracker_type == TrackerType.COMPETITOR.value,
             In(EventDocument.event_type, list(COMPETITOR_CHANGE_EVENT_TYPES)),
             EventDocument.snapshot_date == today,
         ).to_list()

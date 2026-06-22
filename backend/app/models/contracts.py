@@ -37,6 +37,8 @@ class CompetitorProductRecord(BaseModel):
     asin: str
     title: str | None = None
     brand: str | None = None
+    product_url: str | None = None
+    main_image_url: str | None = None
     price_current: float | None = None
     price_original: float | None = None
     currency: str | None = None
@@ -45,6 +47,7 @@ class CompetitorProductRecord(BaseModel):
     availability_status: str | None = None
     buy_box_status: str | None = None
     buy_box_seller_name: str | None = None
+    bsr_position: int | None = None
     variation_count: int | None = None
 
     def has_null_critical_fields(self) -> bool:
