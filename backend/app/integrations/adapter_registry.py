@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from app.integrations.adapters import (
     ActorAdapter,
-    DealsScraperAdapter,
     HarvestlabKeywordAdapter,
     JungleeAsinsAdapter,
     JungleeBestsellersAdapter,
@@ -12,7 +11,6 @@ _ADAPTER_REGISTRY: dict[str, ActorAdapter] = {
     "junglee_bestsellers": JungleeBestsellersAdapter(),
     "junglee_asins": JungleeAsinsAdapter(),
     "harvestlab_keyword": HarvestlabKeywordAdapter(),
-    "deals_scraper": DealsScraperAdapter(),
 }
 
 

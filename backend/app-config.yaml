@@ -67,16 +67,6 @@ apify:
             amazon_in: "amazon.in"
             amazon_au: "amazon.com.au"
             amazon_mx: "amazon.com.mx"
-    deals:
-      deals_scraper:
-        actor_id: "hJNp8X1wuz14Wc5wU"
-        task_id: ""
-        name: "Deals Scraper"
-        adapter: "deals_scraper"
-        build: "latest"
-        memory_mbytes: 4096
-        enabled: true
-        priority: 1
 
 storage:
   raw_batch_offload_enabled: false
