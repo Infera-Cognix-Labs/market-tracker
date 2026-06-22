@@ -570,10 +570,8 @@ export const CompetitorPage = () => {
     rating: pt.rating_value,
     reviews: pt.review_count,
     availability: pt.availability_status,
-    buyBox: pt.buy_box_status,
     coupon: pt.coupon_text,
     deal: pt.deal_info,
-    variations: pt.variation_count,
   })) || []
 
   return (
@@ -885,7 +883,7 @@ export const CompetitorPage = () => {
                     <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 500 }}>
                       <thead>
                         <tr>
-                          {["Date", "Availability", "Buy Box", "Deal", "Coupon", "Variants"].map(h => (
+                          {["Date", "Availability", "Deal", "Coupon"].map(h => (
                             <th key={h} className="th-border">{h}</th>
                           ))}
                         </tr>
@@ -896,9 +894,6 @@ export const CompetitorPage = () => {
                             <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.date}</td>
                             <td style={{ padding: "6px 10px" }}>
                               <Badge type={r.availability === "IN_STOCK" ? "listing" : "stock"} text={r.availability === "IN_STOCK" ? "In Stock" : r.availability === "OUT_OF_STOCK" ? "OOS" : r.availability ?? "—"} />
-                            </td>
-                            <td style={{ padding: "6px 10px" }}>
-                              <Badge type={r.buyBox === "HAS_BUY_BOX" ? "listing" : r.buyBox === "NO_BUY_BOX" ? "stock" : "info"} text={r.buyBox === "HAS_BUY_BOX" ? "Has BB" : r.buyBox === "NO_BUY_BOX" ? "No BB" : "—"} />
                             </td>
                             <td style={{ padding: "6px 10px" }}>
                               {(() => {
@@ -939,7 +934,6 @@ export const CompetitorPage = () => {
                                 )
                               })()}
                             </td>
-                            <td style={{ padding: "6px 10px", fontFamily: T.mono, fontSize: 11, color: T.text2 }}>{r.variations != null ? r.variations : "—"}</td>
                           </tr>
                         ))}
                       </tbody>
