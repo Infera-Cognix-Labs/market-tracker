@@ -91,7 +91,7 @@ def _format_events_text(digest_events: list[dict[str, str]]) -> str:
         delta_str = f" ({entry['delta']})" if "delta" in entry else ""
         lines.append(
             f"- [{entry['severity']}] {entry['marketplace']} | {entry['asin']} "
-            f"| {entry['event_type']}: \"{entry['summary']}\"{delta_str}"
+            f'| {entry["event_type"]}: "{entry["summary"]}"{delta_str}'
         )
     return "\n".join(lines) if lines else "No notable events."
 
@@ -163,7 +163,9 @@ class LLMService:
                     ],
                 )
                 content = response.choices[0].message.content or ""
-                parsed = json.loads(content.strip().removeprefix("```json").removesuffix("```").strip())
+                parsed = json.loads(
+                    content.strip().removeprefix("```json").removesuffix("```").strip()
+                )
                 return DigestInsights(
                     executive_summary=str(parsed.get("executive_summary", "")),
                     key_trends=[str(t) for t in parsed.get("key_trends", [])],

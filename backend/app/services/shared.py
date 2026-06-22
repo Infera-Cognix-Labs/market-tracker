@@ -657,11 +657,21 @@ def build_competitor_summaries(
                     title=product.title_latest,
                     product_url=product.product_url,
                     image_url=product.main_image_url_latest,
-                    current_bsr_position=snapshot.bsr_position if snapshot else product.current_state.bsr_position,
-                    current_price=snapshot.price_current if snapshot else product.current_state.price_current,
-                    currency=snapshot.currency if snapshot else product.current_state.currency,
-                    availability_status=snapshot.availability_status if snapshot else product.current_state.availability_status,
-                    last_snapshot_date=snapshot.snapshot_date if snapshot else product.current_state.last_snapshot_date,
+                    current_bsr_position=snapshot.bsr_position
+                    if snapshot
+                    else product.current_state.bsr_position,
+                    current_price=snapshot.price_current
+                    if snapshot
+                    else product.current_state.price_current,
+                    currency=snapshot.currency
+                    if snapshot
+                    else product.current_state.currency,
+                    availability_status=snapshot.availability_status
+                    if snapshot
+                    else product.current_state.availability_status,
+                    last_snapshot_date=snapshot.snapshot_date
+                    if snapshot
+                    else product.current_state.last_snapshot_date,
                     recent_event_count_7d=recent_event_count,
                 )
             )

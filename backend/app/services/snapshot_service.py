@@ -173,9 +173,7 @@ class SnapshotService:
         )
 
         bsr_position = (
-            record.bsr_position
-            if snapshot_date >= tracker_created_date
-            else None
+            record.bsr_position if snapshot_date >= tracker_created_date else None
         )
 
         payload = {
@@ -328,11 +326,15 @@ class SnapshotService:
         current_asins = {p.asin for p in products}
         current_top10_asins = {p.asin for p in products[:10]}
 
-        previous_snapshot = await CategorySnapshotDocument.find(
-            CategorySnapshotDocument.workspace_id == workspace_id,
-            CategorySnapshotDocument.tracker_code == tracker_code,
-            CategorySnapshotDocument.snapshot_date < snapshot_date,
-        ).sort((CategorySnapshotDocument.snapshot_date, DESCENDING)).first_or_none()
+        previous_snapshot = (
+            await CategorySnapshotDocument.find(
+                CategorySnapshotDocument.workspace_id == workspace_id,
+                CategorySnapshotDocument.tracker_code == tracker_code,
+                CategorySnapshotDocument.snapshot_date < snapshot_date,
+            )
+            .sort((CategorySnapshotDocument.snapshot_date, DESCENDING))
+            .first_or_none()
+        )
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:
@@ -425,7 +427,9 @@ class SnapshotService:
         workspace_id: str,
         snapshot_date,
         tracker_code: str,
-        tracker_document: CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument,
+        tracker_document: CategoryTrackerDocument
+        | CompetitorTrackerDocument
+        | KeywordTrackerDocument,
         records: list[NormalizedProductRecord],
         apify_run_id: str,
         dataset_id: str,
@@ -471,11 +475,15 @@ class SnapshotService:
         current_asins = {p.asin for p in products}
         current_top10_asins = {p.asin for p in products[:10]}
 
-        previous_snapshot = await KeywordSnapshotDocument.find(
-            KeywordSnapshotDocument.workspace_id == workspace_id,
-            KeywordSnapshotDocument.tracker_code == tracker_code,
-            KeywordSnapshotDocument.snapshot_date < snapshot_date,
-        ).sort((KeywordSnapshotDocument.snapshot_date, DESCENDING)).first_or_none()
+        previous_snapshot = (
+            await KeywordSnapshotDocument.find(
+                KeywordSnapshotDocument.workspace_id == workspace_id,
+                KeywordSnapshotDocument.tracker_code == tracker_code,
+                KeywordSnapshotDocument.snapshot_date < snapshot_date,
+            )
+            .sort((KeywordSnapshotDocument.snapshot_date, DESCENDING))
+            .first_or_none()
+        )
         previous_asins = set()
         previous_top10_asins = set()
         if previous_snapshot:
@@ -550,9 +558,7 @@ class SnapshotService:
             KeywordSnapshotDocument.snapshot_date == snapshot_date,
         )
         if existing is None:
-            await KeywordSnapshotDocument(
-                workspace_id=workspace_id, **payload
-            ).insert()
+            await KeywordSnapshotDocument(workspace_id=workspace_id, **payload).insert()
             return True
 
         return False
@@ -623,7 +629,7 @@ def _dedupe_category_records(
 ) -> list[NormalizedProductRecord]:
     unique_records: list[NormalizedProductRecord] = []
     seen_asins: set[str] = set()
-    
+
     for record in records:
         if record.asin in seen_asins:
             continue

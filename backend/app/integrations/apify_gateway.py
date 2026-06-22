@@ -137,9 +137,7 @@ class ApifyGateway:
         pools = self.config.actor_pools
         entries_config = pools.get(pool_code)
         if not entries_config:
-            raise ApifyBindingResolutionError(
-                f"Unknown actor pool `{pool_code}`."
-            )
+            raise ApifyBindingResolutionError(f"Unknown actor pool `{pool_code}`.")
         result: list[ActorPoolEntry] = []
         for idx, entry in enumerate(entries_config):
             if not entry.enabled:
@@ -193,7 +191,9 @@ class ApifyGateway:
         if entry.input_adapter.marketplace_map and "marketplace" in adapted:
             marketplace = adapted["marketplace"]
             if marketplace in entry.input_adapter.marketplace_map:
-                adapted["marketplace"] = entry.input_adapter.marketplace_map[marketplace]
+                adapted["marketplace"] = entry.input_adapter.marketplace_map[
+                    marketplace
+                ]
 
         return adapted
 

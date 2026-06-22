@@ -68,7 +68,7 @@ async def main():
 
     print("\n3. Raw output sample:")
     for i, item in enumerate(items):
-        print(f"\n   --- Item {i+1} ---")
+        print(f"\n   --- Item {i + 1} ---")
         print(f"   asin:  {item.get('asin')}")
         print(f"   url:   {item.get('url')}")
         print(f"   title: {str(item.get('title', ''))[:60]}...")
@@ -78,9 +78,11 @@ async def main():
     for i, item in enumerate(items):
         contract = adapter.to_standard_contract(item, "amazon_us")
         if contract:
-            print(f"   Item {i+1}: asin={contract.asin}, product_url={contract.product_url}")
+            print(
+                f"   Item {i + 1}: asin={contract.asin}, product_url={contract.product_url}"
+            )
         else:
-            print(f"   Item {i+1}: adapter returned None")
+            print(f"   Item {i + 1}: adapter returned None")
 
     print("\n5. Testing normalization service...")
     normalizer = NormalizationService()
@@ -93,9 +95,13 @@ async def main():
         marketplace="amazon_us",
         raw_items=raw_items,
     )
-    print(f"   Normalized: {len(result.records)} records, {result.invalid_count} invalid")
+    print(
+        f"   Normalized: {len(result.records)} records, {result.invalid_count} invalid"
+    )
     for i, record in enumerate(result.records):
-        print(f"   Record {i+1}: asin={record.asin}, product_url={record.product_url}")
+        print(
+            f"   Record {i + 1}: asin={record.asin}, product_url={record.product_url}"
+        )
 
     print("\n=== Result ===")
     all_have_url = all(r.product_url for r in result.records)

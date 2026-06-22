@@ -123,7 +123,9 @@ def _make_event_doc(
     return evt
 
 
-def _make_product_doc(*, asin: str = "B0ABC12345", marketplace: str = "amazon_us") -> SimpleNamespace:
+def _make_product_doc(
+    *, asin: str = "B0ABC12345", marketplace: str = "amazon_us"
+) -> SimpleNamespace:
     return SimpleNamespace(
         marketplace=marketplace,
         asin=asin,
@@ -163,13 +165,24 @@ def _make_tracker_doc(
         tracker_code=tracker_code,
         name=name,
         marketplace=marketplace,
-        tracked_asins=tracked_asins or [
-            SimpleNamespace(asin="B0ABC12345", enabled=True, added_at=datetime(2025, 6, 1, tzinfo=timezone.utc))
+        tracked_asins=tracked_asins
+        or [
+            SimpleNamespace(
+                asin="B0ABC12345",
+                enabled=True,
+                added_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+            )
         ],
         track_fields=CompetitorTrackFields(
-            bsr=True, price=True, buy_box=True, availability=True,
-            promotions=True, title_change=True, main_image_change=True,
-            variation_change=True, content_change=True,
+            bsr=True,
+            price=True,
+            buy_box=True,
+            availability=True,
+            promotions=True,
+            title_change=True,
+            main_image_change=True,
+            variation_change=True,
+            content_change=True,
         ),
         schedule=SimpleNamespace(frequency="DAILY", hour_utc=3),
         status="ACTIVE",
@@ -188,13 +201,23 @@ def _make_tracker_doc(
                 for ta in (tracked_asins or [])
             ],
             "track_fields": {
-                "bsr": True, "price": True, "buy_box": True, "availability": True,
-                "promotions": True, "title_change": True, "main_image_change": True,
-                "variation_change": True, "content_change": True,
+                "bsr": True,
+                "price": True,
+                "buy_box": True,
+                "availability": True,
+                "promotions": True,
+                "title_change": True,
+                "main_image_change": True,
+                "variation_change": True,
+                "content_change": True,
             },
             "schedule": {"frequency": "DAILY", "hour_utc": 3},
             "status": "ACTIVE",
-            "stats": {"tracked_asin_count": 1, "last_job_at": None, "last_success_at": None},
+            "stats": {
+                "tracked_asin_count": 1,
+                "last_job_at": None,
+                "last_success_at": None,
+            },
             "tracked_products": [],
             "created_at": datetime(2025, 6, 1, tzinfo=timezone.utc),
             "updated_at": datetime(2025, 6, 1, tzinfo=timezone.utc),
@@ -214,9 +237,15 @@ def _make_create_payload(
         marketplace=marketplace,
         tracked_asins=[TrackedAsinWrite(asin=a, enabled=True) for a in asin_list],
         track_fields=CompetitorTrackFields(
-            bsr=True, price=True, buy_box=True, availability=True,
-            promotions=True, title_change=True, main_image_change=True,
-            variation_change=True, content_change=True,
+            bsr=True,
+            price=True,
+            buy_box=True,
+            availability=True,
+            promotions=True,
+            title_change=True,
+            main_image_change=True,
+            variation_change=True,
+            content_change=True,
         ),
         schedule={"frequency": "DAILY", "hour_utc": 3},
     )
@@ -242,9 +271,14 @@ class TestCompetitorInsightsTrackerTypeFilter:
         mock_competitor = _mock_doc_class()
         mock_product = _mock_doc_class()
 
-        with patch("app.services.insights_query_service.EventDocument", mock_event), \
-             patch("app.services.insights_query_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.insights_query_service.ProductDocument", mock_product):
+        with (
+            patch("app.services.insights_query_service.EventDocument", mock_event),
+            patch(
+                "app.services.insights_query_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch("app.services.insights_query_service.ProductDocument", mock_product),
+        ):
             await service.get_competitor_insights("ws_test", Timeframe.WEEKLY)
 
         # EventDocument.find was called; check that 4 query conditions were passed
@@ -287,7 +321,8 @@ class TestCompetitorInsightsTrackerTypeFilter:
         """
         service = InsightsQueryService()
         competitor_event = _make_event_doc(
-            tracker_type="COMPETITOR", event_type="PRICE_CHANGED",
+            tracker_type="COMPETITOR",
+            event_type="PRICE_CHANGED",
             asin="B0XYZ00001",
         )
 
@@ -298,13 +333,16 @@ class TestCompetitorInsightsTrackerTypeFilter:
         mock_competitor = _mock_doc_class()
         mock_product = _mock_doc_class()
         product_doc = _make_product_doc(asin="B0XYZ00001", marketplace="amazon_us")
-        mock_product.find = MagicMock(
-            return_value=_mock_find_chain([product_doc])
-        )
+        mock_product.find = MagicMock(return_value=_mock_find_chain([product_doc]))
 
-        with patch("app.services.insights_query_service.EventDocument", mock_event), \
-             patch("app.services.insights_query_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.insights_query_service.ProductDocument", mock_product):
+        with (
+            patch("app.services.insights_query_service.EventDocument", mock_event),
+            patch(
+                "app.services.insights_query_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch("app.services.insights_query_service.ProductDocument", mock_product),
+        ):
             result = await service.get_competitor_insights("ws_test", Timeframe.WEEKLY)
 
         competitor_asins = {pc.asin for pc in result.price_changes}
@@ -333,10 +371,20 @@ class TestCreateCompetitorMarketplaceFilter:
         mock_event = _mock_doc_class()
         mock_snapshot = _mock_doc_class()
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.tracker_management_service.ProductDocument", mock_product), \
-             patch("app.services.tracker_management_service.EventDocument", mock_event), \
-             patch("app.services.tracker_management_service.ProductSnapshotDocument", mock_snapshot):
+        with (
+            patch(
+                "app.services.tracker_management_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch(
+                "app.services.tracker_management_service.ProductDocument", mock_product
+            ),
+            patch("app.services.tracker_management_service.EventDocument", mock_event),
+            patch(
+                "app.services.tracker_management_service.ProductSnapshotDocument",
+                mock_snapshot,
+            ),
+        ):
             await service.create_competitor_tracker(
                 "ws_test", _make_create_payload(marketplace="amazon_de")
             )
@@ -365,10 +413,20 @@ class TestCreateCompetitorMarketplaceFilter:
         mock_product = _mock_doc_class()
         mock_snapshot = _mock_doc_class()
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.tracker_management_service.ProductDocument", mock_product), \
-             patch("app.services.tracker_management_service.EventDocument", mock_event), \
-             patch("app.services.tracker_management_service.ProductSnapshotDocument", mock_snapshot):
+        with (
+            patch(
+                "app.services.tracker_management_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch(
+                "app.services.tracker_management_service.ProductDocument", mock_product
+            ),
+            patch("app.services.tracker_management_service.EventDocument", mock_event),
+            patch(
+                "app.services.tracker_management_service.ProductSnapshotDocument",
+                mock_snapshot,
+            ),
+        ):
             await service.create_competitor_tracker(
                 "ws_test", _make_create_payload(marketplace="amazon_uk")
             )
@@ -397,10 +455,20 @@ class TestCreateCompetitorMarketplaceFilter:
         mock_product = _mock_doc_class()
         mock_event = _mock_doc_class()
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.tracker_management_service.ProductDocument", mock_product), \
-             patch("app.services.tracker_management_service.EventDocument", mock_event), \
-             patch("app.services.tracker_management_service.ProductSnapshotDocument", mock_snapshot):
+        with (
+            patch(
+                "app.services.tracker_management_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch(
+                "app.services.tracker_management_service.ProductDocument", mock_product
+            ),
+            patch("app.services.tracker_management_service.EventDocument", mock_event),
+            patch(
+                "app.services.tracker_management_service.ProductSnapshotDocument",
+                mock_snapshot,
+            ),
+        ):
             await service.create_competitor_tracker(
                 "ws_test", _make_create_payload(marketplace="amazon_fr")
             )
@@ -423,8 +491,16 @@ class TestCreateCompetitorConflict:
         service = TrackerManagementService()
         existing_tracker = _make_tracker_doc(
             tracked_asins=[
-                SimpleNamespace(asin="B0ABC12345", enabled=True, added_at=datetime(2025, 6, 1, tzinfo=timezone.utc)),
-                SimpleNamespace(asin="B0DEF67890", enabled=True, added_at=datetime(2025, 6, 1, tzinfo=timezone.utc)),
+                SimpleNamespace(
+                    asin="B0ABC12345",
+                    enabled=True,
+                    added_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    asin="B0DEF67890",
+                    enabled=True,
+                    added_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+                ),
             ],
         )
 
@@ -433,7 +509,10 @@ class TestCreateCompetitorConflict:
             return_value=_mock_find_chain([existing_tracker])
         )
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor):
+        with patch(
+            "app.services.tracker_management_service.CompetitorTrackerDocument",
+            mock_competitor,
+        ):
             with pytest.raises(ConflictError, match="already exists"):
                 await service.create_competitor_tracker(
                     "ws_test",
@@ -447,7 +526,11 @@ class TestCreateCompetitorConflict:
         existing_tracker = _make_tracker_doc(
             marketplace="amazon_us",
             tracked_asins=[
-                SimpleNamespace(asin="B0ABC12345", enabled=True, added_at=datetime(2025, 6, 1, tzinfo=timezone.utc)),
+                SimpleNamespace(
+                    asin="B0ABC12345",
+                    enabled=True,
+                    added_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+                ),
             ],
         )
 
@@ -460,10 +543,20 @@ class TestCreateCompetitorConflict:
         mock_event = _mock_doc_class()
         mock_snapshot = _mock_doc_class()
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.tracker_management_service.ProductDocument", mock_product), \
-             patch("app.services.tracker_management_service.EventDocument", mock_event), \
-             patch("app.services.tracker_management_service.ProductSnapshotDocument", mock_snapshot):
+        with (
+            patch(
+                "app.services.tracker_management_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch(
+                "app.services.tracker_management_service.ProductDocument", mock_product
+            ),
+            patch("app.services.tracker_management_service.EventDocument", mock_event),
+            patch(
+                "app.services.tracker_management_service.ProductSnapshotDocument",
+                mock_snapshot,
+            ),
+        ):
             result = await service.create_competitor_tracker(
                 "ws_test",
                 _make_create_payload(asins=["B0ABC12345"], marketplace="amazon_de"),
@@ -478,7 +571,11 @@ class TestCreateCompetitorConflict:
         existing_tracker = _make_tracker_doc(
             marketplace="amazon_us",
             tracked_asins=[
-                SimpleNamespace(asin="B0ABC12345", enabled=True, added_at=datetime(2025, 6, 1, tzinfo=timezone.utc)),
+                SimpleNamespace(
+                    asin="B0ABC12345",
+                    enabled=True,
+                    added_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+                ),
             ],
         )
 
@@ -491,10 +588,20 @@ class TestCreateCompetitorConflict:
         mock_event = _mock_doc_class()
         mock_snapshot = _mock_doc_class()
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.tracker_management_service.ProductDocument", mock_product), \
-             patch("app.services.tracker_management_service.EventDocument", mock_event), \
-             patch("app.services.tracker_management_service.ProductSnapshotDocument", mock_snapshot):
+        with (
+            patch(
+                "app.services.tracker_management_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch(
+                "app.services.tracker_management_service.ProductDocument", mock_product
+            ),
+            patch("app.services.tracker_management_service.EventDocument", mock_event),
+            patch(
+                "app.services.tracker_management_service.ProductSnapshotDocument",
+                mock_snapshot,
+            ),
+        ):
             result = await service.create_competitor_tracker(
                 "ws_test",
                 _make_create_payload(asins=["B0XYZ99999"], marketplace="amazon_us"),
@@ -509,7 +616,11 @@ class TestCreateCompetitorConflict:
         existing_tracker = _make_tracker_doc(
             marketplace="amazon_us",
             tracked_asins=[
-                SimpleNamespace(asin="B0ABC12345", enabled=False, added_at=datetime(2025, 6, 1, tzinfo=timezone.utc)),
+                SimpleNamespace(
+                    asin="B0ABC12345",
+                    enabled=False,
+                    added_at=datetime(2025, 6, 1, tzinfo=timezone.utc),
+                ),
             ],
         )
 
@@ -522,10 +633,20 @@ class TestCreateCompetitorConflict:
         mock_event = _mock_doc_class()
         mock_snapshot = _mock_doc_class()
 
-        with patch("app.services.tracker_management_service.CompetitorTrackerDocument", mock_competitor), \
-             patch("app.services.tracker_management_service.ProductDocument", mock_product), \
-             patch("app.services.tracker_management_service.EventDocument", mock_event), \
-             patch("app.services.tracker_management_service.ProductSnapshotDocument", mock_snapshot):
+        with (
+            patch(
+                "app.services.tracker_management_service.CompetitorTrackerDocument",
+                mock_competitor,
+            ),
+            patch(
+                "app.services.tracker_management_service.ProductDocument", mock_product
+            ),
+            patch("app.services.tracker_management_service.EventDocument", mock_event),
+            patch(
+                "app.services.tracker_management_service.ProductSnapshotDocument",
+                mock_snapshot,
+            ),
+        ):
             result = await service.create_competitor_tracker(
                 "ws_test",
                 _make_create_payload(asins=["B0ABC12345"], marketplace="amazon_us"),

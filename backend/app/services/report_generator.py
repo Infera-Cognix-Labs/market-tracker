@@ -74,7 +74,9 @@ def _build_analytics(digest: WeeklyDigest) -> ReportAnalytics:
 
     for threat in digest.threats:
         marketplace_counter[_value(threat.marketplace)] += 1
-        event_type_counter.update(_value(event_type) for event_type in threat.event_types or [])
+        event_type_counter.update(
+            _value(event_type) for event_type in threat.event_types or []
+        )
         tracker_counter.update(ref.tracker_name for ref in threat.tracker_refs)
 
     event_type_counts = _sorted_counts(event_type_counter)
@@ -314,7 +316,10 @@ class ReportPDFGenerator:
         page_width = pdf.w - pdf.l_margin - pdf.r_margin
         insights = [
             ("Top Signal", self.analytics.top_event_type),
-            ("Avg Signals / Threat", f"{self.analytics.average_signals_per_threat:.1f}"),
+            (
+                "Avg Signals / Threat",
+                f"{self.analytics.average_signals_per_threat:.1f}",
+            ),
             ("Top Tracker", self.analytics.top_tracker),
         ]
         width = page_width / len(insights)
@@ -444,7 +449,9 @@ class ReportPDFGenerator:
             pdf.set_x(pdf.l_margin + 4)
             self._set_text_color(pdf, INK)
             pdf.set_font("Helvetica", "", 9)
-            pdf.multi_cell(page_width - 8, 5, _safe_pdf_text(f"Reason: {threat.reason}"))
+            pdf.multi_cell(
+                page_width - 8, 5, _safe_pdf_text(f"Reason: {threat.reason}")
+            )
             pdf.set_x(pdf.l_margin + 4)
             self._set_text_color(pdf, MUTED)
             pdf.set_font("Helvetica", "B", 7.5)
@@ -554,7 +561,9 @@ class ReportExcelGenerator:
             ws_threats[f"B{i}"] = threat.marketplace
             ws_threats[f"C{i}"] = threat.reason
             ws_threats[f"D{i}"] = _join_values(threat.event_types)
-            ws_threats[f"E{i}"] = ", ".join(ref.tracker_name for ref in threat.tracker_refs)
+            ws_threats[f"E{i}"] = ", ".join(
+                ref.tracker_name for ref in threat.tracker_refs
+            )
         self._style_table_sheet(
             ws_threats,
             widths={1: 16, 2: 16, 3: 58, 4: 52, 5: 46},
@@ -663,8 +672,10 @@ class ReportExcelGenerator:
             ws.cell(row=current_row, column=2, value=trend)
             ws.cell(row=current_row, column=2).alignment = Alignment(wrap_text=True)
             ws.merge_cells(
-                start_row=current_row, start_column=2,
-                end_row=current_row, end_column=6,
+                start_row=current_row,
+                start_column=2,
+                end_row=current_row,
+                end_column=6,
             )
             current_row += 1
 
@@ -673,10 +684,14 @@ class ReportExcelGenerator:
         ws.cell(row=current_row, column=1).font = Font(bold=True, color=BRAND_NAVY)
         current_row += 1
         ws.cell(row=current_row, column=1, value=insights.risk_assessment)
-        ws.cell(row=current_row, column=1).alignment = Alignment(wrap_text=True, vertical="top")
+        ws.cell(row=current_row, column=1).alignment = Alignment(
+            wrap_text=True, vertical="top"
+        )
         ws.merge_cells(
-            start_row=current_row, start_column=1,
-            end_row=current_row, end_column=6,
+            start_row=current_row,
+            start_column=1,
+            end_row=current_row,
+            end_column=6,
         )
         ws.row_dimensions[current_row].height = 45
 
@@ -696,7 +711,9 @@ class ReportExcelGenerator:
         rows: list[tuple[str, int]],
     ) -> None:
         ws.cell(row=start_row, column=start_col, value=title)
-        ws.cell(row=start_row, column=start_col).font = Font(bold=True, color=BRAND_NAVY)
+        ws.cell(row=start_row, column=start_col).font = Font(
+            bold=True, color=BRAND_NAVY
+        )
         ws.merge_cells(
             start_row=start_row,
             start_column=start_col,

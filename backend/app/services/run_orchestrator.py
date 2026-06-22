@@ -234,7 +234,9 @@ class RunOrchestrator:
     def _build_run_input(
         self,
         job_document: JobDocument,
-        tracker_document: CategoryTrackerDocument | CompetitorTrackerDocument | KeywordTrackerDocument,
+        tracker_document: CategoryTrackerDocument
+        | CompetitorTrackerDocument
+        | KeywordTrackerDocument,
     ) -> dict[str, object]:
         job = job_doc_to_model(job_document)
         base_input: dict[str, object] = {
@@ -245,9 +247,7 @@ class RunOrchestrator:
         if job.tracker_type == TrackerType.CATEGORY:
             top_n = max(1, tracker_document.tracking_config.top_n)
             browse_node_url = tracker_document.scope.browse_node_url
-            amazon_domain = _marketplace_to_amazon_domain(
-                tracker_document.marketplace
-            )
+            amazon_domain = _marketplace_to_amazon_domain(tracker_document.marketplace)
 
             base_input.update(
                 {
@@ -265,9 +265,7 @@ class RunOrchestrator:
 
         if job.tracker_type == TrackerType.KEYWORD:
             top_n = max(1, tracker_document.tracking_config.top_n)
-            amazon_domain = _marketplace_to_amazon_domain(
-                tracker_document.marketplace
-            )
+            amazon_domain = _marketplace_to_amazon_domain(tracker_document.marketplace)
             base_input.update(
                 {
                     "marketplace": tracker_document.marketplace,

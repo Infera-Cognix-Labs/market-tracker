@@ -682,7 +682,9 @@ class ResultImporterService:
                 raw_items=raw_items,
             )
 
-            merged_records = _merge_records(current_records, fallback_normalized.records)
+            merged_records = _merge_records(
+                current_records, fallback_normalized.records
+            )
 
             if not any(_has_null_critical_fields(r) for r in merged_records):
                 metrics.increment(
@@ -872,9 +874,7 @@ def _merge_records(
                     brand=record.brand
                     if record.brand not in (None, "Unknown")
                     else o.brand,
-                    title=record.title
-                    if record.title != record.asin
-                    else o.title,
+                    title=record.title if record.title != record.asin else o.title,
                     product_url=record.product_url or o.product_url,
                     main_image_url=record.main_image_url or o.main_image_url,
                     title_hash=record.title_hash,

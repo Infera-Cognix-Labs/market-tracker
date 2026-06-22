@@ -70,9 +70,7 @@ class InsightsQueryService:
         tracker_docs = await CategoryTrackerDocument.find(
             CategoryTrackerDocument.workspace_id == workspace_id
         ).to_list()
-        tracker_name_map = {
-            doc.tracker_code: doc.name for doc in tracker_docs
-        }
+        tracker_name_map = {doc.tracker_code: doc.name for doc in tracker_docs}
 
         asin_keys = list({(e.marketplace, e.asin) for e in events})
         if asin_keys:
@@ -82,9 +80,7 @@ class InsightsQueryService:
             ).to_list()
         else:
             product_docs = []
-        product_map = {
-            (doc.marketplace, doc.asin): doc for doc in product_docs
-        }
+        product_map = {(doc.marketplace, doc.asin): doc for doc in product_docs}
         t_db = (time.monotonic() - t0) * 1000
 
         t1 = time.monotonic()
@@ -166,7 +162,11 @@ class InsightsQueryService:
                 if dedup_key not in seen_first_time:
                     seen_first_time.add(dedup_key)
                     first_time_entrants.append(item)
-                if current_rank > 0 and current_rank <= 10 and dedup_key not in seen_top10:
+                if (
+                    current_rank > 0
+                    and current_rank <= 10
+                    and dedup_key not in seen_top10
+                ):
                     seen_top10.add(dedup_key)
                     new_top10_entrants.append(item)
 
@@ -225,9 +225,7 @@ class InsightsQueryService:
         competitor_docs = await CompetitorTrackerDocument.find(
             CompetitorTrackerDocument.workspace_id == workspace_id
         ).to_list()
-        tracker_name_map = {
-            doc.tracker_code: doc.name for doc in competitor_docs
-        }
+        tracker_name_map = {doc.tracker_code: doc.name for doc in competitor_docs}
 
         asin_list = list({e.asin for e in events})
         if asin_list:
@@ -237,9 +235,7 @@ class InsightsQueryService:
             ).to_list()
         else:
             product_docs = []
-        product_map = {
-            (doc.marketplace, doc.asin): doc for doc in product_docs
-        }
+        product_map = {(doc.marketplace, doc.asin): doc for doc in product_docs}
         t_db = (time.monotonic() - t0) * 1000
 
         t1 = time.monotonic()
@@ -271,8 +267,12 @@ class InsightsQueryService:
             payload = event.payload
 
             if event.event_type == EventType.PRICE_CHANGED:
-                current_price = payload.current.price_current if payload.current else None
-                previous_price = payload.previous.price_current if payload.previous else None
+                current_price = (
+                    payload.current.price_current if payload.current else None
+                )
+                previous_price = (
+                    payload.previous.price_current if payload.previous else None
+                )
                 delta_abs = payload.delta.price_current_abs if payload.delta else None
                 delta_pct = payload.delta.price_current_pct if payload.delta else None
 
@@ -312,8 +312,16 @@ class InsightsQueryService:
                 )
 
             elif event.event_type == EventType.AVAILABILITY_CHANGED:
-                current_status = payload.current.availability_status if payload.current else AvailabilityStatus.UNKNOWN
-                previous_status = payload.previous.availability_status if payload.previous else AvailabilityStatus.UNKNOWN
+                current_status = (
+                    payload.current.availability_status
+                    if payload.current
+                    else AvailabilityStatus.UNKNOWN
+                )
+                previous_status = (
+                    payload.previous.availability_status
+                    if payload.previous
+                    else AvailabilityStatus.UNKNOWN
+                )
 
                 availability_changes.append(
                     AvailabilityChangeItem(
@@ -330,8 +338,12 @@ class InsightsQueryService:
                 )
 
             elif event.event_type == EventType.VARIATIONS_ADDED:
-                current_var = payload.current.variation_count if payload.current else None
-                previous_var = payload.previous.variation_count if payload.previous else None
+                current_var = (
+                    payload.current.variation_count if payload.current else None
+                )
+                previous_var = (
+                    payload.previous.variation_count if payload.previous else None
+                )
 
                 variation_changes.append(
                     VariationChangeItem(
@@ -369,9 +381,7 @@ class InsightsQueryService:
             variation_changes=variation_changes,
         )
 
-    async def get_competitor_alerts(
-        self, workspace_id: str
-    ) -> CompetitorAlertCounts:
+    async def get_competitor_alerts(self, workspace_id: str) -> CompetitorAlertCounts:
         t0 = time.monotonic()
         today = utc_now().date()
         event_docs = await EventDocument.find(
@@ -395,12 +405,20 @@ class InsightsQueryService:
 
         for event in filtered_events:
             if event.event_type == EventType.AVAILABILITY_CHANGED:
-                current_status = event.payload.current.availability_status if event.payload.current else None
+                current_status = (
+                    event.payload.current.availability_status
+                    if event.payload.current
+                    else None
+                )
                 if current_status == AvailabilityStatus.OUT_OF_STOCK:
                     oos_count += 1
 
             elif event.event_type == EventType.PRICE_CHANGED:
-                delta_abs = event.payload.delta.price_current_abs if event.payload.delta else None
+                delta_abs = (
+                    event.payload.delta.price_current_abs
+                    if event.payload.delta
+                    else None
+                )
                 if delta_abs is not None:
                     if delta_abs < 0:
                         price_drop_count += 1
@@ -450,9 +468,7 @@ class InsightsQueryService:
         tracker_docs = await KeywordTrackerDocument.find(
             KeywordTrackerDocument.workspace_id == workspace_id
         ).to_list()
-        tracker_name_map = {
-            doc.tracker_code: doc.name for doc in tracker_docs
-        }
+        tracker_name_map = {doc.tracker_code: doc.name for doc in tracker_docs}
 
         asin_keys = list({(e.marketplace, e.asin) for e in events})
         if asin_keys:
@@ -462,9 +478,7 @@ class InsightsQueryService:
             ).to_list()
         else:
             product_docs = []
-        product_map = {
-            (doc.marketplace, doc.asin): doc for doc in product_docs
-        }
+        product_map = {(doc.marketplace, doc.asin): doc for doc in product_docs}
         t_db = (time.monotonic() - t0) * 1000
 
         t1 = time.monotonic()
@@ -546,7 +560,11 @@ class InsightsQueryService:
                 if dedup_key not in seen_first_time:
                     seen_first_time.add(dedup_key)
                     first_time_entrants.append(item)
-                if current_rank > 0 and current_rank <= 10 and dedup_key not in seen_top10:
+                if (
+                    current_rank > 0
+                    and current_rank <= 10
+                    and dedup_key not in seen_top10
+                ):
                     seen_top10.add(dedup_key)
                     new_top10_entrants.append(item)
 

@@ -78,7 +78,9 @@ async def get_latest_keyword_snapshot(
     store: Annotated[BaseStore, Depends(get_store)],
     timeframe: Timeframe = Query(default=Timeframe.WEEKLY),
 ) -> KeywordSnapshot:
-    return await store.get_latest_keyword_snapshot(workspace_id, tracker_code, timeframe)
+    return await store.get_latest_keyword_snapshot(
+        workspace_id, tracker_code, timeframe
+    )
 
 
 @router.delete("/{tracker_code}", status_code=status.HTTP_204_NO_CONTENT)

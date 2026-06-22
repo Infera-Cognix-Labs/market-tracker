@@ -396,10 +396,7 @@ class NotificationService:
                 },
                 {
                     "title": "Tracker",
-                    "value": (
-                        f"{event.tracker_code} "
-                        f"({event.tracker_type.value})"
-                    ),
+                    "value": (f"{event.tracker_code} ({event.tracker_type.value})"),
                     "short": True,
                 },
                 {"title": "Product", "value": event.title, "short": False},
