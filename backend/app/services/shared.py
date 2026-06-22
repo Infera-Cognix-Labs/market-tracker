@@ -78,13 +78,17 @@ THREAT_SCORE_WEIGHT = {
 
 def category_doc_to_model(document: CategoryTrackerDocument) -> CategoryTracker:
     return CategoryTracker.model_validate(
-        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+        document.model_dump(
+            exclude={"id", "workspace_id", "asins_last_seen"}, mode="python"
+        )
     )
 
 
 def keyword_doc_to_model(document: KeywordTrackerDocument) -> KeywordTracker:
     return KeywordTracker.model_validate(
-        document.model_dump(exclude={"id", "workspace_id"}, mode="python")
+        document.model_dump(
+            exclude={"id", "workspace_id", "asins_last_seen"}, mode="python"
+        )
     )
 
 
