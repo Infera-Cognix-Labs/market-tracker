@@ -318,6 +318,7 @@ export const CategoryPageInner = () => {
         {selectedTracker && (
           <TrackerInfoCard
             name={selectedTracker.name}
+            titleHref={selectedTracker.scope.browse_node_url}
             marketplace={selectedTracker.marketplace}
             status={selectedTracker.status}
             meta={`Amazon ${marketplaceLabel(selectedTracker.marketplace)} · Top ${selectedTracker.tracking_config.top_n} · ${selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()} at ${String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC`}
