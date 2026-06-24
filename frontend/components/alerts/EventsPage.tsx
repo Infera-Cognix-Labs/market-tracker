@@ -13,10 +13,11 @@ import {
   apiListCategoryTrackers,
   apiListCompetitorTrackers,
   apiListEvents,
+  apiListKeywordTrackers,
   apiListNotificationRules,
   apiUpdateNotificationRule,
 } from "../shared/api"
-import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker, NotificationRule, NotificationRuleRequest } from "../shared/types"
+import type { Event, EventType, Severity, CategoryTracker, CompetitorTracker, KeywordTracker, NotificationRule, NotificationRuleRequest } from "../shared/types"
 
 const EVENT_TYPES: EventType[] = [
   "NEW_ENTRANT_TOP50", "RETURNING_TOP50", "EXIT_TOP50",
@@ -207,9 +208,10 @@ interface RuleEditorProps {
   onCancel: () => void
   categoryTrackers: CategoryTracker[]
   competitorTrackers: CompetitorTracker[]
+  keywordTrackers: KeywordTracker[]
 }
 
-const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, competitorTrackers }: RuleEditorProps) => {
+const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, competitorTrackers, keywordTrackers }: RuleEditorProps) => {
   const toggleSeverity = (s: Severity) => {
     const next = rule.severities.includes(s)
       ? rule.severities.filter(x => x !== s)
@@ -229,7 +231,9 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
       ? categoryTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
       : rule.tracker_type === "COMPETITOR"
         ? competitorTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
-        : []
+        : rule.tracker_type === "KEYWORD"
+          ? keywordTrackers.map(t => ({ code: t.tracker_code, name: t.name }))
+          : []
 
   return (
     <div style={{
@@ -334,6 +338,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
               { value: "" as const, label: "All" },
               { value: "CATEGORY" as const, label: "Category" },
               { value: "COMPETITOR" as const, label: "Competitor" },
+              { value: "KEYWORD" as const, label: "Keyword" },
             ] as const).map(opt => (
               <button
                 key={opt.value}
@@ -352,7 +357,7 @@ const RuleEditor = ({ rule, onChange, onSave, onCancel, categoryTrackers, compet
           </div>
           {rule.tracker_type && (
             <TrackerDropdown
-              label={`${rule.tracker_type === "CATEGORY" ? "Category" : "Competitor"}: All`}
+              label={`${rule.tracker_type === "CATEGORY" ? "Category" : rule.tracker_type === "COMPETITOR" ? "Competitor" : "Keyword"}: All`}
               options={trackerOptions}
               selectedCode={rule.tracker_code}
               onSelect={code => onChange({ tracker_code: code })}
@@ -402,6 +407,7 @@ export const EventsPage = () => {
   const [selectedTrackerCode, setSelectedTrackerCode] = useState<string>("")
   const [categoryTrackers, setCategoryTrackers] = useState<CategoryTracker[]>([])
   const [competitorTrackers, setCompetitorTrackers] = useState<CompetitorTracker[]>([])
+  const [keywordTrackers, setKeywordTrackers] = useState<KeywordTracker[]>([])
 
   // Notification settings
   const [showSettings, setShowSettings] = useState(false)
@@ -476,6 +482,7 @@ export const EventsPage = () => {
     void Promise.all([
       apiListCategoryTrackers().then(res => setCategoryTrackers(res.items)),
       apiListCompetitorTrackers().then(res => setCompetitorTrackers(res.items)),
+      apiListKeywordTrackers().then(res => setKeywordTrackers(res.items)),
     ])
   }, [])
 
@@ -488,6 +495,10 @@ export const EventsPage = () => {
     .filter(t => t.status === "ACTIVE")
     .map(t => ({ code: t.tracker_code, name: t.name }))
 
+  const activeKeywordOptions = keywordTrackers
+    .filter(t => t.status === "ACTIVE")
+    .map(t => ({ code: t.tracker_code, name: t.name }))
+
   const selectCategory = (code: string) => {
     setSelectedTrackerCode(code)
     setFilterTrackerType(code ? "CATEGORY" : "")
@@ -496,6 +507,11 @@ export const EventsPage = () => {
   const selectCompetitor = (code: string) => {
     setSelectedTrackerCode(code)
     setFilterTrackerType(code ? "COMPETITOR" : "")
+  }
+
+  const selectKeyword = (code: string) => {
+    setSelectedTrackerCode(code)
+    setFilterTrackerType(code ? "KEYWORD" : "")
   }
 
   // Rule management helpers
@@ -665,7 +681,7 @@ export const EventsPage = () => {
                     </span>
                     {rule.tracker_code && (
                       <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: T.bg4, color: T.text3, fontFamily: T.mono, flexShrink: 0 }}>
-                        {[...categoryTrackers, ...competitorTrackers].find(t => t.tracker_code === rule.tracker_code)?.name || rule.tracker_code}
+                        {[...categoryTrackers, ...competitorTrackers, ...keywordTrackers].find(t => t.tracker_code === rule.tracker_code)?.name || rule.tracker_code}
                       </span>
                     )}
                     <button
@@ -700,6 +716,7 @@ export const EventsPage = () => {
                       onCancel={() => cancelEditing(ruleCode)}
                       categoryTrackers={categoryTrackers}
                       competitorTrackers={competitorTrackers}
+                      keywordTrackers={keywordTrackers}
                     />
                   )}
                 </div>
@@ -727,6 +744,14 @@ export const EventsPage = () => {
           options={activeCompetitorOptions}
           selectedCode={filterTrackerType === "COMPETITOR" ? selectedTrackerCode : ""}
           onSelect={selectCompetitor}
+        />
+
+        {/* Keyword dropdown */}
+        <TrackerDropdown
+          label="Keyword"
+          options={activeKeywordOptions}
+          selectedCode={filterTrackerType === "KEYWORD" ? selectedTrackerCode : ""}
+          onSelect={selectKeyword}
         />
 
         <span style={{ color: T.border2, margin: "0 4px" }}>|</span>
