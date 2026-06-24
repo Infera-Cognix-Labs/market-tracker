@@ -121,7 +121,8 @@ export function useFilteredEvents(
   )
 
   useEffect(() => {
-    if (!trackerCode || !snapshotDate || activeKpiFilter === "ALL") {
+    const activeEventType = filterToEvent[activeKpiFilter]
+    if (!trackerCode || !snapshotDate || activeKpiFilter === "ALL" || !activeEventType) {
       dispatchEvents({ type: "RESET" })
       return
     }
@@ -134,6 +135,7 @@ export function useFilteredEvents(
       let page = 1
       while (true) {
         const res = await apiListEvents({
+          event_type: activeEventType,
           tracker_type: trackerType,
           tracker_code: trackerCode,
           from_date: snapshotDate,
@@ -154,7 +156,7 @@ export function useFilteredEvents(
         if (cancelled) return
         dispatchEvents({
           type: "FETCH_OK",
-          events: allItems.filter(event => Object.values(filterToEvent).includes(event.event_type)),
+          events: allItems.filter(event => event.event_type === activeEventType),
         })
       })
       .catch(() => {

@@ -301,7 +301,7 @@ export const CategoryPageInner = () => {
       <TrackerPageLayout
         title="Category Tracker"
         sub="Daily BSR movement across selected Amazon categories"
-        trackers={trackers}
+        trackers={trackers.map(t => ({ ...t, href: t.scope.browse_node_url }))}
         selectedCode={selectedCode}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
@@ -318,6 +318,7 @@ export const CategoryPageInner = () => {
         {selectedTracker && (
           <TrackerInfoCard
             name={selectedTracker.name}
+            titleHref={selectedTracker.scope.browse_node_url}
             marketplace={selectedTracker.marketplace}
             status={selectedTracker.status}
             meta={`Amazon ${marketplaceLabel(selectedTracker.marketplace)} · Top ${selectedTracker.tracking_config.top_n} · ${selectedTracker.schedule.frequency.charAt(0) + selectedTracker.schedule.frequency.slice(1).toLowerCase()} at ${String(selectedTracker.schedule.hour_utc).padStart(2, "0")}:00 UTC`}
