@@ -1,9 +1,11 @@
+import { ExternalLink } from "lucide-react"
 import { T } from "./DesignTokens"
 import { Badge } from "./Badge"
 import { StatusBadge } from "./StatusBadge"
 
 interface TrackerInfoCardProps {
   name: string
+  titleHref?: string | null
   marketplace?: string
   status?: string
   meta?: string
@@ -11,12 +13,19 @@ interface TrackerInfoCardProps {
   children?: React.ReactNode
 }
 
-export const TrackerInfoCard = ({ name, marketplace, status, meta, statsRight, children }: TrackerInfoCardProps) => (
+export const TrackerInfoCard = ({ name, titleHref, marketplace, status, meta, statsRight, children }: TrackerInfoCardProps) => (
   <div className="card-info">
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{name}</span>
+          {titleHref ? (
+            <a href={titleHref} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
+              {name}<ExternalLink size={12} />
+            </a>
+          ) : (
+            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.01em", color: T.text0, lineHeight: 1.2 }}>{name}</span>
+          )}
           {marketplace && <Badge type="top10" text={marketplace.toUpperCase()} />}
           <StatusBadge status={status} />
         </div>
