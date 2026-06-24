@@ -301,7 +301,7 @@ export const CategoryPageInner = () => {
       <TrackerPageLayout
         title="Category Tracker"
         sub="Daily BSR movement across selected Amazon categories"
-        trackers={trackers}
+        trackers={trackers.map(t => ({ ...t, href: t.scope.browse_node_url }))}
         selectedCode={selectedCode}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}

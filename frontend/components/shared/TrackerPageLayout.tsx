@@ -12,7 +12,7 @@ import type { EventsState } from "./hooks"
 interface TrackerPageLayoutProps {
   title: string
   sub: string
-  trackers: { tracker_code: string; name: string; status?: string }[]
+  trackers: { tracker_code: string; name: string; status?: string; href?: string | null }[]
   selectedCode: string
   statusFilter: string
   onStatusFilterChange: (v: string) => void
