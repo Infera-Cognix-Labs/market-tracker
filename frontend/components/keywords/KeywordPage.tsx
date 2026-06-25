@@ -29,7 +29,7 @@ import type {
   TrackerStatus
 } from "../shared/types"
 
-type KpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
+type KpiFilter = "ALL" | "UP" | "DOWN" | "NEW" | "STABLE" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
 
 interface CreateModalProps { onClose: () => void; onCreate: (t: KeywordTracker) => void }
 
