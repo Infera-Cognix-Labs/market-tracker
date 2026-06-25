@@ -77,6 +77,10 @@ export const TrackerPageLayout = ({
           exits: snapshot.summary.exit_count,
           enter_top10: snapshot.summary.enter_top10_count,
           exit_top10: snapshot.summary.exit_top10_count,
+          up: snapshot.products.filter(product => product.rank_trend === "UP").length,
+          down: snapshot.products.filter(product => product.rank_trend === "DOWN").length,
+          new: snapshot.products.filter(product => product.rank_trend === "NEW").length,
+          stable: snapshot.products.filter(product => product.rank_trend === "STABLE").length,
         }}
         activeFilter={activeKpiFilter}
         onFilterChange={onKpiFilterChange}
