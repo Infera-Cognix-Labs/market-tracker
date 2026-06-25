@@ -17,7 +17,7 @@ import { handleApiError, useTrackerPage } from "../shared/hooks"
 import type { CategoryTracker, CategoryTrackerCreateRequest, CategoryTrackerUpdateRequest, Timeframe, TrackerStatus } from "../shared/types"
 import { ProductTable } from "./ProductTable"
 
-type CategoryKpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
+type CategoryKpiFilter = "ALL" | "UP" | "DOWN" | "NEW" | "STABLE" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
 
 interface CreateModalProps { onClose: () => void; onCreate: (t: CategoryTracker) => void }
 

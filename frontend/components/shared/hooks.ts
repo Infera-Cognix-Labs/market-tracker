@@ -198,13 +198,17 @@ export function useTriggerJob(
 
 // ── useTrackerPage (combined hook for CategoryPage + KeywordPage) ─────────────
 
-type KpiFilter = "ALL" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
+type TrendFilter = "UP" | "DOWN" | "NEW" | "STABLE"
+type KpiFilter = "ALL" | TrendFilter | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
 
 export type TableRow =
   | { kind: "product"; key: string; product: CategorySnapshotProduct }
   | { kind: "event"; key: string; event: Event }
 
-export const TRACKER_FILTER_TO_EVENT = FILTER_TO_EVENT as Record<Exclude<KpiFilter, "ALL">, EventType>
+const TREND_FILTERS: TrendFilter[] = ["UP", "DOWN", "NEW", "STABLE"]
+const isTrendFilter = (filter: string): filter is TrendFilter => TREND_FILTERS.includes(filter as TrendFilter)
+
+export const TRACKER_FILTER_TO_EVENT = FILTER_TO_EVENT as Record<Exclude<KpiFilter, "ALL" | TrendFilter>, EventType>
 
 interface UseTrackerPageOptions<T> {
   trackerType: TrackerType
@@ -284,6 +288,12 @@ export function useTrackerPage<T extends { tracker_code: string; status?: string
       }))
     }
 
+    if (isTrendFilter(activeKpiFilter)) {
+      return filteredProducts
+        .filter(product => product.rank_trend === activeKpiFilter)
+        .map(product => ({ kind: "product", key: `${product.asin}-${product.rank_position}`, product }))
+    }
+
     const eventType = filterToEvent[activeKpiFilter]
     const relevantEvents = eventsState.events.filter(event => event.event_type === eventType)
 
@@ -317,6 +327,9 @@ export function useTrackerPage<T extends { tracker_code: string; status?: string
   const totalFilteredCount = useMemo(() => {
     if (!snapshot) return 0
     if (activeKpiFilter === "ALL") return snapshot.products.length
+    if (isTrendFilter(activeKpiFilter)) {
+      return snapshot.products.filter(product => product.rank_trend === activeKpiFilter).length
+    }
     const eventType = filterToEvent[activeKpiFilter]
     if (activeKpiFilter === "EXITS" || activeKpiFilter === "EXIT_TOP10") {
       return eventsState.events.filter(event => event.event_type === eventType).length
