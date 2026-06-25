@@ -157,7 +157,7 @@ async def main(
 
         for marketplace in marketplaces_to_process:
             mkt_products = by_marketplace[marketplace]
-            amazon_domain = MARKETPLACE_TO_DOMAIN.get(marketplace, "www.amazon.com")
+            amazon_domain = MARKETPLACE_TO_DOMAIN.get(marketplace, "www.amazon.de")
             asins = [p.asin for p in mkt_products]
             log.info(
                 "Marketplace %s: %d products, domain=%s",

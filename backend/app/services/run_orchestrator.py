@@ -336,5 +336,7 @@ def _marketplace_to_amazon_domain(marketplace: str) -> str:
         "amazon_ca": "amazon.ca",
         "amazon_mx": "amazon.com.mx",
         "amazon_jp": "amazon.co.jp",
+        "amazon_in": "amazon.in",
+        "amazon_au": "amazon.com.au",
     }
     return mapping.get(marketplace.lower(), "amazon.com")

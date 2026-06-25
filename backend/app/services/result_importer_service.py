@@ -28,9 +28,9 @@ from app.models.documents import (
 )
 from app.services.event_engine import EventEngine
 from app.services.normalization_service import (
+    NormalizationResult,
     NormalizationService,
     NormalizedProductRecord,
-    NormalizationResult,
     RawImportedItem,
 )
 from app.services.object_storage_service import LocalObjectStorageService
@@ -899,19 +899,3 @@ def _merge_records(
         else:
             merged.append(record)
     return merged
-
-
-def _marketplace_to_amazon_domain(marketplace: str) -> str:
-    mapping = {
-        "amazon_us": "www.amazon.com",
-        "amazon_uk": "www.amazon.co.uk",
-        "amazon_de": "www.amazon.de",
-        "amazon_fr": "www.amazon.fr",
-        "amazon_es": "www.amazon.es",
-        "amazon_it": "www.amazon.it",
-        "amazon_ca": "www.amazon.ca",
-        "amazon_jp": "www.amazon.co.jp",
-        "amazon_au": "www.amazon.com.au",
-        "amazon_in": "www.amazon.in",
-    }
-    return mapping.get(marketplace, "www.amazon.com")
