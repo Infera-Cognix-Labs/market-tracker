@@ -27,6 +27,12 @@ const presetRange = (preset: DatePreset): { from: string } | null => {
 
 const PAGE_SIZE = 10
 
+const isCompleteReportDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const year = Number(value.slice(0, 4))
+  return year >= 2000 && year <= 2100
+}
+
 export const ReportsPage = () => {
   const [digests, setDigests] = useState<WeeklyDigest[]>([])
   const [total, setTotal] = useState(0)
@@ -43,6 +49,7 @@ export const ReportsPage = () => {
     try {
       let weekStart: string | undefined
       if (datePreset === "custom") {
+        if (customFrom && !isCompleteReportDate(customFrom)) return
         weekStart = customFrom || undefined
       } else {
         const range = presetRange(datePreset)
@@ -58,6 +65,7 @@ export const ReportsPage = () => {
       setPageNum(p)
     } catch {
       setDigests([])
+      setTotal(0)
       setError("Failed to load reports")
     } finally {
       setLoading(false)
