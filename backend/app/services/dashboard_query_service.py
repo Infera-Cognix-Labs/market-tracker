@@ -256,7 +256,8 @@ class DashboardQueryService:
     ) -> WeeklyDigestListResponse:
         query_filters = [WeeklyDigestDocument.workspace_id == workspace_id]
         if week_start is not None:
-            query_filters.append(WeeklyDigestDocument.week_start == week_start)
+            #hung 25/06/2026: fix reports filter to include digests from the selected week_start onward.
+            query_filters.append(WeeklyDigestDocument.week_start >= week_start)
         query = WeeklyDigestDocument.find(*query_filters)
         total = await query.count()
         page_docs = await (
