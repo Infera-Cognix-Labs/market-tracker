@@ -40,6 +40,21 @@ apify:
         memory_mbytes: 4096
         enabled: true
         priority: 1
+        input_adapter:
+          field_map:
+            amazon_domain: "amazonDomain"
+          marketplace_map:
+            amazon_us: "amazon.com"
+            amazon_uk: "amazon.co.uk"
+            amazon_de: "amazon.de"
+            amazon_fr: "amazon.fr"
+            amazon_it: "amazon.it"
+            amazon_es: "amazon.es"
+            amazon_ca: "amazon.ca"
+            amazon_jp: "amazon.co.jp"
+            amazon_in: "amazon.in"
+            amazon_au: "amazon.com.au"
+            amazon_mx: "amazon.com.mx"
     keyword:
       harvestlab:
         actor_id: "harvestlab/amazon-scraper"

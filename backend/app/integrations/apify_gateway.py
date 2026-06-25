@@ -180,7 +180,7 @@ class ApifyGateway:
             if target_field in adapted:
                 asins = adapted[target_field]
                 if isinstance(asins, list):
-                    amazon_domain = adapted.get("amazon_domain", "www.amazon.com")
+                    amazon_domain = adapted.get("amazon_domain", "www.amazon.de")
                     adapted[target_field] = [
                         f"https://{amazon_domain}/dp/{asin}" for asin in asins
                     ]
