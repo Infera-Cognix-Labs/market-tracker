@@ -3,6 +3,7 @@
 import { Info, Plus, Search, Trash2, X } from "lucide-react"
 import { Suspense, useState } from "react"
 import { ProductTable } from "../categories/ProductTable"
+import { KeywordGroupsPanel } from "./KeywordGroupsPanel"
 import { ConfirmDialog } from "../shared/ConfirmDialog"
 import { T } from "../shared/DesignTokens"
 import { Dropdown } from "../shared/Dropdown"
@@ -30,6 +31,18 @@ import type {
 } from "../shared/types"
 
 type KpiFilter = "ALL" | "UP" | "DOWN" | "NEW" | "STABLE" | "NEW_ENTRANTS" | "RETURNING" | "EXITS" | "ENTER_TOP10" | "EXIT_TOP10"
+type KeywordView = "TRACKERS" | "GROUPS"
+
+const KeywordViewSwitch = ({ view, onChange }: { view: KeywordView; onChange: (view: KeywordView) => void }) => (
+  <div style={{ display: "inline-flex", gap: 4, padding: 4, border: `1px solid ${T.border}`, borderRadius: 8, background: T.bg2, marginBottom: 16 }}>
+    {(["TRACKERS", "GROUPS"] as KeywordView[]).map(item => (
+      <button key={item} type="button" onClick={() => onChange(item)}
+        style={{ padding: "7px 12px", borderRadius: 6, border: "none", background: view === item ? T.bg4 : "transparent", color: view === item ? T.amber : T.text2, fontSize: 12, fontWeight: view === item ? 700 : 500, cursor: "pointer", fontFamily: T.sans }}>
+        {item === "TRACKERS" ? "Trackers" : "Groups"}
+      </button>
+    ))}
+  </div>
+)
 
 interface CreateModalProps { onClose: () => void; onCreate: (t: KeywordTracker) => void }
 
@@ -204,7 +217,7 @@ const EditKeywordTrackerModal = ({ tracker, onClose, onUpdate, onDelete }: EditM
   )
 }
 
-export const KeywordPageInner = () => {
+const KeywordTrackersPanel = () => {
   const [rankTimeframe, setRankTimeframe] = useState<Timeframe>("WEEKLY")
 
   const {
@@ -362,6 +375,17 @@ export const KeywordPageInner = () => {
           </div>
         }
       />
+    </>
+  )
+}
+
+const KeywordPageInner = () => {
+  const [view, setView] = useState<KeywordView>("TRACKERS")
+
+  return (
+    <>
+      <KeywordViewSwitch view={view} onChange={setView} />
+      {view === "TRACKERS" ? <KeywordTrackersPanel /> : <KeywordGroupsPanel />}
     </>
   )
 }
