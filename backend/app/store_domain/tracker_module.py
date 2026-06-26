@@ -11,6 +11,11 @@ from app.models.api import (
     CompetitorTrackerDetail,
     CompetitorTrackerListResponse,
     CompetitorTrackerUpdateRequest,
+    KeywordGroup,
+    KeywordGroupCreateRequest,
+    KeywordGroupListResponse,
+    KeywordGroupSnapshot,
+    KeywordGroupUpdateRequest,
     KeywordSnapshot,
     KeywordTracker,
     KeywordTrackerCreateRequest,
@@ -18,6 +23,7 @@ from app.models.api import (
     KeywordTrackerUpdateRequest,
     Timeframe,
     TrackedAsinReplacementRequest,
+    TrackedKeywordReplacementRequest,
 )
 from app.services.tracker_management_service import TrackerManagementService
 
@@ -147,3 +153,52 @@ class TrackerModule:
         self, workspace_id: str, tracker_code: str
     ) -> None:
         await self._service.delete_keyword_tracker(workspace_id, tracker_code)
+
+    # ── Keyword Group ──────────────────────────────────────────────────────
+
+    async def list_keyword_groups(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordGroupListResponse:
+        return await self._service.list_keyword_groups(workspace_id, page, page_size)
+
+    async def create_keyword_group(
+        self, workspace_id: str, payload: KeywordGroupCreateRequest
+    ) -> KeywordGroup:
+        return await self._service.create_keyword_group(workspace_id, payload)
+
+    async def get_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroup:
+        return await self._service.get_keyword_group(workspace_id, group_code)
+
+    async def update_keyword_group(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: KeywordGroupUpdateRequest,
+    ) -> KeywordGroup:
+        return await self._service.update_keyword_group(
+            workspace_id, group_code, payload
+        )
+
+    async def replace_tracked_keywords(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: TrackedKeywordReplacementRequest,
+    ) -> KeywordGroup:
+        return await self._service.replace_tracked_keywords(
+            workspace_id, group_code, payload
+        )
+
+    async def get_latest_keyword_group_snapshot(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroupSnapshot:
+        return await self._service.get_latest_keyword_group_snapshot(
+            workspace_id, group_code
+        )
+
+    async def delete_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> None:
+        await self._service.delete_keyword_group(workspace_id, group_code)

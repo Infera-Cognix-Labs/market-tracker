@@ -22,6 +22,8 @@ from app.models.api import (
     JobError,
     JobRunStrategy,
     JobSummary,
+    KeywordGroupLatestSnapshotSummary,
+    KeywordGroupStats,
     KeywordScope,
     KeywordSnapshotSummary,
     KeywordTrackerLatestSnapshotSummary,
@@ -30,6 +32,7 @@ from app.models.api import (
     ProductCurrentState,
     Threat,
     TrackedAsin,
+    TrackedKeyword,
     TrackedProductSummary,
     TrackerRef,
     TrackerSchedule,
@@ -419,11 +422,31 @@ class WeeklyDigestDocument(WorkspaceDocument):
         ]
 
 
+class KeywordGroupDocument(WorkspaceDocument):
+    group_code: str
+    name: str
+    marketplace: str
+    tracked_keywords: list[TrackedKeyword]
+    status: str
+    stats: KeywordGroupStats
+    latest_snapshot_summary: KeywordGroupLatestSnapshotSummary | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Settings:
+        name = "keyword_groups"
+        indexes = [
+            IndexModel([("workspace_id", 1), ("group_code", 1)], unique=True),
+            IndexModel([("workspace_id", 1), ("status", 1)]),
+        ]
+
+
 DOCUMENT_MODELS = [
     CategoryTrackerDocument,
     CategorySnapshotDocument,
     KeywordTrackerDocument,
     KeywordSnapshotDocument,
+    KeywordGroupDocument,
     CompetitorTrackerDocument,
     EventDocument,
     NotificationRuleDocument,
