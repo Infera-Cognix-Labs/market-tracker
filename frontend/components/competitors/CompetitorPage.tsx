@@ -75,6 +75,16 @@ const formatMoneyAxisTick = (value: number, symbol: string, domain?: [number, nu
   const decimals = range > 0 && range < 2 ? 2 : range > 0 && range < 10 ? 1 : 0
   return `${symbol}${Number(value).toFixed(decimals)}`
 }
+const formatRatingAxisTick = (value: number, domain?: [number, number]) => {
+  const range = domain ? Math.abs(domain[1] - domain[0]) : 0
+  return Number(value).toFixed(range > 0 && range < 0.8 ? 2 : 1)
+}
+
+const formatReviewAxisTick = (value: number, domain?: [number, number]) => {
+  const range = domain ? Math.abs(domain[1] - domain[0]) : 0
+  if (range > 0 && range < 1_000) return Math.round(value).toLocaleString()
+  return formatCompactNumber(value)
+}
 
 
 // ── Manage ASINs Modal ────────────────────────────────────────────────────────
@@ -919,8 +929,8 @@ export const CompetitorPage = () => {
                     <ComposedChart data={ratingData} margin={{ top: 12, right: 54, left: 8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
                       <XAxis dataKey="date" minTickGap={28} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="left" domain={ratingDomain} width={42} tickCount={4} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Number(v).toFixed(1)}`} />
-                      <YAxis yAxisId="right" orientation="right" domain={reviewsDomain} width={48} tickCount={4} allowDecimals={false} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompactNumber(v)} />
+                      <YAxis yAxisId="left" domain={ratingDomain} width={42} tickCount={4} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatRatingAxisTick(v, ratingDomain)} />
+                      <YAxis yAxisId="right" orientation="right" domain={reviewsDomain} width={48} tickCount={4} allowDecimals={false} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatReviewAxisTick(v, reviewsDomain)} />
                       <Tooltip formatter={(value, name) => name === "Rating" ? [`${Number(value ?? 0).toFixed(1)}/5`, name] : [Number(value ?? 0).toLocaleString(), name]} contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
                       <Legend wrapperStyle={{ color: T.text1, fontSize: 11 }} />
                       <Line yAxisId="left" type="monotone" dataKey="rating" stroke={T.green} strokeWidth={2.25} name="Rating" dot={ratingData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
