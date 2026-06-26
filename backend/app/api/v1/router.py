@@ -8,6 +8,7 @@ from app.api.v1.endpoints import (
     dashboard,
     events,
     jobs,
+    keyword_groups,
     keyword_trackers,
     notification_rules,
     products,
@@ -21,6 +22,7 @@ api_router.include_router(dashboard.router)
 api_router.include_router(category_trackers.router)
 api_router.include_router(competitor_trackers.router)
 api_router.include_router(keyword_trackers.router)
+api_router.include_router(keyword_groups.router)
 api_router.include_router(products.router)
 api_router.include_router(events.router)
 api_router.include_router(notification_rules.router)

@@ -33,6 +33,11 @@ from app.models.api import (
     JobCreateRequest,
     JobListResponse,
     JobStatus,
+    KeywordGroup,
+    KeywordGroupCreateRequest,
+    KeywordGroupListResponse,
+    KeywordGroupSnapshot,
+    KeywordGroupUpdateRequest,
     KeywordInsights,
     KeywordSnapshot,
     KeywordTracker,
@@ -50,6 +55,7 @@ from app.models.api import (
     Severity,
     Timeframe,
     TrackedAsinReplacementRequest,
+    TrackedKeywordReplacementRequest,
     TrackerType,
     WeeklyDigest,
     WeeklyDigestListResponse,
@@ -386,6 +392,47 @@ class BaseStore:
     async def get_keyword_insights(
         self, workspace_id: str, timeframe: Timeframe
     ) -> KeywordInsights:
+        raise NotImplementedError
+
+    async def list_keyword_groups(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordGroupListResponse:
+        raise NotImplementedError
+
+    async def create_keyword_group(
+        self, workspace_id: str, payload: KeywordGroupCreateRequest
+    ) -> KeywordGroup:
+        raise NotImplementedError
+
+    async def get_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroup:
+        raise NotImplementedError
+
+    async def update_keyword_group(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: KeywordGroupUpdateRequest,
+    ) -> KeywordGroup:
+        raise NotImplementedError
+
+    async def replace_tracked_keywords(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: TrackedKeywordReplacementRequest,
+    ) -> KeywordGroup:
+        raise NotImplementedError
+
+    async def get_latest_keyword_group_snapshot(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroupSnapshot:
+        raise NotImplementedError
+
+    async def delete_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> None:
         raise NotImplementedError
 
 
@@ -770,6 +817,53 @@ class MongoStore(BaseStore):
         self, workspace_id: str, timeframe: Timeframe
     ) -> KeywordInsights:
         return await self._insights.get_keyword_insights(workspace_id, timeframe)
+
+    async def list_keyword_groups(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordGroupListResponse:
+        return await self._trackers.list_keyword_groups(workspace_id, page, page_size)
+
+    async def create_keyword_group(
+        self, workspace_id: str, payload: KeywordGroupCreateRequest
+    ) -> KeywordGroup:
+        return await self._trackers.create_keyword_group(workspace_id, payload)
+
+    async def get_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroup:
+        return await self._trackers.get_keyword_group(workspace_id, group_code)
+
+    async def update_keyword_group(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: KeywordGroupUpdateRequest,
+    ) -> KeywordGroup:
+        return await self._trackers.update_keyword_group(
+            workspace_id, group_code, payload
+        )
+
+    async def replace_tracked_keywords(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: TrackedKeywordReplacementRequest,
+    ) -> KeywordGroup:
+        return await self._trackers.replace_tracked_keywords(
+            workspace_id, group_code, payload
+        )
+
+    async def get_latest_keyword_group_snapshot(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroupSnapshot:
+        return await self._trackers.get_latest_keyword_group_snapshot(
+            workspace_id, group_code
+        )
+
+    async def delete_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> None:
+        await self._trackers.delete_keyword_group(workspace_id, group_code)
 
 
 async def build_store(settings: Config) -> BaseStore:

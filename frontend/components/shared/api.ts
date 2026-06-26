@@ -17,6 +17,11 @@ import type {
   KeywordTrackerCreateRequest,
   KeywordTrackerUpdateRequest,
   KeywordInsights,
+  KeywordGroup,
+  KeywordGroupCreateRequest,
+  KeywordGroupUpdateRequest,
+  KeywordGroupSnapshot,
+  TrackedKeywordInput,
 } from "./types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || `${process.env.NEXT_PUBLIC_BASE_PATH || "/market-tracker"}/api`
@@ -358,4 +363,34 @@ export const apiDeleteKeywordTracker = async (trackerCode: string): Promise<void
 
 export const apiGetKeywordInsights = async (timeframe: Timeframe = "WEEKLY"): Promise<KeywordInsights> => {
   return apiFetch<KeywordInsights>(`/summaries/keyword-insights${qs({ timeframe })}`)
+}
+
+// Keyword Groups
+
+export const apiListKeywordGroups = async (page = 1, pageSize = 20): Promise<PagedResponse<KeywordGroup>> => {
+  return apiFetch<PagedResponse<KeywordGroup>>(`/keyword-groups${qs({ page, page_size: pageSize })}`)
+}
+
+export const apiGetKeywordGroup = async (groupCode: string): Promise<KeywordGroup> => {
+  return apiFetch<KeywordGroup>(`/keyword-groups/${groupCode}`)
+}
+
+export const apiGetLatestKeywordGroupSnapshot = async (groupCode: string): Promise<KeywordGroupSnapshot | null> => {
+  return apiFetch<KeywordGroupSnapshot>(`/keyword-groups/${groupCode}/snapshots/latest`)
+}
+
+export const apiCreateKeywordGroup = async (payload: KeywordGroupCreateRequest): Promise<KeywordGroup> => {
+  return apiFetch<KeywordGroup>("/keyword-groups", { method: "POST", body: JSON.stringify(payload) })
+}
+
+export const apiUpdateKeywordGroup = async (groupCode: string, payload: KeywordGroupUpdateRequest): Promise<KeywordGroup> => {
+  return apiFetch<KeywordGroup>(`/keyword-groups/${groupCode}`, { method: "PATCH", body: JSON.stringify(payload) })
+}
+
+export const apiReplaceTrackedKeywords = async (groupCode: string, trackedKeywords: TrackedKeywordInput[]): Promise<KeywordGroup> => {
+  return apiFetch<KeywordGroup>(`/keyword-groups/${groupCode}/tracked-keywords`, { method: "PUT", body: JSON.stringify({ tracked_keywords: trackedKeywords }) })
+}
+
+export const apiDeleteKeywordGroup = async (groupCode: string): Promise<void> => {
+  await apiFetch<void>(`/keyword-groups/${groupCode}`, { method: "DELETE" })
 }

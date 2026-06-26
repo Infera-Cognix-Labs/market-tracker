@@ -947,3 +947,99 @@ class CompetitorAlertCounts(ApiModel):
     price_increase_count: int
     new_promotion_count: int
     new_variation_count: int
+
+
+# ── Keyword Group ────────────────────────────────────────────────────────────
+
+
+class TrackedKeywordWrite(ApiModel):
+    tracker_code: str = Field(min_length=1, max_length=120)
+    enabled: bool = True
+
+
+class TrackedKeyword(TrackedKeywordWrite):
+    added_at: datetime
+    keyword_snapshot: str
+    tracker_name_snapshot: str
+
+
+class TrackedKeywordReplacementRequest(ApiModel):
+    tracked_keywords: list[TrackedKeywordWrite] = Field(min_length=1, max_length=50)
+
+
+class KeywordGroupStats(ApiModel):
+    tracked_keyword_count: int
+    total_snapshots_covered: int = 0
+
+
+class KeywordGroupLatestSnapshotSummary(ApiModel):
+    snapshot_date: date
+    captured_at: datetime
+    total_unique_asins: int
+    top_asins: list[AsinCode]
+
+
+class KeywordGroup(ApiModel):
+    group_code: str
+    name: str
+    marketplace: MarketplaceCode
+    tracked_keywords: list[TrackedKeyword]
+    status: TrackerStatus
+    stats: KeywordGroupStats
+    latest_snapshot_summary: KeywordGroupLatestSnapshotSummary | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class KeywordGroupCreateRequest(ApiModel):
+    name: str = Field(min_length=1, max_length=120)
+    marketplace: MarketplaceCode
+    tracked_keywords: list[TrackedKeywordWrite] = Field(min_length=1, max_length=50)
+
+
+class KeywordGroupUpdateRequest(ApiModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    status: TrackerStatus | None = None
+
+
+class KeywordGroupListResponse(ApiModel):
+    items: list[KeywordGroup]
+    page: int
+    page_size: int
+    total: int
+
+
+class KeywordGroupKeywordSummary(ApiModel):
+    tracker_code: str
+    keyword: str
+    asin_count: int
+    top10_asins: list[AsinCode]
+    snapshot_date: date
+
+
+class KeywordGroupProductEntry(ApiModel):
+    asin: AsinCode
+    brand: str
+    title: str
+    product_url: str | None = None
+    image_url: str | None = None
+    current_price: float | None = None
+    currency: str | None = None
+    availability_status: AvailabilityStatus
+    keyword_count: int
+    keyword_list: list[str]
+    avg_rank: float
+    best_rank: int
+    worst_rank: int
+    keyword_ranks: dict[str, int]
+
+
+class KeywordGroupSnapshot(ApiModel):
+    group_code: str
+    marketplace: MarketplaceCode
+    snapshot_date: date
+    captured_at: datetime
+    keyword_count: int
+    total_unique_asins: int
+    products: list[KeywordGroupProductEntry]
+    keyword_summaries: list[KeywordGroupKeywordSummary]
