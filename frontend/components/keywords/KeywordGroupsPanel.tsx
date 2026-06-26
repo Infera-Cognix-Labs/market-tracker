@@ -226,21 +226,7 @@ const ManageKeywordsModal = ({ group, keywordTrackers, onClose, onUpdate }: { gr
 
 const rankList = (product: KeywordGroupProduct) => Object.entries(product.keyword_ranks).sort((a, b) => a[1] - b[1])
 
-type SnapshotLayout = "TABLE" | "DETAIL"
-
-const SnapshotLayoutSwitch = ({ layout, onChange }: { layout: SnapshotLayout; onChange: (layout: SnapshotLayout) => void }) => (
-  <div style={{ display: "inline-flex", gap: 3, padding: 3, border: `1px solid ${T.border}`, borderRadius: 7, background: T.bg2 }}>
-    {(["TABLE", "DETAIL"] as SnapshotLayout[]).map(item => (
-      <button key={item} type="button" onClick={() => onChange(item)}
-        style={{ padding: "5px 9px", borderRadius: 5, border: "none", background: layout === item ? T.bg4 : "transparent", color: layout === item ? T.amber : T.text3, fontSize: 10, fontWeight: layout === item ? 700 : 500, cursor: "pointer", fontFamily: T.sans }}>
-        {item === "TABLE" ? "Table" : "Detail"}
-      </button>
-    ))}
-  </div>
-)
-
 const KeywordGroupSnapshotTable = ({ snapshot, loading, search, onSearchChange }: { snapshot: KeywordGroupSnapshot | null; loading: boolean; search: string; onSearchChange: (value: string) => void }) => {
-  const [layout, setLayout] = useState<SnapshotLayout>("TABLE")
   const [selectedProductIdx, setSelectedProductIdx] = useState(0)
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -251,7 +237,7 @@ const KeywordGroupSnapshotTable = ({ snapshot, loading, search, onSearchChange }
   const effectiveIdx = filteredProducts.length === 0 ? 0 : Math.min(selectedProductIdx, filteredProducts.length - 1)
   const selectedProduct = filteredProducts[effectiveIdx]
 
-  const renderTableLayout = () => {
+  const renderTableRows = () => {
     if (!snapshot) return null
     return (
       <div style={{ width: "100%", overflowX: "auto" }}>
@@ -299,97 +285,101 @@ const KeywordGroupSnapshotTable = ({ snapshot, loading, search, onSearchChange }
   const renderDetailLayout = () => {
     if (!snapshot) return null
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16, padding: 14 }}>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px" }}>
-            {filteredProducts.length} aggregated ASINs
-          </div>
-          <div style={{ maxHeight: 680, overflowY: "auto", paddingRight: 4 }}>
-            {filteredProducts.map((product, i) => (
-              <div key={product.asin} className="row-hover" onClick={() => setSelectedProductIdx(i)}
-                style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === effectiveIdx ? T.bg4 : T.bg2, border: `1px solid ${i === effectiveIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3 }}>{product.asin}</span>
-                  <span style={{ fontSize: 11, fontFamily: T.mono, color: T.amber, fontWeight: 700 }}>{product.keyword_count} kw</span>
+      <div className="card" style={{ padding: 14, overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px" }}>
+              {filteredProducts.length} aggregated ASINs
+            </div>
+            <div style={{ maxHeight: 680, overflowY: "auto", paddingRight: 4 }}>
+              {filteredProducts.map((product, i) => (
+                <div key={product.asin} className="row-hover" onClick={() => setSelectedProductIdx(i)}
+                  style={{ padding: "10px 12px", borderRadius: 8, marginBottom: 4, background: i === effectiveIdx ? T.bg4 : T.bg2, border: `1px solid ${i === effectiveIdx ? T.border2 : T.border}`, cursor: "pointer", transition: "all .15s" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, fontFamily: T.mono, color: T.text3 }}>{product.asin}</span>
+                    <span style={{ fontSize: 11, fontFamily: T.mono, color: T.amber, fontWeight: 700 }}>{product.keyword_count} kw</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.title}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text1 }}>avg #{product.avg_rank.toFixed(1)}</span>
+                    <Badge type={product.availability_status === "IN_STOCK" ? "listing" : "stock"} text={product.availability_status === "IN_STOCK" ? "In Stock" : product.availability_status === "OUT_OF_STOCK" ? "OOS" : product.availability_status} />
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: T.text0, fontWeight: 500, lineHeight: 1.3, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{product.title}</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: T.mono, fontSize: 12, color: T.text1 }}>avg #{product.avg_rank.toFixed(1)}</span>
-                  <Badge type={product.availability_status === "IN_STOCK" ? "listing" : "stock"} text={product.availability_status === "IN_STOCK" ? "In Stock" : product.availability_status === "OUT_OF_STOCK" ? "OOS" : product.availability_status} />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
 
-        {selectedProduct && (
-          <div key={selectedProduct.asin} className="anim-slide">
-            <div className="card" style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                <ThumbnailImage src={selectedProduct.image_url ?? ""} alt={selectedProduct.title || selectedProduct.asin} size={52} fallback="IMG" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: T.text0, marginBottom: 3 }}>{selectedProduct.title}</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
-                    <a href={selectedProduct.product_url || `https://www.amazon.com/dp/${selectedProduct.asin}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontFamily: T.mono, color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>{selectedProduct.asin}<ExternalLink size={9} /></a>
-                    <span style={{ fontSize: 11, color: T.text2 }}>{selectedProduct.brand || "-"}</span>
-                    <Badge type={selectedProduct.availability_status === "IN_STOCK" ? "listing" : "stock"} text={selectedProduct.availability_status === "IN_STOCK" ? "In Stock" : selectedProduct.availability_status === "OUT_OF_STOCK" ? "Out of Stock" : selectedProduct.availability_status} />
-                  </div>
-                  <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text1, flexWrap: "wrap" }}>
-                    <span>Price: <span style={{ fontFamily: T.mono }}><PriceDisplay current={selectedProduct.current_price ?? 0} currency={selectedProduct.currency} marketplace={snapshot.marketplace} /></span></span>
-                    <span>Coverage: <span style={{ color: T.amber, fontFamily: T.mono }}>{selectedProduct.keyword_count}/{snapshot.keyword_count}</span></span>
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 20, flexShrink: 0 }}>
-                  {[
-                    { label: "Avg", v: `#${selectedProduct.avg_rank.toFixed(1)}`, color: T.text0 },
-                    { label: "Best", v: `#${selectedProduct.best_rank}`, color: T.green },
-                    { label: "Worst", v: `#${selectedProduct.worst_rank}`, color: T.text2 },
-                    { label: "Keywords", v: selectedProduct.keyword_count, color: T.amber },
-                  ].map(stat => (
-                    <div key={stat.label} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: stat.color }}>{stat.v}</div>
-                      <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{stat.label}</div>
+          {selectedProduct && (
+            <div key={selectedProduct.asin} className="anim-slide">
+              <div className="card" style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                  <ThumbnailImage src={selectedProduct.image_url ?? ""} alt={selectedProduct.title || selectedProduct.asin} size={52} fallback="IMG" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: T.text0, marginBottom: 3 }}>{selectedProduct.title}</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+                      <a href={selectedProduct.product_url || `https://www.amazon.com/dp/${selectedProduct.asin}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, fontFamily: T.mono, color: T.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>{selectedProduct.asin}<ExternalLink size={9} /></a>
+                      <span style={{ fontSize: 11, color: T.text2 }}>{selectedProduct.brand || "-"}</span>
+                      <Badge type={selectedProduct.availability_status === "IN_STOCK" ? "listing" : "stock"} text={selectedProduct.availability_status === "IN_STOCK" ? "In Stock" : selectedProduct.availability_status === "OUT_OF_STOCK" ? "Out of Stock" : selectedProduct.availability_status} />
                     </div>
-                  ))}
+                    <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text1, flexWrap: "wrap" }}>
+                      <span>Price: <span style={{ fontFamily: T.mono }}><PriceDisplay current={selectedProduct.current_price ?? 0} currency={selectedProduct.currency} marketplace={snapshot.marketplace} /></span></span>
+                      <span>Coverage: <span style={{ color: T.amber, fontFamily: T.mono }}>{selectedProduct.keyword_count}/{snapshot.keyword_count}</span></span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 20, flexShrink: 0 }}>
+                    {[
+                      { label: "Avg", v: `#${selectedProduct.avg_rank.toFixed(1)}`, color: T.text0 },
+                      { label: "Best", v: `#${selectedProduct.best_rank}`, color: T.green },
+                      { label: "Worst", v: `#${selectedProduct.worst_rank}`, color: T.text2 },
+                      { label: "Keywords", v: selectedProduct.keyword_count, color: T.amber },
+                    ].map(stat => (
+                      <div key={stat.label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, fontFamily: T.mono, color: stat.color }}>{stat.v}</div>
+                        <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 600, color: T.text1 }}>Keyword Rank Coverage</div>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr style={{ borderBottom: `1px solid ${T.border}` }}>{["Rank", "Keyword"].map(h => <th key={h} className="th">{h}</th>)}</tr></thead>
-                <tbody>
-                  {rankList(selectedProduct).map(([keyword, rank]) => (
-                    <tr key={keyword} className="row-hover" style={{ borderBottom: `1px solid ${T.border}` }}>
-                      <td style={{ padding: "9px 10px", width: 80, fontFamily: T.mono, fontSize: 12, color: rank <= 10 ? T.amber : T.text1, fontWeight: rank <= 10 ? 700 : 500 }}>#{rank}</td>
-                      <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0 }}>{keyword}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+                <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, fontSize: 13, fontWeight: 600, color: T.text1 }}>Keyword Rank Coverage</div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead><tr style={{ borderBottom: `1px solid ${T.border}` }}>{["Rank", "Keyword"].map(h => <th key={h} className="th">{h}</th>)}</tr></thead>
+                  <tbody>
+                    {rankList(selectedProduct).map(([keyword, rank]) => (
+                      <tr key={keyword} className="row-hover" style={{ borderBottom: `1px solid ${T.border}` }}>
+                        <td style={{ padding: "9px 10px", width: 80, fontFamily: T.mono, fontSize: 12, color: rank <= 10 ? T.amber : T.text1, fontWeight: rank <= 10 ? 700 : 500 }}>#{rank}</td>
+                        <td style={{ padding: "9px 10px", fontSize: 12, color: T.text0 }}>{keyword}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
-        <SearchInput value={search} onChange={onSearchChange} placeholder="Search ASIN, title, brand, or keyword..." />
-        <SnapshotLayoutSwitch layout={layout} onChange={setLayout} />
-        <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>{filteredProducts.length} of {snapshot?.total_unique_asins ?? 0} products</span>
+    <>
+      <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <SearchInput value={search} onChange={onSearchChange} placeholder="Search ASIN, title, brand, or keyword..." />
+          <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>{filteredProducts.length} of {snapshot?.total_unique_asins ?? 0} products</span>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading group snapshot...</div>
+        ) : !snapshot ? (
+          <div style={{ textAlign: "center", padding: 46, color: T.text3 }}><AlertCircle size={22} style={{ marginBottom: 8, opacity: 0.5 }} /><br />No aggregated snapshot available for this group.</div>
+        ) : filteredProducts.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
+        ) : renderTableRows()}
       </div>
-      {loading ? (
-        <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading group snapshot...</div>
-      ) : !snapshot ? (
-        <div style={{ textAlign: "center", padding: 46, color: T.text3 }}><AlertCircle size={22} style={{ marginBottom: 8, opacity: 0.5 }} /><br />No aggregated snapshot available for this group.</div>
-      ) : filteredProducts.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
-      ) : layout === "TABLE" ? renderTableLayout() : renderDetailLayout()}
-    </div>
+      {!loading && snapshot && filteredProducts.length > 0 && renderDetailLayout()}
+    </>
   )
 }
 export const KeywordGroupsPanel = () => {
@@ -470,6 +460,7 @@ export const KeywordGroupsPanel = () => {
     </div>
   )
 }
+
 
 
 
