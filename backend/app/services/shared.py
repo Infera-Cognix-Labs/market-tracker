@@ -19,6 +19,10 @@ from app.models.api import (
     Event,
     EventType,
     Job,
+    KeywordGroup,
+    KeywordGroupKeywordSummary,
+    KeywordGroupProductEntry,
+    KeywordGroupSnapshot,
     KeywordHighlight,
     KeywordSnapshot,
     KeywordTracker,
@@ -43,6 +47,7 @@ from app.models.documents import (
     CompetitorTrackerDocument,
     EventDocument,
     JobDocument,
+    KeywordGroupDocument,
     KeywordSnapshotDocument,
     KeywordTrackerDocument,
     ProductDocument,
@@ -765,6 +770,119 @@ def build_product_timeline_response(
     )
 
 
+def generate_group_code(prefix: str, name: str, existing_codes: set[str]) -> str:
+    base_code = f"{prefix}_{slugify(name)}"
+    candidate = base_code
+    counter = 2
+    while candidate in existing_codes:
+        candidate = f"{base_code}_{counter}"
+        counter += 1
+    return candidate
+
+
+def keyword_group_doc_to_model(document: KeywordGroupDocument) -> KeywordGroup:
+    return KeywordGroup.model_validate(
+        document.model_dump(
+            exclude={"id", "workspace_id"},
+            mode="python",
+        )
+    )
+
+
+def build_keyword_group_snapshot(
+    *,
+    group_code: str,
+    marketplace: str,
+    latest_per_tracker: dict[str, KeywordSnapshotDocument],
+) -> KeywordGroupSnapshot:
+    now = utc_now()
+    if not latest_per_tracker:
+        return KeywordGroupSnapshot(
+            group_code=group_code,
+            marketplace=marketplace,
+            snapshot_date=now.date(),
+            captured_at=now,
+            keyword_count=0,
+            total_unique_asins=0,
+            products=[],
+            keyword_summaries=[],
+        )
+
+    # Build keyword summaries
+    keyword_summaries: list[KeywordGroupKeywordSummary] = []
+    for tracker_code, snap_doc in latest_per_tracker.items():
+        keyword_summaries.append(
+            KeywordGroupKeywordSummary(
+                tracker_code=tracker_code,
+                keyword=snap_doc.keyword,
+                asin_count=len(snap_doc.products),
+                top10_asins=[p.asin for p in snap_doc.products[:10]],
+                snapshot_date=snap_doc.snapshot_date,
+            )
+        )
+
+    # Merge products across keywords
+    asin_map: dict[str, dict] = {}
+    for tracker_code, snap_doc in latest_per_tracker.items():
+        keyword_text = snap_doc.keyword
+        for product in snap_doc.products:
+            if product.asin not in asin_map:
+                asin_map[product.asin] = {
+                    "keyword_count": 0,
+                    "ranks": [],
+                    "keyword_list": [],
+                    "keyword_ranks": {},
+                    "product_info": product,
+                }
+            asin_map[product.asin]["keyword_count"] += 1
+            asin_map[product.asin]["ranks"].append(product.rank_position)
+            asin_map[product.asin]["keyword_list"].append(keyword_text)
+            asin_map[product.asin]["keyword_ranks"][tracker_code] = (
+                product.rank_position
+            )
+
+    # Build product entries sorted by keyword_count DESC, avg_rank ASC
+    product_entries: list[KeywordGroupProductEntry] = []
+    for entry in asin_map.values():
+        ranks = entry["ranks"]
+        product_entries.append(
+            KeywordGroupProductEntry(
+                asin=entry["product_info"].asin,
+                brand=entry["product_info"].brand,
+                title=entry["product_info"].title,
+                product_url=entry["product_info"].product_url,
+                image_url=entry["product_info"].image_url,
+                current_price=entry["product_info"].price_current,
+                currency=entry["product_info"].currency,
+                availability_status=entry["product_info"].availability_status,
+                keyword_count=entry["keyword_count"],
+                keyword_list=entry["keyword_list"],
+                avg_rank=round(sum(ranks) / len(ranks), 1),
+                best_rank=min(ranks),
+                worst_rank=max(ranks),
+                keyword_ranks=entry["keyword_ranks"],
+            )
+        )
+
+    product_entries.sort(key=lambda x: (-x.keyword_count, x.avg_rank))
+
+    # Use the latest snapshot date across all trackers
+    latest_date = max(
+        snap.snapshot_date for snap in latest_per_tracker.values()
+    )
+
+    return KeywordGroupSnapshot(
+        group_code=group_code,
+        marketplace=marketplace,
+        snapshot_date=latest_date,
+        captured_at=now,
+        keyword_count=len(latest_per_tracker),
+        total_unique_asins=len(asin_map),
+        products=product_entries,
+        keyword_summaries=keyword_summaries,
+    )
+
+
 # Backward-compatible names re-exported by store.py and imported in existing tests.
 _aggregate_timeline_points = aggregate_timeline_points
 _build_competitor_summaries = build_competitor_summaries
@@ -778,3 +896,4 @@ _sort_events = sort_events
 _within_range = within_range
 _keyword_doc_to_model = keyword_doc_to_model
 _keyword_snapshot_doc_to_model = keyword_snapshot_doc_to_model
+_keyword_group_doc_to_model = keyword_group_doc_to_model

@@ -22,6 +22,12 @@ from app.models.api import (
     CompetitorTrackerListResponse,
     CompetitorTrackerStats,
     CompetitorTrackerUpdateRequest,
+    KeywordGroup,
+    KeywordGroupCreateRequest,
+    KeywordGroupListResponse,
+    KeywordGroupSnapshot,
+    KeywordGroupStats,
+    KeywordGroupUpdateRequest,
     KeywordSnapshot,
     KeywordTracker,
     KeywordTrackerCreateRequest,
@@ -34,6 +40,8 @@ from app.models.api import (
     TrackedAsinReplacementRequest,
     TrackerSchedule,
     TrackerStatus,
+    TrackedKeyword,
+    TrackedKeywordReplacementRequest,
 )
 from app.models.documents import (
     ApifyRunDocument,
@@ -42,6 +50,7 @@ from app.models.documents import (
     CompetitorTrackerDocument,
     EventDocument,
     JobDocument,
+    KeywordGroupDocument,
     KeywordSnapshotDocument,
     KeywordTrackerDocument,
     ProductDocument,
@@ -51,13 +60,16 @@ from app.models.documents import (
 from app.services.shared import (
     build_competitor_summaries,
     build_category_snapshot_with_rank_comparison,
+    build_keyword_group_snapshot,
     build_keyword_snapshot_with_rank_comparison,
     category_doc_to_model,
     competitor_detail_to_list_model,
     competitor_doc_to_model,
     event_doc_to_model,
+    generate_group_code,
     generate_tracker_code,
     keyword_doc_to_model,
+    keyword_group_doc_to_model,
     keyword_snapshot_doc_to_model,
     product_doc_to_model,
     snapshot_doc_to_model,
@@ -898,6 +910,277 @@ class TrackerManagementService:
             raise NotFoundError("Keyword tracker not found.")
 
         await self._delete_tracker_data(workspace_id, tracker_code, "KEYWORD")
+        await document.delete()
+
+    # ── Keyword Group ──────────────────────────────────────────────────────
+
+    async def list_keyword_groups(
+        self, workspace_id: str, page: int, page_size: int
+    ) -> KeywordGroupListResponse:
+        query = KeywordGroupDocument.find(
+            KeywordGroupDocument.workspace_id == workspace_id
+        ).sort(("updated_at", DESCENDING))
+        total = await query.count()
+        docs = await (
+            query.skip((page - 1) * page_size).limit(page_size).to_list()
+        )
+        return KeywordGroupListResponse(
+            items=[keyword_group_doc_to_model(doc) for doc in docs],
+            page=page,
+            page_size=page_size,
+            total=total,
+        )
+
+    async def create_keyword_group(
+        self, workspace_id: str, payload: KeywordGroupCreateRequest
+    ) -> KeywordGroup:
+        now = utc_now()
+
+        existing_docs = await KeywordGroupDocument.find(
+            KeywordGroupDocument.workspace_id == workspace_id
+        ).to_list()
+        existing_codes = {doc.group_code for doc in existing_docs}
+
+        # Dedup: same marketplace + same set of tracker_codes
+        incoming_codes = sorted(kw.tracker_code for kw in payload.tracked_keywords)
+
+        # Check for duplicate tracker_codes in payload
+        if len(incoming_codes) != len(set(incoming_codes)):
+            raise ConflictError("Duplicate keyword trackers in the request.")
+
+        for doc in existing_docs:
+            if doc.marketplace != payload.marketplace:
+                continue
+            existing_kw_codes = sorted(kw.tracker_code for kw in doc.tracked_keywords)
+            if existing_kw_codes == incoming_codes:
+                raise ConflictError(
+                    "A keyword group with the same marketplace and keywords already exists."
+                )
+
+        # Validate all referenced keyword trackers exist and share marketplace
+        tracker_docs = await KeywordTrackerDocument.find(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            In(KeywordTrackerDocument.tracker_code, incoming_codes),
+        ).to_list()
+        tracker_map = {doc.tracker_code: doc for doc in tracker_docs}
+
+        missing = set(incoming_codes) - set(tracker_map.keys())
+        if missing:
+            raise NotFoundError(
+                f"Keyword trackers not found: {', '.join(sorted(missing))}"
+            )
+
+        marketplace_mismatches = [
+            code
+            for code, doc in tracker_map.items()
+            if doc.marketplace != payload.marketplace
+        ]
+        if marketplace_mismatches:
+            raise ConflictError(
+                f"Keyword trackers with marketplace mismatch: {', '.join(sorted(marketplace_mismatches))}"
+            )
+
+        # Build tracked_keywords with snapshots
+        tracked_keywords = []
+        for kw_write in payload.tracked_keywords:
+            tracker_doc = tracker_map[kw_write.tracker_code]
+            tracked_keywords.append(
+                TrackedKeyword(
+                    tracker_code=kw_write.tracker_code,
+                    enabled=kw_write.enabled,
+                    added_at=now,
+                    keyword_snapshot=tracker_doc.scope.keyword,
+                    tracker_name_snapshot=tracker_doc.name,
+                )
+            )
+
+        group_code = generate_group_code("kg", payload.name, existing_codes)
+
+        stats = KeywordGroupStats(
+            tracked_keyword_count=len(tracked_keywords),
+            total_snapshots_covered=sum(
+                tracker_map[kw.tracker_code].stats.snapshot_count
+                for kw in tracked_keywords
+            ),
+        )
+
+        document = KeywordGroupDocument(
+            workspace_id=workspace_id,
+            group_code=group_code,
+            name=payload.name,
+            marketplace=payload.marketplace,
+            tracked_keywords=tracked_keywords,
+            status=TrackerStatus.ACTIVE.value,
+            stats=stats,
+            created_at=now,
+            updated_at=now,
+        )
+        await document.insert()
+        return keyword_group_doc_to_model(document)
+
+    async def get_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroup:
+        document = await KeywordGroupDocument.find_one(
+            KeywordGroupDocument.workspace_id == workspace_id,
+            KeywordGroupDocument.group_code == group_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword group not found.")
+        return keyword_group_doc_to_model(document)
+
+    async def update_keyword_group(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: KeywordGroupUpdateRequest,
+    ) -> KeywordGroup:
+        document = await KeywordGroupDocument.find_one(
+            KeywordGroupDocument.workspace_id == workspace_id,
+            KeywordGroupDocument.group_code == group_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword group not found.")
+
+        model = keyword_group_doc_to_model(document)
+        update_data = payload.model_dump(exclude_unset=True)
+        if update_data:
+            model = model.model_copy(update=update_data)
+
+        now = utc_now()
+        document.name = model.name
+        document.status = model.status.value
+        document.updated_at = now
+        await document.save()
+        return keyword_group_doc_to_model(document)
+
+    async def replace_tracked_keywords(
+        self,
+        workspace_id: str,
+        group_code: str,
+        payload: TrackedKeywordReplacementRequest,
+    ) -> KeywordGroup:
+        document = await KeywordGroupDocument.find_one(
+            KeywordGroupDocument.workspace_id == workspace_id,
+            KeywordGroupDocument.group_code == group_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword group not found.")
+
+        incoming_codes = [kw.tracker_code for kw in payload.tracked_keywords]
+
+        # Check for duplicate tracker_codes in payload
+        if len(incoming_codes) != len(set(incoming_codes)):
+            raise ConflictError("Duplicate keyword trackers in the request.")
+
+        # Validate all referenced keyword trackers exist and share marketplace
+        tracker_docs = await KeywordTrackerDocument.find(
+            KeywordTrackerDocument.workspace_id == workspace_id,
+            In(KeywordTrackerDocument.tracker_code, incoming_codes),
+        ).to_list()
+        tracker_map = {doc.tracker_code: doc for doc in tracker_docs}
+
+        missing = set(incoming_codes) - set(tracker_map.keys())
+        if missing:
+            raise NotFoundError(
+                f"Keyword trackers not found: {', '.join(sorted(missing))}"
+            )
+
+        marketplace_mismatches = [
+            code
+            for code, doc in tracker_map.items()
+            if doc.marketplace != document.marketplace
+        ]
+        if marketplace_mismatches:
+            raise ConflictError(
+                f"Keyword trackers with marketplace mismatch: {', '.join(sorted(marketplace_mismatches))}"
+            )
+
+        # Preserve added_at for existing keywords
+        existing_added_at = {
+            kw.tracker_code: kw.added_at for kw in document.tracked_keywords
+        }
+        now = utc_now()
+
+        tracked_keywords = []
+        for kw_write in payload.tracked_keywords:
+            tracker_doc = tracker_map[kw_write.tracker_code]
+            added_at = existing_added_at.get(kw_write.tracker_code, now)
+            tracked_keywords.append(
+                TrackedKeyword(
+                    tracker_code=kw_write.tracker_code,
+                    enabled=kw_write.enabled,
+                    added_at=added_at,
+                    keyword_snapshot=tracker_doc.scope.keyword,
+                    tracker_name_snapshot=tracker_doc.name,
+                )
+            )
+
+        document.tracked_keywords = tracked_keywords
+        document.stats = KeywordGroupStats(
+            tracked_keyword_count=len(tracked_keywords),
+            total_snapshots_covered=sum(
+                tracker_map[kw.tracker_code].stats.snapshot_count
+                for kw in tracked_keywords
+            ),
+        )
+        document.updated_at = now
+        await document.save()
+        return keyword_group_doc_to_model(document)
+
+    async def get_latest_keyword_group_snapshot(
+        self, workspace_id: str, group_code: str
+    ) -> KeywordGroupSnapshot:
+        document = await KeywordGroupDocument.find_one(
+            KeywordGroupDocument.workspace_id == workspace_id,
+            KeywordGroupDocument.group_code == group_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword group not found.")
+
+        enabled_tracker_codes = [
+            kw.tracker_code for kw in document.tracked_keywords if kw.enabled
+        ]
+        if not enabled_tracker_codes:
+            now = utc_now()
+            return KeywordGroupSnapshot(
+                group_code=group_code,
+                marketplace=document.marketplace,
+                snapshot_date=now.date(),
+                captured_at=now,
+                keyword_count=0,
+                total_unique_asins=0,
+                products=[],
+                keyword_summaries=[],
+            )
+
+        # Fetch latest snapshot per keyword tracker
+        snapshot_docs = await KeywordSnapshotDocument.find(
+            KeywordSnapshotDocument.workspace_id == workspace_id,
+            In(KeywordSnapshotDocument.tracker_code, enabled_tracker_codes),
+        ).sort(("snapshot_date", DESCENDING)).to_list()
+
+        # Group by tracker_code, take latest per tracker
+        latest_per_tracker: dict[str, KeywordSnapshotDocument] = {}
+        for snap in snapshot_docs:
+            if snap.tracker_code not in latest_per_tracker:
+                latest_per_tracker[snap.tracker_code] = snap
+
+        return build_keyword_group_snapshot(
+            group_code=group_code,
+            marketplace=document.marketplace,
+            latest_per_tracker=latest_per_tracker,
+        )
+
+    async def delete_keyword_group(
+        self, workspace_id: str, group_code: str
+    ) -> None:
+        document = await KeywordGroupDocument.find_one(
+            KeywordGroupDocument.workspace_id == workspace_id,
+            KeywordGroupDocument.group_code == group_code,
+        )
+        if document is None:
+            raise NotFoundError("Keyword group not found.")
         await document.delete()
 
 
