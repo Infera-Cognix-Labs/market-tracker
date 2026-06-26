@@ -32,6 +32,61 @@ const TRACK_FIELD_LABELS: Record<keyof CompetitorTrackFields, string> = {
   variation_change: "Variation Change", content_change: "Content Change",
 }
 
+const validNumbers = (values: Array<number | null | undefined>) =>
+  values.filter((value): value is number => Number.isFinite(value))
+
+const paddedDomain = (
+  values: Array<number | null | undefined>,
+  options: { paddingRatio?: number; minSpan?: number; floor?: number; ceil?: number } = {}
+): [number, number] | undefined => {
+  const nums = validNumbers(values)
+  if (nums.length === 0) return undefined
+
+  const min = Math.min(...nums)
+  const max = Math.max(...nums)
+  const minSpan = options.minSpan ?? 1
+  const span = Math.max(max - min, minSpan)
+  const padding = span * (options.paddingRatio ?? 0.12)
+  const lower = Math.max(options.floor ?? -Infinity, min - padding)
+  const upper = Math.min(options.ceil ?? Infinity, max + padding)
+
+  return [lower, upper]
+}
+
+const paddedIntegerDomain = (
+  values: Array<number | null | undefined>,
+  options: { paddingRatio?: number; minSpan?: number; floor?: number } = {}
+): [number, number] | undefined => {
+  const domain = paddedDomain(values, options)
+  if (!domain) return undefined
+  return [
+    Math.max(options.floor ?? -Infinity, Math.floor(domain[0])),
+    Math.ceil(domain[1]),
+  ]
+}
+
+const formatCompactNumber = (value: number) => {
+  if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`
+  if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`
+  return Math.round(value).toLocaleString()
+}
+const formatMoneyAxisTick = (value: number, symbol: string, domain?: [number, number]) => {
+  const range = domain ? Math.abs(domain[1] - domain[0]) : 0
+  const decimals = range > 0 && range < 2 ? 2 : range > 0 && range < 10 ? 1 : 0
+  return `${symbol}${Number(value).toFixed(decimals)}`
+}
+const formatRatingAxisTick = (value: number, domain?: [number, number]) => {
+  const range = domain ? Math.abs(domain[1] - domain[0]) : 0
+  return Number(value).toFixed(range > 0 && range < 0.8 ? 2 : 1)
+}
+
+const formatReviewAxisTick = (value: number, domain?: [number, number]) => {
+  const range = domain ? Math.abs(domain[1] - domain[0]) : 0
+  if (range > 0 && range < 1_000) return Math.round(value).toLocaleString()
+  return formatCompactNumber(value)
+}
+
+
 // ── Manage ASINs Modal ────────────────────────────────────────────────────────
 const ManageAsinsModal = ({
   tracker,
@@ -561,18 +616,24 @@ export const CompetitorPage = () => {
 
   const dualAxisData = timeline?.points.map(pt => ({
     date: pt.snapshot_date,
-    bsr: pt.bsr_position,
-    price: pt.price_current,
+    bsr: pt.bsr_position ?? null,
+    price: pt.price_current ?? null,
   })) || []
+  const chartCurrency = productDetail?.current_state.currency ?? selectedProduct?.currency ?? "USD"
+  const chartCurrencySymbol = chartCurrency === "EUR" ? "EUR " : chartCurrency === "GBP" ? "GBP " : "$"
+  const bsrDomain = paddedIntegerDomain(dualAxisData.map(pt => pt.bsr), { minSpan: 10, floor: 1 })
+  const priceDomain = paddedDomain(dualAxisData.map(pt => pt.price), { minSpan: 1, floor: 0 })
 
   const ratingData = timeline?.points.map(pt => ({
     date: pt.snapshot_date,
-    rating: pt.rating_value,
-    reviews: pt.review_count,
+    rating: pt.rating_value ?? null,
+    reviews: pt.review_count ?? null,
     availability: pt.availability_status,
     coupon: pt.coupon_text,
     deal: pt.deal_info,
   })) || []
+  const ratingDomain = paddedDomain(ratingData.map(pt => pt.rating), { paddingRatio: 0.2, minSpan: 0.4, floor: 0, ceil: 5 })
+  const reviewsDomain = paddedIntegerDomain(ratingData.map(pt => pt.reviews), { minSpan: 20, floor: 0 })
 
   return (
     <>
@@ -747,7 +808,6 @@ export const CompetitorPage = () => {
                   {/* Product state */}
                   {productDetail?.current_state && (
                     <div style={{ display: "flex", gap: 12, fontSize: 11, color: T.text1, flexWrap: "wrap" }}>
-                      <span><strong>Buy Box:</strong> {productDetail.current_state.buy_box_status === "HAS_BUY_BOX" ? `✅ ${productDetail.current_state.buy_box_seller_name || ""}` : "❌"}</span>
                       {productDetail.current_state.coupon_text && (
                         <span style={{ padding: "2px 8px", background: T.bg4, borderRadius: 4, color: T.amber }}>
                           🏷️ {productDetail.current_state.coupon_text}
@@ -831,15 +891,15 @@ export const CompetitorPage = () => {
               </div>
               {dualAxisData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
-                  <ComposedChart data={dualAxisData} margin={{ top: 20, right: 80, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
-                    <XAxis dataKey="date" tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" reversed tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={v => `#${v}`} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={v => `$${v}`} />
-                    <Tooltip contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
+                  <ComposedChart data={dualAxisData} margin={{ top: 12, right: 54, left: 8, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+                    <XAxis dataKey="date" minTickGap={28} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" reversed domain={bsrDomain} width={48} tickCount={4} allowDecimals={false} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `#${formatCompactNumber(v)}`} />
+                    <YAxis yAxisId="right" orientation="right" domain={priceDomain} width={58} tickCount={4} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatMoneyAxisTick(v, chartCurrencySymbol, priceDomain)} />
+                    <Tooltip formatter={(value, name) => name === "Price" ? [`${chartCurrencySymbol}${Number(value ?? 0).toFixed(2)}`, name] : [`#${Number(value ?? 0).toLocaleString()}`, name]} contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
                     <Legend wrapperStyle={{ color: T.text1, fontSize: 11 }} />
-                    <Line yAxisId="left" type="monotone" dataKey="bsr" stroke={T.amber} strokeWidth={2.5} name="BSR Rank" dot={false} />
-                    <Line yAxisId="right" type="monotone" dataKey="price" stroke={T.green} strokeWidth={2.5} strokeDasharray="5 5" name="Price ($)" dot={false} />
+                    <Line yAxisId="left" type="monotone" dataKey="bsr" stroke={T.amber} strokeWidth={2.25} name="BSR Rank" dot={dualAxisData.length <= 12 ? { r: 2, fill: T.amber } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
+                    <Line yAxisId="right" type="monotone" dataKey="price" stroke={T.green} strokeWidth={2.25} strokeDasharray="4 4" name="Price" dot={dualAxisData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
@@ -866,15 +926,15 @@ export const CompetitorPage = () => {
               {ratingData.length > 0 ? (
                 <>
                   <ResponsiveContainer width="100%" height={220}>
-                    <ComposedChart data={ratingData} margin={{ top: 20, right: 80, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
-                      <XAxis dataKey="date" tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="left" domain={[0, 5]} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${v}★`} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
-                      <Tooltip contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
+                    <ComposedChart data={ratingData} margin={{ top: 12, right: 54, left: 8, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+                      <XAxis dataKey="date" minTickGap={28} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="left" domain={ratingDomain} width={42} tickCount={4} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatRatingAxisTick(v, ratingDomain)} />
+                      <YAxis yAxisId="right" orientation="right" domain={reviewsDomain} width={48} tickCount={4} allowDecimals={false} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatReviewAxisTick(v, reviewsDomain)} />
+                      <Tooltip formatter={(value, name) => name === "Rating" ? [`${Number(value ?? 0).toFixed(1)}/5`, name] : [Number(value ?? 0).toLocaleString(), name]} contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
                       <Legend wrapperStyle={{ color: T.text1, fontSize: 11 }} />
-                      <Line yAxisId="left" type="monotone" dataKey="rating" stroke={T.green} strokeWidth={2.5} name="Rating ★" dot={{ r: 3, fill: T.green }} />
-                      <Line yAxisId="right" type="monotone" dataKey="reviews" stroke={T.blue} strokeWidth={2.5} strokeDasharray="5 5" name="Reviews" dot={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="rating" stroke={T.green} strokeWidth={2.25} name="Rating" dot={ratingData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
+                      <Line yAxisId="right" type="monotone" dataKey="reviews" stroke={T.blue} strokeWidth={2.25} strokeDasharray="4 4" name="Reviews" dot={ratingData.length <= 12 ? { r: 2, fill: T.blue } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
                     </ComposedChart>
                   </ResponsiveContainer>
 
