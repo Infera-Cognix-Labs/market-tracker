@@ -92,8 +92,8 @@ const CreateKeywordGroupModal = ({ keywordTrackers, onClose, onCreate }: { keywo
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
-      <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1000, overflowY: "auto" }}>
+      <div style={{ minHeight: "100%", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "72px 24px 24px" }}>
         <div className="card" style={{ width: "100%", maxWidth: 620, padding: "24px 28px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>New Keyword Group</span>
@@ -140,8 +140,8 @@ const EditKeywordGroupModal = ({ group, onClose, onUpdate, onDelete }: { group: 
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
-      <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1000, overflowY: "auto" }}>
+      <div style={{ minHeight: "100%", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "72px 24px 24px" }}>
         <div className="card" style={{ width: "100%", maxWidth: 480, padding: "24px 28px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <div><span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>Edit Group</span><div style={{ fontSize: 11, color: T.text3, marginTop: 2, fontFamily: T.mono }}>{group.group_code}</div></div>
@@ -190,8 +190,8 @@ const ManageKeywordsModal = ({ group, keywordTrackers, onClose, onUpdate }: { gr
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, overflowY: "auto" }}>
-      <div style={{ minHeight: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 1000, overflowY: "auto" }}>
+      <div style={{ minHeight: "100%", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "72px 24px 24px" }}>
         <div className="card" style={{ width: "100%", maxWidth: 620, padding: "24px 28px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
             <div><span style={{ fontSize: 16, fontWeight: 700, color: T.text0 }}>Manage Keywords</span><div style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>{group.name}</div></div>
@@ -395,7 +395,7 @@ const KeywordGroupSnapshotTable = ({
   const renderKeywordLayout = () => {
     if (!group) return null
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 16, padding: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "280px minmax(0, 1fr)", gap: 16, padding: 14, overflowX: "auto" }}>
         <div>
           <div style={{ fontSize: 10, fontWeight: 600, color: T.text3, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8, padding: "0 4px" }}>
             {keywords.length} keywords in group
@@ -419,7 +419,7 @@ const KeywordGroupSnapshotTable = ({
             })}
           </div>
         </div>
-        <div>
+        <div style={{ minWidth: 0 }}>
           {selectedKeyword ? (
             <KeywordDetailPanel group={group} keywordTrackers={keywordTrackers} selectedKeyword={selectedKeyword} />
           ) : (
@@ -431,8 +431,8 @@ const KeywordGroupSnapshotTable = ({
   }
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+    <div className="card" style={{ padding: 0, overflow: "visible" }}>
+      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>Keyword tracker detail</div>
         <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>{keywords.length} keywords</span>
       </div>
@@ -539,11 +539,15 @@ export const KeywordGroupsPanel = () => {
         })}
       </div>
       {selectedGroup && <TrackerInfoCard name={selectedGroup.name} marketplace={selectedGroup.marketplace} status={selectedGroup.status} meta={`${selectedGroup.tracked_keywords.filter(k => k.enabled).length} active keywords - ${selectedGroup.tracked_keywords.length} total`} statsRight={<><TrackerStat label="Unique ASINs" value={selectedGroup.latest_snapshot_summary?.total_unique_asins ?? snapshot?.total_unique_asins ?? "-"} /><TrackerStat label="Snapshots" value={selectedGroup.stats.total_snapshots_covered} /></>}><div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>{selectedGroup.tracked_keywords.slice(0, 8).map(keyword => <span key={keyword.tracker_code} style={{ padding: "3px 7px", borderRadius: 5, border: `1px solid ${keyword.enabled ? T.border2 : T.border}`, background: keyword.enabled ? T.bg4 : T.bg3, color: keyword.enabled ? T.text2 : T.text3, fontSize: 10 }}>{keyword.keyword_snapshot}{!keyword.enabled ? " - off" : ""}</span>)}{selectedGroup.tracked_keywords.length > 8 && <span style={{ color: T.text3, fontSize: 10, padding: "3px 0" }}>+{selectedGroup.tracked_keywords.length - 8}</span>}</div></TrackerInfoCard>}
-      {snapshot && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 16 }}>{[["Unique ASINs", snapshot.total_unique_asins], ["Keywords", snapshot.keyword_count], ["Overlap", snapshot.products.filter(p => p.keyword_count > 1).length], ["Captured", new Date(snapshot.captured_at).toLocaleDateString()]].map(([label, value]) => <div key={label} className="card" style={{ padding: "12px 14px" }}><div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>{label}</div><div style={{ fontSize: 18, color: T.text0, fontWeight: 700, fontFamily: T.mono }}>{value}</div></div>)}</div>}
+      {snapshot && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 16 }}>{[["Unique ASINs", snapshot.total_unique_asins], ["Keywords", snapshot.keyword_count], ["Overlap", snapshot.products.filter(p => p.keyword_count > 1).length], ["Captured", new Date(snapshot.captured_at).toLocaleDateString()]].map(([label, value]) => <div key={label} className="card" style={{ padding: "12px 14px" }}><div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>{label}</div><div style={{ fontSize: 18, color: T.text0, fontWeight: 700, fontFamily: T.mono }}>{value}</div></div>)}</div>}
       <KeywordGroupSnapshotTable group={selectedGroup ?? null} keywordTrackers={keywordTrackers} snapshot={snapshot} loading={snapshotLoading} />
     </div>
   )
 }
+
+
+
+
 
 
 
