@@ -632,6 +632,7 @@ export interface TrackedAsinReplacementRequest {
 export interface KeywordTracker {
   tracker_code: string
   name: string
+  marketplace: string
   scope: KeywordScope
   tracking_config: KeywordTrackingConfig
   schedule: TrackerSchedule
@@ -693,4 +694,88 @@ export interface KeywordTrackerUpdateRequest {
   tracking_config?: { top10_alert_enabled?: boolean }
   schedule?: TrackerScheduleInput
   status?: TrackerStatus
+}
+
+// Keyword Groups
+
+export interface TrackedKeywordInput {
+  tracker_code: string
+  enabled: boolean
+}
+
+export interface TrackedKeyword extends TrackedKeywordInput {
+  added_at: string
+  keyword_snapshot: string
+  tracker_name_snapshot: string
+}
+
+export interface KeywordGroup {
+  group_code: string
+  name: string
+  marketplace: string
+  tracked_keywords: TrackedKeyword[]
+  status: TrackerStatus
+  stats: KeywordGroupStats
+  latest_snapshot_summary?: KeywordGroupLatestSnapshotSummary | null
+  created_at: string
+  updated_at: string
+}
+
+export interface KeywordGroupStats {
+  tracked_keyword_count: number
+  total_snapshots_covered: number
+}
+
+export interface KeywordGroupLatestSnapshotSummary {
+  snapshot_date: string
+  captured_at: string
+  total_unique_asins: number
+  top_asins: string[]
+}
+
+export interface KeywordGroupCreateRequest {
+  name: string
+  marketplace: string
+  tracked_keywords: TrackedKeywordInput[]
+}
+
+export interface KeywordGroupUpdateRequest {
+  name?: string
+  status?: TrackerStatus
+}
+
+export interface KeywordGroupSnapshot {
+  group_code: string
+  marketplace: string
+  snapshot_date: string
+  captured_at: string
+  keyword_count: number
+  total_unique_asins: number
+  products: KeywordGroupProduct[]
+  keyword_summaries: KeywordGroupKeywordSummary[]
+}
+
+export interface KeywordGroupKeywordSummary {
+  tracker_code: string
+  keyword: string
+  asin_count: number
+  top10_asins: string[]
+  snapshot_date: string
+}
+
+export interface KeywordGroupProduct {
+  asin: string
+  brand: string
+  title: string
+  product_url?: string | null
+  image_url?: string | null
+  current_price?: number | null
+  currency?: string | null
+  availability_status: AvailabilityStatus
+  keyword_count: number
+  keyword_list: string[]
+  avg_rank: number
+  best_rank: number
+  worst_rank: number
+  keyword_ranks: Record<string, number>
 }
