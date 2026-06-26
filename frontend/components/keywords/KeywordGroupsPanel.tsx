@@ -225,8 +225,10 @@ const ManageKeywordsModal = ({ group, keywordTrackers, onClose, onUpdate }: { gr
 }
 
 const rankList = (product: KeywordGroupProduct) => Object.entries(product.keyword_ranks).sort((a, b) => a[1] - b[1])
+type SnapshotLayout = "TABLE" | "DETAIL"
 
 const KeywordGroupSnapshotTable = ({ snapshot, loading, search, onSearchChange }: { snapshot: KeywordGroupSnapshot | null; loading: boolean; search: string; onSearchChange: (value: string) => void }) => {
+  const [layout, setLayout] = useState<SnapshotLayout>("TABLE")
   const [selectedProductIdx, setSelectedProductIdx] = useState(0)
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -364,22 +366,27 @@ const KeywordGroupSnapshotTable = ({ snapshot, loading, search, onSearchChange }
   }
 
   return (
-    <>
-      <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 14 }}>
-        <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
-          <SearchInput value={search} onChange={onSearchChange} placeholder="Search ASIN, title, brand, or keyword..." />
-          <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>{filteredProducts.length} of {snapshot?.total_unique_asins ?? 0} products</span>
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+        <SearchInput value={search} onChange={onSearchChange} placeholder="Search ASIN, title, brand, or keyword..." />
+        <div style={{ display: "inline-flex", gap: 3, padding: 3, border: `1px solid ${T.border}`, borderRadius: 7, background: T.bg2 }}>
+          {(["TABLE", "DETAIL"] as SnapshotLayout[]).map(item => (
+            <button key={item} type="button" onClick={() => setLayout(item)}
+              style={{ padding: "5px 9px", borderRadius: 5, border: "none", background: layout === item ? T.bg4 : "transparent", color: layout === item ? T.amber : T.text3, fontSize: 10, fontWeight: layout === item ? 700 : 500, cursor: "pointer", fontFamily: T.sans }}>
+              {item === "TABLE" ? "Original Table" : "Competitor Style"}
+            </button>
+          ))}
         </div>
-        {loading ? (
-          <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading group snapshot...</div>
-        ) : !snapshot ? (
-          <div style={{ textAlign: "center", padding: 46, color: T.text3 }}><AlertCircle size={22} style={{ marginBottom: 8, opacity: 0.5 }} /><br />No aggregated snapshot available for this group.</div>
-        ) : filteredProducts.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
-        ) : renderTableRows()}
+        <span style={{ fontSize: 11, color: T.text3, fontFamily: T.mono, marginLeft: "auto" }}>{filteredProducts.length} of {snapshot?.total_unique_asins ?? 0} products</span>
       </div>
-      {!loading && snapshot && filteredProducts.length > 0 && renderDetailLayout()}
-    </>
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 40, color: T.text3 }}>Loading group snapshot...</div>
+      ) : !snapshot ? (
+        <div style={{ textAlign: "center", padding: 46, color: T.text3 }}><AlertCircle size={22} style={{ marginBottom: 8, opacity: 0.5 }} /><br />No aggregated snapshot available for this group.</div>
+      ) : filteredProducts.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "40px 0", color: T.text3, fontSize: 13 }}>No products match your search</div>
+      ) : layout === "TABLE" ? renderTableRows() : renderDetailLayout()}
+    </div>
   )
 }
 export const KeywordGroupsPanel = () => {
@@ -437,7 +444,30 @@ export const KeywordGroupsPanel = () => {
       {showCreate && <CreateKeywordGroupModal keywordTrackers={keywordTrackers} onClose={() => setShowCreate(false)} onCreate={handleCreate} />}
       {showEdit && selectedGroup && <EditKeywordGroupModal group={selectedGroup} onClose={() => setShowEdit(false)} onUpdate={handleUpdate} onDelete={handleDelete} />}
       {showManage && selectedGroup && <ManageKeywordsModal group={selectedGroup} keywordTrackers={keywordTrackers} onClose={() => setShowManage(false)} onUpdate={handleUpdate} />}
-      <PageHeader title="Keyword Groups" sub="Aggregate products across multiple keyword trackers" actions={<div style={{ display: "flex", gap: 8 }}>{selectedGroup && <button className="btn-ghost" onClick={() => setShowManage(true)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><Settings size={14} /> Manage Keywords</button>}{selectedGroup && <button className="btn-ghost" onClick={() => setShowEdit(true)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}><Edit2 size={14} /> Edit Group</button>}<button className="btn-primary" onClick={() => setShowCreate(true)} style={{ display: "flex", alignItems: "center", gap: 6 }}><Plus size={14} /> New Group</button></div>} />
+      <PageHeader title="Keyword Groups" sub="Aggregate products across multiple keyword trackers" />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: -12, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 11, color: T.text3, fontFamily: T.mono }}>
+          {selectedGroup ? selectedGroup.group_code : "No group selected"}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {selectedGroup && (
+            <>
+              <button className="btn-ghost" onClick={() => setShowManage(true)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 10px", whiteSpace: "nowrap" }}>
+                <Settings size={14} /> Manage Keywords
+              </button>
+              <button className="btn-ghost" onClick={() => setShowEdit(true)}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 10px", whiteSpace: "nowrap" }}>
+                <Edit2 size={14} /> Edit Group
+              </button>
+            </>
+          )}
+          <button className="btn-primary" onClick={() => setShowCreate(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, padding: "8px 11px", whiteSpace: "nowrap" }}>
+            <Plus size={14} /> New Group
+          </button>
+        </div>
+      </div>
       {error && <ErrorBanner message={error} />}
       <StatusFilterTabs trackers={selectorGroups} value={statusFilter} onChange={setStatusFilter} />
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
@@ -460,6 +490,11 @@ export const KeywordGroupsPanel = () => {
     </div>
   )
 }
+
+
+
+
+
 
 
 
