@@ -70,6 +70,12 @@ const formatCompactNumber = (value: number) => {
   if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`
   return Math.round(value).toLocaleString()
 }
+const formatMoneyAxisTick = (value: number, symbol: string, domain?: [number, number]) => {
+  const range = domain ? Math.abs(domain[1] - domain[0]) : 0
+  const decimals = range > 0 && range < 2 ? 2 : range > 0 && range < 10 ? 1 : 0
+  return `${symbol}${Number(value).toFixed(decimals)}`
+}
+
 
 // ── Manage ASINs Modal ────────────────────────────────────────────────────────
 const ManageAsinsModal = ({
@@ -878,12 +884,12 @@ export const CompetitorPage = () => {
                   <ComposedChart data={dualAxisData} margin={{ top: 12, right: 54, left: 8, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
                     <XAxis dataKey="date" minTickGap={28} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" reversed domain={bsrDomain} width={48} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `#${formatCompactNumber(v)}`} />
-                    <YAxis yAxisId="right" orientation="right" domain={priceDomain} width={44} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${chartCurrencySymbol}${Number(v).toFixed(0)}`} />
+                    <YAxis yAxisId="left" reversed domain={bsrDomain} width={48} tickCount={4} allowDecimals={false} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `#${formatCompactNumber(v)}`} />
+                    <YAxis yAxisId="right" orientation="right" domain={priceDomain} width={58} tickCount={4} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatMoneyAxisTick(v, chartCurrencySymbol, priceDomain)} />
                     <Tooltip formatter={(value, name) => name === "Price" ? [`${chartCurrencySymbol}${Number(value ?? 0).toFixed(2)}`, name] : [`#${Number(value ?? 0).toLocaleString()}`, name]} contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
                     <Legend wrapperStyle={{ color: T.text1, fontSize: 11 }} />
-                    <Line yAxisId="left" type="linear" dataKey="bsr" stroke={T.amber} strokeWidth={2.25} name="BSR Rank" dot={dualAxisData.length <= 12 ? { r: 2, fill: T.amber } : false} activeDot={{ r: 4 }} connectNulls={false} />
-                    <Line yAxisId="right" type="linear" dataKey="price" stroke={T.green} strokeWidth={2.25} strokeDasharray="4 4" name="Price" dot={dualAxisData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} />
+                    <Line yAxisId="left" type="monotone" dataKey="bsr" stroke={T.amber} strokeWidth={2.25} name="BSR Rank" dot={dualAxisData.length <= 12 ? { r: 2, fill: T.amber } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
+                    <Line yAxisId="right" type="monotone" dataKey="price" stroke={T.green} strokeWidth={2.25} strokeDasharray="4 4" name="Price" dot={dualAxisData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
@@ -913,12 +919,12 @@ export const CompetitorPage = () => {
                     <ComposedChart data={ratingData} margin={{ top: 12, right: 54, left: 8, bottom: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
                       <XAxis dataKey="date" minTickGap={28} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="left" domain={ratingDomain} width={42} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Number(v).toFixed(1)}`} />
-                      <YAxis yAxisId="right" orientation="right" domain={reviewsDomain} width={44} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompactNumber(v)} />
+                      <YAxis yAxisId="left" domain={ratingDomain} width={42} tickCount={4} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Number(v).toFixed(1)}`} />
+                      <YAxis yAxisId="right" orientation="right" domain={reviewsDomain} width={48} tickCount={4} allowDecimals={false} tick={{ fill: T.text3, fontSize: 9, fontFamily: T.mono }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCompactNumber(v)} />
                       <Tooltip formatter={(value, name) => name === "Rating" ? [`${Number(value ?? 0).toFixed(1)}/5`, name] : [Number(value ?? 0).toLocaleString(), name]} contentStyle={{ background: T.bg4, border: `1px solid ${T.border}`, borderRadius: 8, fontFamily: T.mono, fontSize: 11 }} />
                       <Legend wrapperStyle={{ color: T.text1, fontSize: 11 }} />
-                      <Line yAxisId="left" type="linear" dataKey="rating" stroke={T.green} strokeWidth={2.25} name="Rating" dot={ratingData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} />
-                      <Line yAxisId="right" type="linear" dataKey="reviews" stroke={T.blue} strokeWidth={2.25} strokeDasharray="4 4" name="Reviews" dot={ratingData.length <= 12 ? { r: 2, fill: T.blue } : false} activeDot={{ r: 4 }} connectNulls={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="rating" stroke={T.green} strokeWidth={2.25} name="Rating" dot={ratingData.length <= 12 ? { r: 2, fill: T.green } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
+                      <Line yAxisId="right" type="monotone" dataKey="reviews" stroke={T.blue} strokeWidth={2.25} strokeDasharray="4 4" name="Reviews" dot={ratingData.length <= 12 ? { r: 2, fill: T.blue } : false} activeDot={{ r: 4 }} connectNulls={false} strokeLinecap="round" strokeLinejoin="round" />
                     </ComposedChart>
                   </ResponsiveContainer>
 
