@@ -161,6 +161,6 @@ jobs:
             git reset --hard ${TARGET_SHA}
 
             # Start lại Airflow containers để nhận code mới + clear module cache
-            docker compose -f docker-compose.staging.yml --env-file .env.staging up airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver -d
+            nohup docker compose -f docker-compose.staging.yml --env-file .env.staging up -d airflow-worker airflow-dag-processor airflow-scheduler airflow-triggerer airflow-apiserver > /tmp/airflow-restart-prod.log 2>&1 &
 
             echo "=== Sync complete. Airflow reloads DAGs automatically. ==="
