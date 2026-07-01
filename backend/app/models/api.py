@@ -663,6 +663,7 @@ class ImportWorkerResult(ApiModel):
     partial_jobs: int
     failed_jobs: int
     skipped_jobs: int
+    reclaimed_jobs: int = 0
 
 
 class SchedulerWorkerResult(ApiModel):

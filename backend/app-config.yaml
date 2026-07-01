@@ -10,6 +10,7 @@ apify:
   import_batch_size: 200
   import_worker_batch_size: 10
   import_worker_interval_secs: 30
+  stuck_processing_reclaim_secs: 900
   actor_pools:
     category:
       junglee_bestsellers:

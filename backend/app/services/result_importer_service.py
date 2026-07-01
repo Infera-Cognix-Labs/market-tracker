@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from time import perf_counter
 
 from app.config.config import ApifyConfig, StorageConfig
@@ -68,6 +68,8 @@ class ResultImporterService:
         self.object_storage = object_storage
 
     async def process_pending_jobs(self) -> ImportWorkerResult:
+        reclaimed_jobs = await self._reclaim_stuck_processing_jobs()
+
         candidates = await JobDocument.find(
             JobDocument.status == JobStatus.IMPORTING.value
         ).to_list()
@@ -150,7 +152,45 @@ class ResultImporterService:
             partial_jobs=partial_jobs,
             failed_jobs=failed_jobs,
             skipped_jobs=skipped_jobs,
+            reclaimed_jobs=reclaimed_jobs,
         )
+
+    async def _reclaim_stuck_processing_jobs(self) -> int:
+        threshold = utc_now() - timedelta(
+            seconds=self.config.stuck_processing_reclaim_secs
+        )
+        stuck = await JobDocument.find(
+            JobDocument.status == JobStatus.PROCESSING.value,
+            {
+                "$or": [
+                    {"started_at": None},
+                    {"started_at": {"$lt": threshold}},
+                ]
+            },
+        ).to_list()
+        reclaimed = 0
+        for job_document in stuck:
+            job_document.status = JobStatus.IMPORTING
+            job_document.error = JobError(
+                code="RECLAIMED_STUCK_PROCESSING",
+                message=(
+                    "Reclaimed from PROCESSING after exceeding "
+                    f"{self.config.stuck_processing_reclaim_secs}s without completion."
+                ),
+            )
+            await job_document.save()
+            reclaimed += 1
+            logger.warning(
+                "Reclaimed stuck PROCESSING job back to IMPORTING.",
+                extra={
+                    "context": correlation_context(
+                        job_code=job_document.job_code,
+                        tracker_code=job_document.tracker_code,
+                        started_at=job_document.started_at,
+                    )
+                },
+            )
+        return reclaimed
 
     async def _process_job(
         self,
@@ -158,10 +198,8 @@ class ResultImporterService:
         run_document: ApifyRunDocument,
     ) -> JobStatus:
         current_time = utc_now()
-        job_document.status = JobStatus.PROCESSING
         job_document.started_at = job_document.started_at or current_time
         job_document.error = None
-        await job_document.save()
 
         run_finished_at = coerce_datetime(run_document.finished_at)
         if run_finished_at is not None and run_document.finished_at != run_finished_at:
@@ -188,6 +226,9 @@ class ResultImporterService:
             job_document=job_document,
             run_document=run_document,
         )
+
+        job_document.status = JobStatus.PROCESSING
+        await job_document.save()
         tracker_context = await self._load_tracker_context(
             workspace_id=job_document.workspace_id,
             tracker_type=TrackerType(job_document.tracker_type),

@@ -215,6 +215,10 @@ class ApifyConfig(BaseModel):
         30,
         "APIFY_IMPORT_WORKER_INTERVAL_SECS",
     )
+    stuck_processing_reclaim_secs: int = _config_int(
+        ("apify", "stuck_processing_reclaim_secs"),
+        900,
+    )
     deals_max_results: int = _config_int(
         ("apify", "deals_max_results"),
         100,
